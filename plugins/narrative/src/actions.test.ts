@@ -259,7 +259,11 @@ class MemoryHost {
         })) })), evidence: [], source_payload_digest: "b".repeat(64),
       } };
     }
-    if (operation === "workspace.identity.read") return this.identity;
+    if (operation === "workspace.identity.read") {
+      assert.deepEqual(Object.keys(payload).sort(), payload.paths === undefined ? [] : ["paths"]);
+      if (payload.paths !== undefined) assert.deepEqual(payload.paths, ["meta/proprium/plugins/proprium.narrative/resume.v1.yaml"]);
+      return this.identity;
+    }
     if (operation === "workspace.change.timestamp") return { timestamp: this.timestamp };
     throw new Error(`Unexpected Host operation: ${operation}`);
   }

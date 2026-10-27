@@ -139,7 +139,7 @@ export function* listPortableResumeMarks(host: NarrativeHost, request: ActionReq
   const repositoryId = request.scope.repository_id;
   if (repositoryId === null) return { items: [], next_cursor: null, source_revision: null };
   const identity = validateIdentity(yield* host.request<unknown>("workspace.identity.read", {
-    scope: request.scope, snapshot: request.snapshot, paths: [MARKER_PATH],
+    paths: [MARKER_PATH],
   }));
   const markerFile = yield* readTextFile(host, request, MARKER_PATH, true);
   if (markerFile.revision === null) {
@@ -225,7 +225,7 @@ export function* proposePortableResumeMark(host: NarrativeHost, request: ActionR
   const input = parseProposeInput(value);
   if (request.scope.repository_id === null) fail("capability_denied", "Portable resume requires a bound GitHub repository");
   if (request.snapshot.draft_generation !== null) fail("dirty_draft", "Save locally first before proposing a portable reading position");
-  const identity = validateIdentity(yield* host.request<unknown>("workspace.identity.read", { scope: request.scope, snapshot: request.snapshot }));
+  const identity = validateIdentity(yield* host.request<unknown>("workspace.identity.read", {}));
   const work = yield* readWorkSnapshot(host, request);
   const scene = currentScene(work, input.scene_id);
   if (!scene) fail("scene_not_found", `Scene ${input.scene_id} was not found`);
