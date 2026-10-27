@@ -3077,6 +3077,77 @@
                 {
                   "key": "end",
                   "label": "終了"
+                },
+                {
+                  "key": "sentenceIndex",
+                  "label": "文番号（0から）"
+                }
+              ]
+            }
+          },
+          {
+            "id": "token-count-input",
+            "title": "トークン数",
+            "body": {
+              "id": "research-token-count-form",
+              "type": "form",
+              "title": "入力した文章のトークン数",
+              "description": "入力した文章だけをローカル辞書で数えます。辞書が利用できない場合は理由が表示されます。原稿は自動取得されず、入力は保存されません。",
+              "fields": [
+                {
+                  "id": "text",
+                  "label": "数える文章",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 1024
+                }
+              ],
+              "submit": {
+                "action_id": "research.nlp.countTokens",
+                "input_template": {
+                  "texts": [
+                    {
+                      "data_key": "form.text"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "token-count-result",
+            "title": "トークン数の結果",
+            "body": {
+              "id": "research-token-count-detail",
+              "type": "detail",
+              "title": "トークン数の結果",
+              "value": {
+                "data_key": "last_action_result"
+              },
+              "fields": [
+                {
+                  "key": "counts",
+                  "label": "トークン数"
+                },
+                {
+                  "key": "identity.modelId",
+                  "label": "解析器"
+                },
+                {
+                  "key": "identity.method",
+                  "label": "方法"
+                },
+                {
+                  "key": "identity.version",
+                  "label": "バージョン"
+                },
+                {
+                  "key": "identity.digest",
+                  "label": "辞書 digest"
+                },
+                {
+                  "key": "fallbackReason",
+                  "label": "代替方法の理由"
                 }
               ]
             }
