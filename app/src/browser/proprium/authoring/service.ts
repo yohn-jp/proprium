@@ -306,7 +306,8 @@ export class BrowserAuthoringService {
     if(this.localPreferenceScope()!==expectedScope)throw staleScope();
   }
 
-  async invokeUi(event: Event, pluginId: string, actionId: string, input: Record<string, unknown>, followNavigation = false): Promise<ActionResult> {
+  async invokeUi(event: Event, pluginId: string, actionId: string, input: Record<string, unknown>, followNavigation = false,
+    validateNavigation?: (result: ActionResult) => void): Promise<ActionResult> {
     const principal = this.makePrincipal("ui", event);
     if (followNavigation) {
       if (!principal.user_gesture_token || !this.options.gestures.consume(principal.user_gesture_token as object)) throw deniedGesture();
@@ -325,6 +326,7 @@ export class BrowserAuthoringService {
         ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}) }, principal);
       if (result.ok && retryIdentity) this.uiProposalRetryKeys.delete(retryIdentity);
       if (followNavigation && result.ok && isRecord(result.value) && isRecord(result.value.navigation)) {
+        validateNavigation?.(result);
         const navigation = result.value.navigation;
         const expected = navigation.expected_context;
         if (!isRecord(expected) || !sameScope(expected.scope as unknown as Scope, result.scope) ||
@@ -341,8 +343,8 @@ export class BrowserAuthoringService {
 
   /** Runs the normal UI action through the same dispatcher as MCP and admits a host-owned result artifact. */
   async invokeUiWithArtifacts(event: Event, pluginId: string, actionId: string,
-    input: Record<string, unknown>): Promise<UiActionWithArtifact> {
-    const action_result = await this.invokeUi(event, pluginId, actionId, input, true);
+    input: Record<string, unknown>, validateNavigation?: (result: ActionResult) => void): Promise<UiActionWithArtifact> {
+    const action_result = await this.invokeUi(event, pluginId, actionId, input, true, validateNavigation);
     if (!action_result.ok || !isRecord(action_result.value) || typeof action_result.value.artifact_id !== "string" ||
         !this.options.artifactHandle) return { action_result };
     try {

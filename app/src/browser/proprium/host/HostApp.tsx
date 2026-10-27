@@ -22,6 +22,9 @@ import { createAuthoringWorkspacePanels, validateAuthoringSurfaceRegistrations, 
 import { AuthoringReview } from "./authoring/AuthoringReview.js";
 import { AuthoringAssets } from "./authoring/AuthoringAssets.js";
 import { AuthoringCommandMenu } from "./authoring/AuthoringCommandMenu.js";
+import { NarrativeNavigation } from "./authoring/NarrativeNavigation.js";
+import { NarrativePortableResume } from "./authoring/NarrativePortableResume.js";
+import { SemanticTaskControls } from "./authoring/SemanticTaskControls.js";
 import { useProviderConsent } from "./use-provider-consent.js";
 import { ProviderSettingsStore } from "../authoring/provider-settings.js";
 import { ProviderSettingsPanel } from "../authoring/provider-settings-panel.js";
@@ -327,11 +330,16 @@ export function HostApp(): ReactElement {
       .catch(error => { if (!cancelled) setMessage({ tone: "error", text: errorMessage(error) }); });
     return () => { cancelled = true; };
   }, [authoring, authoringEpoch]);
-  const invokeAuthoring = async (event: Event, pluginId: string, actionId: string, input: Readonly<Record<string, import("./authoring/types.js").AuthoringJson>>, invocationSource?: { readonly surfaceId: string }) => {
+  const invokeAuthoring = async (event: Event, pluginId: string, actionId: string, input: Readonly<Record<string, import("./authoring/types.js").AuthoringJson>>, invocationSource?: { readonly surfaceId: string; readonly resume?: HostWritingResume }) => {
     if (!authoring) throw new Error("repository_unavailable");
-    const savedResume = invocationSource?.surfaceId === "proprium.narrative.continue-writing" ? loadLocalResume() : null;
+    const savedResume = invocationSource?.resume ?? (invocationSource?.surfaceId === "proprium.narrative.continue-writing" ? loadLocalResume() : null);
     const authorScope = preferencesRef.current.email || "local";
-    const output = await authoring.invokeUiWithArtifacts(event, pluginId, actionId, input);
+    const output = await authoring.invokeUiWithArtifacts(event, pluginId, actionId, input, savedResume ? result=>{
+      if(pluginId!=="proprium.narrative"||actionId!=="proprium.narrative.scene.open"||!result.ok)return;
+      const value=result.value as {scene?:{id?:string;metadata_revision?:string};manuscript_path?:string;manuscript_revision?:string};
+      const position=savedResume.position;
+      if(authorScope!==(preferencesRef.current.email||"local")||value.scene?.id!==position.scene_id||value.scene.metadata_revision!==position.metadata_revision||value.manuscript_path!==position.manuscript_path||value.manuscript_revision!==position.manuscript_revision)throw new Error("snapshot_stale: 保存位置の原稿または構成が変更されています。");
+    } : undefined);
     const result = output.action_result;
     if (pluginId === "proprium.narrative" && actionId === "proprium.narrative.scene.open" && result.ok && result.value && typeof result.value === "object") {
       const value = result.value as { scene?: { id?: string; metadata_revision?: string }; manuscript_path?: string; manuscript_revision?: string };
@@ -373,7 +381,7 @@ export function HostApp(): ReactElement {
   };
   const readAuthoring = async (pluginId: string, actionId: string, input: Readonly<Record<string, import("./authoring/types.js").AuthoringJson>>, signal: AbortSignal) => {
     if (!authoring) throw new Error("repository_unavailable");
-    if (pluginId === "proprium.narrative" && actionId === "proprium.narrative.scene.continue") {
+    if (pluginId === "proprium.narrative" && actionId === "proprium.narrative.scene.continue" && !Object.hasOwn(input,"resume_position")) {
       return authoring.invokeRead(pluginId, actionId, { resume_position: loadLocalResume()?.position ?? null }, signal);
     }
     return authoring.invokeRead(pluginId, actionId, input, signal);
@@ -1057,7 +1065,13 @@ export function HostApp(): ReactElement {
               : <p className="sidebar-empty">このWorkspaceはこのブラウザー内だけに保存されます。GitHub同期は設定されていません。</p>}
           </section>
 </div> : mode === "desktop" ? <div className="host-controls">{recentCard}</div> : picker;
-  const tools = <div className="host-controls">{authoring && <><details><summary>外部プロバイダーの設定</summary><ProviderSettingsPanel store={providerSettings} onChanged={()=>setProviderSettingsEpoch(value=>value+1)} /></details>
+  const tools = <div className="host-controls">{authoring && <>
+    {authoringRegistrations.some(row=>row.pluginId==="proprium.narrative"&&row.status==="ready") && <NarrativePortableResume key={`portable:${workspaceGeneration}`} scopeKey={JSON.stringify([workspaceGeneration,status.head,status.entries.map(entry=>[entry.path,entry.worktree,entry.stage]),preferences.email,authoringRegistrations.filter(row=>row.pluginId==="proprium.narrative").map(row=>row.manifestDigest)])} localSceneId={loadLocalResume()?.position.scene_id}
+      read={async(actionId,input,signal)=>{const result=await authoring.invokeRead("proprium.narrative",actionId,input,signal);if(!result.ok)throw new Error(`${result.error.code}: ${result.error.message}`);return result.value;}}
+      open={async(event,position)=>{const result=await invokeAuthoring(event,"proprium.narrative","proprium.narrative.scene.open",{scene_id:position.scene_id},{surfaceId:"proprium.narrative.portable-resume",resume:{position,selection:null}});if(!result.action_result.ok)throw new Error(result.action_result.error.message);}} />}
+    {authoringRegistrations.some(row=>row.pluginId==="proprium.semantic"&&row.status==="ready") && <SemanticTaskControls key={`semantic:${workspaceGeneration}`} scopeKey={JSON.stringify([workspaceGeneration,authoringRegistrations.filter(row=>row.pluginId==="proprium.semantic").map(row=>row.manifestDigest)])}
+      invokeRead={(pluginId,actionId,input,signal)=>authoring.invokeRead(pluginId,actionId,input,signal)} invokeUi={(event,pluginId,actionId,input)=>authoring.invokeUi(event,pluginId,actionId,input)} />}
+    <details><summary>外部プロバイダーの設定</summary><ProviderSettingsPanel store={providerSettings} onChanged={()=>setProviderSettingsEpoch(value=>value+1)} /></details>
     {authoringRegistrations.some(row=>row.pluginId==="proprium.paired-writing") && <details><summary>執筆支援の個人設定</summary><PairedPreferenceSettingsPanel key={`${workspaceGeneration}:${providerSettingsEpoch}:${preferences.email}`} scopeKey={authoring.localPreferenceScope()}
       load={async expectedScope=>{
         const local=await authoring.readLocalPreference(expectedScope,"proprium.paired-writing","model-settings",1);
@@ -1119,6 +1133,10 @@ export function HostApp(): ReactElement {
     </div></details>
   </div>;
   const editor = workspace && git && currentFile ? <section className="restored-editor">
+    {authoring && selectedNarrativeScene.current?.path===currentFile.path && selectedNarrativeScene.current.generation===workspaceGeneration && authoringRegistrations.some(row=>row.pluginId==="proprium.narrative"&&row.status==="ready") && <NarrativeNavigation
+      sceneId={selectedNarrativeScene.current.id} scopeKey={JSON.stringify([workspaceGeneration,status.head,status.entries.map(entry=>[entry.path,entry.worktree,entry.stage]),currentFile.dirty,authoringRegistrations.filter(row=>row.pluginId==="proprium.narrative").map(row=>row.manifestDigest)])}
+      read={async(actionId,input,signal)=>{const result=await authoring.invokeRead("proprium.narrative",actionId,input,signal);if(!result.ok)throw new Error(`${result.error.code}: ${result.error.message}`);return result.value;}}
+      open={async(event,sceneId,treeRevision)=>{const result=await invokeAuthoring(event,"proprium.narrative","proprium.narrative.scene.open",{scene_id:sceneId,expected_tree_revision:treeRevision});if(!result.action_result.ok)throw new Error(result.action_result.error.message);}} />}
     {currentFile.binary ? <>
       <strong aria-label="Current file">{currentFile.path}</strong>
       <p>Binary file · {currentFile.data?.byteLength ?? 0} bytes</p>
