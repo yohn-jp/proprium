@@ -61,7 +61,7 @@ const indexStatus: Handler = (raw, context) => {
 const indexRebuild: Handler = (raw) => {
   const input = exactObject(raw, ["taskId"], "input");
   safeTaskId(input.taskId);
-  throw fail("provider_unavailable", "The signed embedding asset is not admitted for this plugin version");
+  throw fail("dependency_unavailable", "Semantic index rebuild is not implemented in this plugin version");
 };
 
 function queryInput(raw: unknown): { query: string; granularity: "scene" | "sentence"; limit: number; excludeSceneIds?: string[] } {
@@ -83,7 +83,7 @@ function queryInput(raw: unknown): { query: string; granularity: "scene" | "sent
 const passageQuery: Handler = (raw, context) => {
   const input = queryInput(raw);
   if (!input.query.trim()) return { snapshot: context.snapshot, model: unavailableModel("embedding"), results: [] };
-  throw fail("index_missing", "No verified Semantic index exists for this snapshot; the embedding asset is unavailable");
+  throw fail("index_missing", "No verified Semantic index exists for this snapshot");
 };
 
 const rerank: Handler = (raw) => {

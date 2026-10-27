@@ -54,11 +54,13 @@ test("index and model actions report their unavailable state without loading or 
   const query = JSON.parse(startInvoke("proprium.semantic.passages.query", { query: "旅", granularity: "sentence", limit: 10 })) as Record<string, any>;
   assert.equal(query.ok, false);
   assert.equal(query.error.code, "index_missing");
+  assert.doesNotMatch(query.error.message, /asset is unavailable/i);
   guest.dispose();
 
   const rebuild = JSON.parse(startInvoke("proprium.semantic.index.rebuild", { taskId: "build-1" })) as Record<string, any>;
   assert.equal(rebuild.ok, false);
-  assert.equal(rebuild.error.code, "provider_unavailable");
+  assert.equal(rebuild.error.code, "dependency_unavailable");
+  assert.match(rebuild.error.message, /index rebuild/i);
   guest.dispose();
 });
 
@@ -100,4 +102,13 @@ test("guest rejects unknown fields and reports missing admitted model capability
   const unavailable = invoke({ candidates: [], useEmbedding: true });
   assert.equal(unavailable.ok, false);
   assert.equal(unavailable.error.code, "provider_unavailable");
+});
+
+test("Semantic exposes index state and explicit rebuild through a Host panel", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const manifest = JSON.parse(await readFile(new URL("./plugin.json", import.meta.url), "utf8"));
+  const panel = manifest.ui.find((item: { id: string }) => item.id === "semantic.index");
+  assert.equal(panel.body.load_action.action_id, "proprium.semantic.index.status");
+  const rebuild = panel.body.tabs.find((tab: { id: string }) => tab.id === "rebuild");
+  assert.equal(rebuild.body.submit.action_id, "proprium.semantic.index.rebuild");
 });
