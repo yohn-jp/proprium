@@ -449,9 +449,10 @@ function FormWidget({ node, data, invoke, busy }: {
     if (validation) return;
     setError("");
     try {
-      const context: AuthoringJson = { ...asRecord(data), form: formValuesToJson(node.fields, values) };
+      const form = formValuesToJson(node.fields, values);
+      const context: AuthoringJson = { ...asRecord(data), form };
       if (node.confirmation) setPendingContext(context);
-      else invoke(node.submit, event.nativeEvent, context);
+      else invoke(omitAbsentOptionalFormInputs(node.submit, node.fields, form), event.nativeEvent, context);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "入力内容を確認してください。");
     }
@@ -462,7 +463,8 @@ function FormWidget({ node, data, invoke, busy }: {
     if (pendingContext === null || busy) return;
     const context = pendingContext;
     setPendingContext(null);
-    invoke(node.submit, event.nativeEvent, context);
+    try { invoke(omitAbsentOptionalFormInputs(node.submit, node.fields, asRecord(context).form ?? {}), event.nativeEvent, context); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "入力内容を確認してください。"); }
   };
   const labelId = `authoring-form-${node.id}`;
   return <form className="authoring-form" aria-labelledby={labelId} onSubmit={submit}>
@@ -534,6 +536,39 @@ export function formValuesToJson(fields: readonly AuthoringField[], values: Read
 
 function asRecord(value: unknown): Record<string, AuthoringJson> {
   return isRecord(value) ? value as Record<string, AuthoringJson> : {};
+}
+
+/** Optional form fields absent from submitted JSON must stay absent in Action input.
+ * Unknown data keys and required fields retain the normal fail-closed resolver.
+ */
+export function omitAbsentOptionalFormInputs(binding: AuthoringActionBinding, fields: readonly AuthoringField[], form: AuthoringJson): AuthoringActionBinding {
+  const values = asRecord(form);
+  const absent = fields.filter(field => !field.required && !Object.hasOwn(values, field.id)).map(field => `form.${field.id}`);
+  const omitted = Symbol("absent optional form input");
+  const visit = (value: AuthoringTemplate, depth = 0): AuthoringTemplate | typeof omitted => {
+    if (depth > MAX_TEMPLATE_DEPTH) throw new Error("The UI input template is too deeply nested.");
+    if (isDataKey(value)) return absent.some(path => value.data_key === path || value.data_key.startsWith(`${path}.`)) ? omitted : value;
+    if (Array.isArray(value)) return value.map(item => {
+      const next = visit(item, depth + 1);
+      if (next === omitted) throw new Error("An absent optional form value cannot occupy an array position.");
+      return next;
+    }) as AuthoringTemplate;
+    if (isRecord(value)) {
+      const entries: Array<[string, AuthoringTemplate]> = [];
+      for (const [key, item] of Object.entries(value)) {
+        const next = visit(item as AuthoringTemplate, depth + 1);
+        if (next !== omitted) entries.push([key, next]);
+      }
+      return Object.fromEntries(entries) as AuthoringTemplate;
+    }
+    return value;
+  };
+  const input: Record<string, AuthoringTemplate> = {};
+  for (const [key, value] of Object.entries(binding.input_template)) {
+    const next = visit(value);
+    if (next !== omitted) input[key] = next;
+  }
+  return { ...binding, input_template: input };
 }
 
 function composeSurfaceData(surface: AuthoringSurfaceProps["surface"], data: AuthoringJson): Record<string, AuthoringJson> {

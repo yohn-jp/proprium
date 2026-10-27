@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AuthoringSurface, formValuesToJson, initialFormValues, mergeInitialFormValues, optionsForRecordField, resolveAuthoringNavigation, resolveAuthoringTemplate } from "./AuthoringSurface.js";
+import { AuthoringSurface, formValuesToJson, initialFormValues, mergeInitialFormValues, omitAbsentOptionalFormInputs, optionsForRecordField, resolveAuthoringNavigation, resolveAuthoringTemplate } from "./AuthoringSurface.js";
 import type { AuthoringSurfaceDeclaration } from "./types.js";
 import { validateAuthoringSurfaceDeclaration } from "./validate.js";
 
@@ -27,6 +27,20 @@ test("unchecked required boolean fields submit false while optional fields stay 
   ];
   const values = initialFormValues(fields, {});
   assert.deepEqual(formValuesToJson(fields, values), { appendix: false });
+});
+
+test("optional absent form values are omitted from inputs without hiding missing required or unknown keys", () => {
+  const fields = [{ id: "title", type: "string" as const, label: "Title" },
+    { id: "appendix", type: "boolean" as const, label: "Appendix", required: true }];
+  const binding = { action_id: "publishing.export", input_template: { title: { data_key: "form.title" }, appendix: { data_key: "form.appendix" } } };
+  const form = { appendix: false };
+  const pruned = omitAbsentOptionalFormInputs(binding, fields, form);
+  assert.deepEqual(resolveAuthoringTemplate(pruned.input_template, { form }), { appendix: false });
+  const filled = { title: "A book", appendix: false };
+  assert.deepEqual(resolveAuthoringTemplate(omitAbsentOptionalFormInputs(binding, fields, filled).input_template, { form: filled }), filled);
+  assert.throws(() => resolveAuthoringTemplate(omitAbsentOptionalFormInputs(binding, fields, {}).input_template, { form: {} }), /missing declared data key/u);
+  const typo = { action_id: "publishing.export", input_template: { title: { data_key: "form.typo" } } };
+  assert.throws(() => resolveAuthoringTemplate(omitAbsentOptionalFormInputs(typo, fields, {}).input_template, { form: {} }), /missing declared data key/u);
 });
 
 test("active nested tab exposes its signed read and separate detail/source controls", () => {
