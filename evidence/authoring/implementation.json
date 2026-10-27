@@ -1,7 +1,7 @@
 {
   "schema": "proprium.authoring.evidence/v1",
-  "release_sha": null,
-  "registry_digest": null,
+  "release_sha": "2d1bc8fbfe4c314edc4ed485eb7fc0ca65b18852",
+  "registry_digest": "0b29e79f3e91bca46c3ffc83b48d689b9d6a70ba18fc28c80d813948005554e8",
   "generated_from": {
     "acceptance": "docs/canon/ACCEPTANCE.md",
     "inventory": "docs/canon/RECOVERY-INVENTORY.md",
@@ -25,14 +25,14 @@
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
-      "git_sha": null,
+      "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
       "output": null,
       "receipt": null,
       "artifact": null,
-      "evidence_ref": null,
-      "blocker": null
+      "evidence_ref": "evidence/authoring/validation/results.json",
+      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
     },
     {
       "id": "R02",
@@ -41,14 +41,14 @@
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
-      "git_sha": null,
+      "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
-      "output": null,
+      "output": "All eight actual components and registry signature/dependency integrity PASS with ephemeral keys. Full install/update/rollback/uninstall/browser lifecycle is not certified.",
       "receipt": null,
-      "artifact": null,
-      "evidence_ref": null,
-      "blocker": null
+      "artifact": "evidence/authoring/validation/components.json",
+      "evidence_ref": "evidence/authoring/validation/results.json",
+      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
     },
     {
       "id": "R03",
@@ -57,14 +57,14 @@
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
-      "git_sha": null,
+      "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
-      "output": null,
+      "output": "Actual signed Narrative small Chromium navigation passed diagnostically; final 301-scene and mobile navigation validation pending.",
       "receipt": null,
       "artifact": null,
-      "evidence_ref": null,
-      "blocker": null
+      "evidence_ref": "evidence/authoring/validation/results.json",
+      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
     },
     {
       "id": "R04",
@@ -73,14 +73,14 @@
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
-      "git_sha": null,
+      "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
       "output": null,
       "receipt": null,
       "artifact": null,
-      "evidence_ref": null,
-      "blocker": null
+      "evidence_ref": "evidence/authoring/validation/results.json",
+      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
     },
     {
       "id": "R05",
@@ -89,30 +89,30 @@
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
-      "git_sha": null,
+      "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
       "output": null,
       "receipt": null,
       "artifact": null,
-      "evidence_ref": null,
-      "blocker": null
+      "evidence_ref": "evidence/authoring/validation/results.json",
+      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
     },
     {
       "id": "R06",
       "canon_title": "Semantic structure edits",
       "required_proof": "Create/edit/reorder chapter/scene and semantic metadata through reviewed multi-file preconditions, preserve unrelated YAML/frontmatter",
-      "status": "NOT_CHECKED",
+      "status": "FAIL",
       "fixture": null,
       "command": null,
-      "git_sha": null,
+      "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
       "output": null,
       "receipt": null,
       "artifact": null,
-      "evidence_ref": null,
-      "blocker": null
+      "evidence_ref": "evidence/authoring/validation/results.json",
+      "blocker": "Creation/reorder command forms require manual domain IDs; complete selected-row rename/relink and accessible structural editing flow not delivered."
     },
     {
       "id": "R07",
@@ -121,14 +121,14 @@
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
-      "git_sha": null,
+      "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
       "output": null,
       "receipt": null,
       "artifact": null,
-      "evidence_ref": null,
-      "blocker": null
+      "evidence_ref": "evidence/authoring/validation/results.json",
+      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
     },
     {
       "id": "R08",
@@ -137,46 +137,46 @@
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
-      "git_sha": null,
+      "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
       "output": null,
       "receipt": null,
       "artifact": null,
-      "evidence_ref": null,
-      "blocker": null
+      "evidence_ref": "evidence/authoring/validation/results.json",
+      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
     },
     {
       "id": "R09",
       "canon_title": "MCP-first paired writing",
       "required_proof": "Explicit repository ID -> context/manifest -> typed proposal -> diff/evidence -> selective author approval -> apply -> same editing location, no external self-approval",
-      "status": "NOT_CHECKED",
+      "status": "FAIL",
       "fixture": null,
       "command": null,
-      "git_sha": null,
+      "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
       "output": null,
       "receipt": null,
       "artifact": null,
-      "evidence_ref": null,
-      "blocker": null
+      "evidence_ref": "evidence/authoring/validation/results.json",
+      "blocker": "Paired Writing canon actions and provider.request Host route remain incomplete; real typed MCP proposal approval E2E not executed."
     },
     {
       "id": "R10",
       "canon_title": "Speaker and heavy semantics",
       "required_proof": "Human corrections and eval, optional embeddings and contradictions; no-model fallback, no cross-repo leakage",
-      "status": "NOT_CHECKED",
+      "status": "FAIL",
       "fixture": null,
       "command": null,
-      "git_sha": null,
+      "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
       "output": null,
       "receipt": null,
       "artifact": null,
-      "evidence_ref": null,
-      "blocker": null
+      "evidence_ref": "evidence/authoring/validation/results.json",
+      "blocker": "Semantic index rebuild/candidate generation/task lifecycle is unimplemented, not merely a missing model."
     },
     {
       "id": "R11",
@@ -185,14 +185,14 @@
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
-      "git_sha": null,
+      "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
       "output": null,
       "receipt": null,
       "artifact": null,
-      "evidence_ref": null,
-      "blocker": null
+      "evidence_ref": "evidence/authoring/validation/results.json",
+      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
     },
     {
       "id": "R12",
@@ -201,14 +201,14 @@
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
-      "git_sha": null,
+      "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
       "output": null,
       "receipt": null,
       "artifact": null,
-      "evidence_ref": null,
-      "blocker": null
+      "evidence_ref": "evidence/authoring/validation/results.json",
+      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
     },
     {
       "id": "R13",
@@ -217,14 +217,14 @@
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
-      "git_sha": null,
+      "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
       "output": null,
       "receipt": null,
       "artifact": null,
-      "evidence_ref": null,
-      "blocker": null
+      "evidence_ref": "evidence/authoring/validation/results.json",
+      "blocker": "Same-SHA official distribution, all author UI jobs and final remote CI not yet established. Production credentials unavailable."
     },
     {
       "id": "R14",
@@ -233,14 +233,14 @@
       "status": "NOT_CHECKED",
       "fixture": null,
       "command": null,
-      "git_sha": null,
+      "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
       "output": null,
       "receipt": null,
       "artifact": null,
-      "evidence_ref": null,
-      "blocker": null
+      "evidence_ref": "evidence/authoring/validation/results.json",
+      "blocker": "Full mandatory acceptance scenario and failure dimensions have not been certified; see local partial evidence."
     }
   ],
   "plugins": [
@@ -284,13 +284,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -348,13 +348,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -374,13 +374,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -410,13 +410,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -446,13 +446,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -496,13 +496,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -522,13 +522,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -548,13 +548,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -574,13 +574,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -600,13 +600,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -626,13 +626,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -652,13 +652,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         }
       ],
@@ -682,13 +682,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -755,13 +755,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -783,13 +783,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -823,13 +823,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -863,13 +863,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -919,13 +919,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -947,13 +947,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -975,13 +975,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -1003,13 +1003,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -1031,13 +1031,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -1059,13 +1059,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -1087,13 +1087,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         }
       ]
@@ -1183,13 +1183,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -1263,13 +1263,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -1337,13 +1337,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -1395,13 +1395,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -1446,13 +1446,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -1554,13 +1554,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -1590,13 +1590,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -1655,13 +1655,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -1741,13 +1741,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -1784,13 +1784,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -1883,13 +1883,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -1988,13 +1988,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2068,13 +2068,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2167,13 +2167,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2193,13 +2193,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2219,13 +2219,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2245,13 +2245,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2271,13 +2271,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2298,13 +2298,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         }
       ],
@@ -2374,13 +2374,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2422,13 +2422,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2463,13 +2463,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2492,13 +2492,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2566,13 +2566,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2631,13 +2631,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2680,13 +2680,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2721,13 +2721,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2749,13 +2749,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2797,13 +2797,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2846,13 +2846,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2874,13 +2874,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2923,13 +2923,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -2964,13 +2964,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3005,13 +3005,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3053,13 +3053,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3093,13 +3093,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3191,13 +3191,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3305,13 +3305,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3333,13 +3333,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3362,13 +3362,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3391,13 +3391,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3419,13 +3419,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3447,13 +3447,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3475,13 +3475,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         }
       ]
@@ -3544,13 +3544,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3570,13 +3570,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3627,13 +3627,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3670,13 +3670,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3713,13 +3713,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3756,13 +3756,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3792,13 +3792,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3842,13 +3842,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3878,13 +3878,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3904,13 +3904,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3940,13 +3940,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -3990,13 +3990,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -4016,13 +4016,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         }
       ],
@@ -4067,13 +4067,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -4095,13 +4095,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -4160,13 +4160,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -4209,13 +4209,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -4258,13 +4258,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -4307,13 +4307,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -4347,13 +4347,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -4404,13 +4404,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -4444,13 +4444,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -4472,13 +4472,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -4512,13 +4512,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -4569,13 +4569,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -4597,13 +4597,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         }
       ]
@@ -4691,17 +4691,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
         },
         {
           "id": "accept-pw-02",
@@ -4743,17 +4743,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
         },
         {
           "id": "accept-pw-03",
@@ -4794,17 +4794,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
         },
         {
           "id": "accept-pw-04",
@@ -4845,17 +4845,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
         },
         {
           "id": "accept-pw-05",
@@ -4930,17 +4930,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
         },
         {
           "id": "accept-pw-06",
@@ -5003,17 +5003,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
         },
         {
           "id": "accept-pw-07",
@@ -5101,17 +5101,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
         },
         {
           "id": "accept-pw-08",
@@ -5129,17 +5129,17 @@
           ],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
         },
         {
           "id": "accept-pw-09",
@@ -5155,17 +5155,17 @@
           ],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
         },
         {
           "id": "accept-pw-10",
@@ -5194,17 +5194,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
         },
         {
           "id": "accept-pw-11",
@@ -5266,17 +5266,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required Paired Writing behavior remains incomplete; see owning feature records."
         },
         {
           "id": "accept-pw-21",
@@ -5305,13 +5305,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         }
       ],
@@ -5386,17 +5386,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
         },
         {
           "feature_id": "PW-02",
@@ -5446,13 +5446,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -5500,17 +5500,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
         },
         {
           "feature_id": "PW-04",
@@ -5557,17 +5557,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
         },
         {
           "feature_id": "PW-05",
@@ -5654,17 +5654,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
         },
         {
           "feature_id": "PW-06",
@@ -5735,17 +5735,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
         },
         {
           "feature_id": "PW-07",
@@ -5775,17 +5775,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
         },
         {
           "feature_id": "PW-08",
@@ -5823,17 +5823,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
         },
         {
           "feature_id": "PW-09",
@@ -5863,17 +5863,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
         },
         {
           "feature_id": "PW-10",
@@ -5903,17 +5903,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
         },
         {
           "feature_id": "PW-11",
@@ -5968,17 +5968,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
         },
         {
           "feature_id": "PW-12",
@@ -6000,17 +6000,17 @@
           "source_ui_contributions": [],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
         },
         {
           "feature_id": "PW-13",
@@ -6028,17 +6028,17 @@
           "source_ui_contributions": [],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
         },
         {
           "feature_id": "PW-14",
@@ -6056,17 +6056,17 @@
           "source_ui_contributions": [],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
         },
         {
           "feature_id": "PW-15",
@@ -6087,13 +6087,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -6113,17 +6113,17 @@
           "source_ui_contributions": [],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
         },
         {
           "feature_id": "PW-17",
@@ -6142,17 +6142,17 @@
           "source_ui_contributions": [],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
         },
         {
           "feature_id": "PW-18",
@@ -6171,17 +6171,17 @@
           "source_ui_contributions": [],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
         },
         {
           "feature_id": "PW-19",
@@ -6199,17 +6199,17 @@
           "source_ui_contributions": [],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature."
         },
         {
           "feature_id": "PW-20",
@@ -6231,13 +6231,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -6272,13 +6272,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         }
       ]
@@ -6344,13 +6344,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -6371,13 +6371,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -6398,13 +6398,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -6424,13 +6424,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -6460,13 +6460,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -6503,13 +6503,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -6546,13 +6546,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -6589,13 +6589,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -6647,13 +6647,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -6690,13 +6690,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -6733,13 +6733,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -6776,13 +6776,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -6819,13 +6819,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -6862,13 +6862,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -6898,13 +6898,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -6950,13 +6950,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         }
       ],
@@ -7005,13 +7005,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7054,13 +7054,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7103,13 +7103,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7152,13 +7152,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7200,13 +7200,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7250,13 +7250,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7290,13 +7290,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7330,13 +7330,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7359,13 +7359,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7387,13 +7387,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7427,13 +7427,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7456,13 +7456,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7484,13 +7484,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7532,13 +7532,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         }
       ]
@@ -7593,13 +7593,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7636,13 +7636,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7662,13 +7662,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7698,13 +7698,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7748,13 +7748,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7791,13 +7791,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7841,13 +7841,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7898,13 +7898,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7955,13 +7955,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -7991,13 +7991,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -8017,13 +8017,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -8043,13 +8043,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         }
       ],
@@ -8085,13 +8085,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -8134,13 +8134,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -8162,13 +8162,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -8202,13 +8202,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -8259,13 +8259,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -8308,13 +8308,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -8365,13 +8365,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -8429,13 +8429,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -8494,13 +8494,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -8534,13 +8534,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -8562,13 +8562,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -8590,13 +8590,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         }
       ]
@@ -8675,17 +8675,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required Semantic implementation is absent; see feature records."
         },
         {
           "id": "accept-sem-a2",
@@ -8720,17 +8720,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required Semantic implementation is absent; see feature records."
         },
         {
           "id": "accept-sem-a3",
@@ -8765,17 +8765,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required Semantic implementation is absent; see feature records."
         },
         {
           "id": "accept-sem-a4",
@@ -8804,17 +8804,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required Semantic implementation is absent; see feature records."
         },
         {
           "id": "accept-sem-a5",
@@ -8851,17 +8851,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Required Semantic implementation is absent; see feature records."
         },
         {
           "id": "accept-sem-a6",
@@ -8899,13 +8899,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -8927,13 +8927,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         }
       ],
@@ -9001,17 +9001,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Actual Semantic index rebuild, retrieval and candidate generation are not implemented; unavailable status UI is not feature completion."
         },
         {
           "feature_id": "SEM-02",
@@ -9052,17 +9052,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Actual Semantic index rebuild, retrieval and candidate generation are not implemented; unavailable status UI is not feature completion."
         },
         {
           "feature_id": "SEM-03",
@@ -9103,17 +9103,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Actual Semantic index rebuild, retrieval and candidate generation are not implemented; unavailable status UI is not feature completion."
         },
         {
           "feature_id": "SEM-04",
@@ -9145,17 +9145,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Actual Semantic index rebuild, retrieval and candidate generation are not implemented; unavailable status UI is not feature completion."
         },
         {
           "feature_id": "SEM-05",
@@ -9196,17 +9196,17 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FAIL",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
-          "blocker": null
+          "evidence_ref": "evidence/authoring/validation/results.json",
+          "blocker": "Actual Semantic index rebuild, retrieval and candidate generation are not implemented; unavailable status UI is not feature completion."
         },
         {
           "feature_id": "SEM-06",
@@ -9249,13 +9249,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -9279,13 +9279,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -9309,13 +9309,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -9340,13 +9340,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         }
       ]
@@ -9402,13 +9402,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -9438,13 +9438,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -9481,13 +9481,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -9524,13 +9524,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -9567,13 +9567,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -9610,13 +9610,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -9636,13 +9636,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -9686,13 +9686,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -9743,13 +9743,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -9800,13 +9800,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -9826,13 +9826,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -9852,13 +9852,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -9878,13 +9878,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         }
       ],
@@ -9921,13 +9921,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -9970,13 +9970,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -10020,13 +10020,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -10069,13 +10069,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -10097,13 +10097,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -10154,13 +10154,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -10220,13 +10220,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         },
         {
@@ -10250,13 +10250,13 @@
           "status": "NOT_CHECKED",
           "fixture": null,
           "command": null,
-          "git_sha": null,
+          "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
           "output": null,
           "receipt": null,
           "artifact": null,
-          "evidence_ref": null,
+          "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null
         }
       ]
@@ -15352,5 +15352,86 @@
     "source_revisions": [
       "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
     ]
+  },
+  "execution": {
+    "base_sha": "cf286eea88d9ef7c809463ff0e339a140e87abb4",
+    "candidate_sha": "d9e92b24655165b66e63142e8946c6f3aa1378ed",
+    "certified": false,
+    "pr": "https://github.com/yohn-jp/proprium/pull/16",
+    "note": "Candidate source SHA, not a certified release. Full acceptance and live deployment are incomplete. Unit tests do not certify feature or R-ID completion.",
+    "cloudflare_publication": {
+      "status": "BLOCKED",
+      "reason": "No managed-environment signing/R2 credentials configured. GitHub Secrets and Variables metadata endpoints return HTTP403 for the injected integration identity; production credentials/permissions cannot be established. No production publication performed."
+    },
+    "checks": [
+      {
+        "name": "Host typecheck",
+        "command": "pnpm typecheck:browser",
+        "status": "PASS",
+        "git_sha": "d9e92b24655165b66e63142e8946c6f3aa1378ed",
+        "evidence_ref": "evidence/authoring/validation/typecheck.log",
+        "scope": "Only the named local suite; not all R-ID or feature acceptance dimensions."
+      },
+      {
+        "name": "Host unit",
+        "command": "pnpm test:browser:unit",
+        "status": "PASS",
+        "git_sha": "d9e92b24655165b66e63142e8946c6f3aa1378ed",
+        "evidence_ref": "evidence/authoring/validation/host-unit.log",
+        "scope": "Only the named local suite; not all R-ID or feature acceptance dimensions."
+      },
+      {
+        "name": "Host static build",
+        "command": "pnpm build:browser",
+        "status": "PASS",
+        "git_sha": "d9e92b24655165b66e63142e8946c6f3aa1378ed",
+        "evidence_ref": "evidence/authoring/validation/host-build.log",
+        "scope": "Only the named local suite; not all R-ID or feature acceptance dimensions."
+      },
+      {
+        "name": "Official plugin units",
+        "command": "node --import tsx --test <all official *.test.ts>",
+        "status": "PASS",
+        "git_sha": "d9e92b24655165b66e63142e8946c6f3aa1378ed",
+        "evidence_ref": "evidence/authoring/validation/official-units.log",
+        "scope": "Only the named local suite; not all R-ID or feature acceptance dimensions."
+      },
+      {
+        "name": "Recovered UI units",
+        "command": "pnpm test:ui:unit",
+        "status": "PASS",
+        "git_sha": "e77000a",
+        "evidence_ref": "evidence/authoring/validation/ui-unit.log",
+        "scope": "Only the named local suite; not all R-ID or feature acceptance dimensions."
+      },
+      {
+        "name": "Static desktop/mobile offline",
+        "command": "PROPRIUM_E2E_CHROMIUM=/usr/bin/chromium PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1 playwright test --config tests/browser/static-playwright.config.ts",
+        "status": "PASS",
+        "git_sha": "2793a9c",
+        "evidence_ref": "evidence/authoring/validation/static-e2e.log",
+        "scope": "Only the named local suite; not all R-ID or feature acceptance dimensions."
+      },
+      {
+        "name": "Gateway race regression/full/vet",
+        "command": "go test -race -run TestHostSelectionDoesNotFailOverAfterDisconnect -count=100; go test -race ./...; go vet ./...",
+        "status": "PASS",
+        "git_sha": "aebe73fd6b0e8e0d43e99a61a12f4fa3888e392b",
+        "evidence_ref": "evidence/authoring/validation/gateway-race.log",
+        "scope": "Only the named local suite; not all R-ID or feature acceptance dimensions."
+      },
+      {
+        "name": "Actual eight WASM builds and signed registry integrity",
+        "command": "NODE_USE_ENV_PROXY=1 node scripts/test-authoring-plugin-build.mjs",
+        "status": "PASS",
+        "git_sha": "2d1bc8fbfe4c314edc4ed485eb7fc0ca65b18852",
+        "evidence_ref": "evidence/authoring/validation/components.json",
+        "scope": "Ephemeral test keys; browser lifecycle and production release not certified."
+      }
+    ],
+    "same_release_sha_certification": {
+      "status": "NOT_CHECKED",
+      "reason": "All-eight registry build is pinned to 2d1bc8f; final Host lease-validation optimization is d9e92b2. No same-SHA full product acceptance or production publication is certified."
+    }
   }
 }

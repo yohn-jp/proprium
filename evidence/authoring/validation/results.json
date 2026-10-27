@@ -1,0 +1,40 @@
+{
+  "candidate_sha": "d9e92b24655165b66e63142e8946c6f3aa1378ed",
+  "overall": "INCOMPLETE",
+  "browser_suite": {
+    "status": "NOT_CHECKED",
+    "reason": "Earlier runs invalidated by shared-contract rebuild/HMR; targeted stable checks include actual failures and passes; no complete final suite PASS."
+  },
+  "official_registry": {
+    "status": "PASS",
+    "source_sha": "2d1bc8fbfe4c314edc4ed485eb7fc0ca65b18852",
+    "registry_digest": "0b29e79f3e91bca46c3ffc83b48d689b9d6a70ba18fc28c80d813948005554e8",
+    "evidence_ref": "evidence/authoring/validation/components.json",
+    "signing": "Ephemeral test keys; not production"
+  },
+  "official_narrative_e2e": {
+    "status": "NOT_CHECKED",
+    "observations": [
+      "Small signed Narrative Chromium navigation passed.",
+      "Earlier 301-scene action timed out at actual 30-second budget.",
+      "Subsequent exact lease validation removes redundant unrelated page fetches; final large/mobile reruns pending."
+    ]
+  },
+  "h0_read": {
+    "status": "PASS",
+    "command": "PROPRIUM_E2E_CHROMIUM=/usr/bin/chromium PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1 pnpm test:browser:adapters",
+    "scope": "Only authoring-snapshot.acceptance.spec.ts sub-suite: 2 actual Chromium/Mobile WebKit tests passed; complete adapter command had another failing suite."
+  },
+  "remaining": [
+    "Semantic index rebuild and model inference lifecycle",
+    "Paired Writing remaining canon actions/provider Host bridge",
+    "All R01–R14 mandatory failure dimensions",
+    "Live Cloudflare publish and acquisition",
+    "Physical-device tests and source-aware sibling provenance checks"
+  ],
+  "ci": {
+    "gateway": "PENDING after test race fix",
+    "browser": "PENDING",
+    "production_publish": "BLOCKED"
+  }
+}
