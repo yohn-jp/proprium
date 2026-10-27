@@ -46,6 +46,8 @@ jobs:
         with:
           toolchain: 1.99.0
           target: wasm32-unknown-unknown
+      - name: Install Research's pinned Rust toolchain
+        run: rustup toolchain install 1.99.1 --profile minimal --target wasm32-unknown-unknown
       - name: Install pinned cargo-component
         run: cargo install cargo-component --version 0.21.1 --locked
       - name: Install pinned wasm-tools composer
