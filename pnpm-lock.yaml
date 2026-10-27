@@ -190,6 +190,9 @@ importers:
       '@bytecodealliance/jco-transpile':
         specifier: 0.20.0
         version: 0.20.0
+      '@cfworker/json-schema':
+        specifier: 4.1.1
+        version: 4.1.1
       '@codemirror/commands':
         specifier: ^6.10.4
         version: 6.11.1
@@ -613,6 +616,9 @@ packages:
     resolution: {integrity: sha512-ziWmovyu1jQl9TsKlfC2bwuUZwxVPFHlX4fOqTzxhgS76jITIo45nzODEwPgU+jjmOr8F3YX2V2wAChC5NKujg==}
     engines: {node: '>=16'}
     hasBin: true
+
+  '@cfworker/json-schema@4.1.1':
+    resolution: {integrity: sha512-gAmrUZSGtKc3AiBL71iNWxDsyUC5uMaKKGdvzYsBoTW/xi42JQHl7eKV2OYzCUqvc+D2RCcf7EXY2iCyFIk6og==}
 
   '@cloudflare/kv-asset-handler@0.5.0':
     resolution: {integrity: sha512-jxQYkj8dSIzc0cD6cMMNdOc1UVjqSqu8BZdor5s8cGjW2I8BjODt/kWPVdY+u9zj3ms75Q5qaZgnxUad83+eAg==}
@@ -3275,6 +3281,8 @@ snapshots:
       '@bytecodealliance/wizer-linux-s390x': 10.0.0
       '@bytecodealliance/wizer-linux-x64': 10.0.0
       '@bytecodealliance/wizer-win32-x64': 10.0.0
+
+  '@cfworker/json-schema@4.1.1': {}
 
   '@cloudflare/kv-asset-handler@0.5.0': {}
 

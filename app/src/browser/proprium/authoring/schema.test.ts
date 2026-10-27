@@ -33,3 +33,14 @@ test("only Host widget shapes and declared data bindings are admitted", () => {
   assert.throws(() => assertSurface({ ...surface, body: { ...surface.body, html: "<script>" } }));
   assert.throws(() => assertSurface({ ...surface, body: { id: "custom", type: "html", value: "<b>" } }));
 });
+
+test("interpreted schema validation preserves frozen signed declarations and rejects malformed types", () => {
+  const schema = Object.freeze({ type: "object", additionalProperties: false,
+    properties: Object.freeze({ count: Object.freeze({ type: "integer", minimum: 1 }) }), required: Object.freeze(["count"]) });
+  const before = JSON.stringify(schema);
+  assertValue(schema, { count: 2 });
+  assert.equal(JSON.stringify(schema), before);
+  assert.throws(() => assertValue(schema, { count: 0 }));
+  assert.throws(() => assertValue({ type: "invented" } as never, {}));
+  assert.throws(() => assertValue({ type: "object", properties: { x: { type: "invented" } }, additionalProperties: false } as never, {}));
+});

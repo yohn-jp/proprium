@@ -1,4 +1,5 @@
-import { Ajv2020 } from "ajv/dist/2020.js";
+import { Validator, type Schema } from "@cfworker/json-schema";
+import { structuralSchemaMeta } from "./schema-meta.js";
 import type { ActionDescriptor, ActionRequest, ActionResult, JsonSchema } from "./types.js";
 import { AuthoringError } from "./types.js";
 
@@ -88,13 +89,18 @@ export const surfaceSchema = {
   ] } },
 };
 
-// All validators compile from this adopted schema. No runtime schema fetching.
-const ajv = new Ajv2020({ allErrors: false, strict: false, validateFormats: false, unicodeRegExp: true });
-const requestValidator = ajv.compile(actionRequestSchema);
-const descriptorValidator = ajv.compile(actionDescriptorSchema);
-const resultValidator = ajv.compile(actionResultSchema);
-const surfaceValidator = ajv.compile(surfaceSchema);
-const valueValidators = new WeakMap<object, ReturnType<typeof ajv.compile>>();
+// Interpret the adopted schema without eval/Function. Runtime code generation is
+// forbidden by the static Host CSP, including for newly installed action schemas.
+const compile = (schema: unknown) => {
+  const validator = new Validator(structuredClone(schema) as Schema | boolean, "2020-12", true);
+  return (value: unknown) => validator.validate(value).valid;
+};
+const schemaValidator = new Validator(structuredClone(structuralSchemaMeta) as Schema, "7", true);
+const requestValidator = compile(actionRequestSchema);
+const descriptorValidator = compile(actionDescriptorSchema);
+const resultValidator = compile(actionResultSchema);
+const surfaceValidator = compile(surfaceSchema);
+const valueValidators = new WeakMap<object, ReturnType<typeof compile>>();
 function invalid(phase: string): never {
   throw new AuthoringError("invalid_input", `${phase} does not match its declared schema`);
 }
@@ -106,6 +112,7 @@ function assertSize(value: unknown, limit = 1024 * 1024): void {
 /** Schema safety is checked at admission, before an untrusted declaration compiles. */
 export function assertSafeSchema(schema: JsonSchema): void {
   assertSize(schema, 256 * 1024);
+  if (!schemaValidator.validate(schema).valid) invalid("Action schema");
   let nodes = 0;
   const visit = (value: unknown, depth: number) => {
     if (++nodes > 10000 || depth > 64) invalid("Schema complexity");
@@ -128,7 +135,7 @@ export function assertValue(schema: JsonSchema, value: unknown, phase = "Action 
   let validator = valueValidators.get(schema);
   if (!validator) {
     assertSafeSchema(schema);
-    try { validator = ajv.compile(schema); } catch { invalid("Action schema"); }
+    try { validator = compile(schema); } catch { invalid("Action schema"); }
     valueValidators.set(schema, validator);
   }
   if (!validator(value)) invalid(phase);
