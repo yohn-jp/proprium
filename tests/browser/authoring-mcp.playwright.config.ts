@@ -1,9 +1,17 @@
 import { defineConfig } from "@playwright/test";
 import base from "./playwright.config.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const hostPort = process.env.PROPRIUM_E2E_PORT ?? "4173";
 const gatewayPort = process.env.PROPRIUM_E2E_GATEWAY_PORT ?? "4174";
 const { webServer: _unused, ...shared } = base;
+const retained = process.env.PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR;
+if (retained) {
+  const registry = JSON.parse(readFileSync(join(retained, "registry.json"), "utf8")) as { artifactBase:string };
+  const origin = new URL(registry.artifactBase).origin;
+  process.env.VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS = [...new Set([new URL(base.use!.baseURL!).origin, origin])].join(",");
+}
 export default defineConfig({
   ...shared,
   testMatch: "authoring-mcp*.acceptance.spec.ts",

@@ -1,19 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { readFile } from "node:fs/promises";
-import { resolve, sep } from "node:path";
 import { showPanel } from "./restored-ui.helpers.js";
+import { routeMcpRegistry } from "./authoring-mcp-registry.helpers.js";
 
 // Runtime varies by browser and hardware; opt in when exercising actual deadline behavior.
 test("real Narrative work detects Host timeout without changing files", async ({ page }) => {
   test.skip(process.env.PROPRIUM_E2E_LARGE_TIMEOUT !== "1", "Opt in to the load-dependent Host timeout experiment");
   const origin = new URL(test.info().project.use.baseURL!).origin;
-  const root = resolve(process.env.PROPRIUM_OFFICIAL_E2E_DIR!);
-  await page.route(`${origin}/plugin-fixture/**`, async route => {
-    const path = resolve(root, decodeURIComponent(new URL(route.request().url()).pathname.slice("/plugin-fixture/".length)));
-    if (!path.startsWith(root + sep)) return route.fulfill({ status: 404 });
-    try { return await route.fulfill({ body: await readFile(path), contentType: path.endsWith(".json") ? "application/json" : "application/octet-stream" }); }
-    catch { return route.fulfill({ status: 404 }); }
-  });
+  await routeMcpRegistry(page, origin);
   await page.goto("/");
   await page.waitForFunction(() => typeof window.propriumHostTest?.openWorkspace === "function");
   const files: Record<string, string> = {

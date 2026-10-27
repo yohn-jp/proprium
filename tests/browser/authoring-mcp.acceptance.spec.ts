@@ -1,17 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { readFile } from "node:fs/promises";
-import { resolve, sep } from "node:path";
 import { showPanel } from "./restored-ui.helpers.js";
+import { routeMcpRegistry } from "./authoring-mcp-registry.helpers.js";
 
 test("real MCP invokes signed Narrative actions and requires human proposal approval", async ({ page }) => {
   const origin = new URL(test.info().project.use.baseURL!).origin;
-  const root = resolve(process.env.PROPRIUM_OFFICIAL_E2E_DIR!);
-  await page.route(`${origin}/plugin-fixture/**`, async route => {
-    const path = resolve(root, decodeURIComponent(new URL(route.request().url()).pathname.slice("/plugin-fixture/".length)));
-    if (!path.startsWith(root + sep)) return route.fulfill({ status: 404 });
-    try { return await route.fulfill({ body: await readFile(path), contentType: path.endsWith(".json") ? "application/json" : "application/octet-stream" }); }
-    catch { return route.fulfill({ status: 404 }); }
-  });
+  await routeMcpRegistry(page, origin);
   await page.goto("/");
   await page.waitForFunction(() => typeof window.propriumHostTest?.openWorkspace === "function");
   await page.evaluate(async () => window.propriumHostTest!.openWorkspace({ origin:"https://github.com", repositoryId:923456789, owner:"proprium-test", repository:"mcp-official", branch:"main", localWorkspaceId:`mcp-${crypto.randomUUID()}` }, {
