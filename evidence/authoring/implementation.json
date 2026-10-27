@@ -15355,7 +15355,7 @@
   },
   "execution": {
     "base_sha": "cf286eea88d9ef7c809463ff0e339a140e87abb4",
-    "candidate_sha": "8932dee5e918a998609c83a1672ac831f0537bb0",
+    "candidate_sha": "9a708e80fb55818bdb18b47457e98aabe73f8b53",
     "certified": false,
     "pr": "https://github.com/yohn-jp/proprium/pull/16",
     "note": "Candidate source SHA, not a certified release. Full acceptance and live deployment are incomplete. Unit tests do not certify feature or R-ID completion.",
@@ -15522,6 +15522,21 @@
     "same_release_sha_certification": {
       "status": "NOT_CHECKED",
       "reason": "Fresh all-eight build a6526697 passed. Later Speaker segmentation, Paired QA/provider routes, scope restoration and CI changes are newer; same-source full product acceptance is not certified."
+    },
+    "seven_plugin_wave": {
+      "source_sha": "9a708e80fb55818bdb18b47457e98aabe73f8b53",
+      "scope": [
+        "narrative",
+        "knowledge",
+        "research",
+        "diagnostics",
+        "speaker",
+        "semantic",
+        "publishing"
+      ],
+      "evidence_ref": "evidence/authoring/validation/seven-plugin-implementation-wave.json",
+      "status": "PARTIAL",
+      "note": "Scoped unit and package checks only; new UI browser flows, same-source signed registry and complete Canon acceptance remain unverified. Paired Writing frozen and not modified by this evidence wave."
     }
   }
 }
