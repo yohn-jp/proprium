@@ -20,6 +20,7 @@ import "./authoring/authoring-surface.css";
 import { createBrowserAuthoringService, type BrowserAuthoringService } from "../authoring/service.js";
 import { createAuthoringWorkspacePanels, validateAuthoringSurfaceRegistrations, type AuthoringSurfaceRegistration } from "./authoring/WorkspaceAuthoringPanels.js";
 import { AuthoringReview } from "./authoring/AuthoringReview.js";
+import { AuthoringAssets } from "./authoring/AuthoringAssets.js";
 import { AuthoringCommandMenu } from "./authoring/AuthoringCommandMenu.js";
 
 import { DesktopShell } from "../../../shells/desktop/DesktopShell.js";
@@ -222,6 +223,20 @@ export function HostApp(): ReactElement {
     if (!git || !workspace) { setAuthoring(null); setAuthoringRegistrations([]); return; }
     const service = createBrowserAuthoringService({ manager: pluginManager, git, workspace: workspace.identity,
       generation: workspaceGeneration,
+      measureAssetCapacity: async input => {
+        const estimate = await navigator.storage?.estimate().catch(() => undefined);
+        const available = estimate?.quota !== undefined && estimate.usage !== undefined
+          ? Math.max(0, estimate.quota - estimate.usage) : null;
+        // Dictionary processing uses the admitted tokenizer. Model execution needs
+        // a separately measured runtime/device policy and cannot infer support here.
+        const dictionary = input.role === "dictionary";
+        const wasm = typeof WebAssembly !== "undefined" && WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
+        return { device_supported: dictionary && wasm && typeof indexedDB !== "undefined" && available !== null,
+          available_storage_bytes: available, memory_required_bytes: null,
+          device_requirements: [dictionary ? "辞書はプラグインのローカルWASMで処理します。原稿は送信しません。" : "この端末でのモデル実行は未検証です。"],
+          ...(!dictionary ? { reason: "対応するモデル実行環境の容量検証が完了していません。" }
+            : available === null ? { reason: "ブラウザーの保存容量を測定できません。" } : {}) };
+      },
       getEditorState: () => ({ path: currentFileRef.current?.path ?? null, dirty: currentFileRef.current?.dirty ?? false,
         draft_generation: null, composing: composingRef.current }),
       onNavigate: async (target, _intent, expected) => {
@@ -951,7 +966,7 @@ export function HostApp(): ReactElement {
               : <p className="sidebar-empty">このWorkspaceはこのブラウザー内だけに保存されます。GitHub同期は設定されていません。</p>}
           </section>
 </div> : mode === "desktop" ? <div className="host-controls">{recentCard}</div> : picker;
-  const tools = <div className="host-controls">{authoring && <AuthoringReview key={workspaceGeneration} service={authoring} epoch={authoringEpoch} onApplied={refreshAfterPlugin} />}<AuthoringCommandMenu registrations={authoringRegistrations} invoke={invokeAuthoring} read={readAuthoring} navigate={navigateAuthoring} />{git && workspace && <PluginPanel
+  const tools = <div className="host-controls">{authoring && <><AuthoringReview key={workspaceGeneration} service={authoring} epoch={authoringEpoch} onApplied={refreshAfterPlugin} /><AuthoringAssets key={`assets:${workspaceGeneration}`} manager={pluginManager} service={authoring} epoch={authoringEpoch} /></>}<AuthoringCommandMenu registrations={authoringRegistrations} invoke={invokeAuthoring} read={readAuthoring} navigate={navigateAuthoring} />{git && workspace && <PluginPanel
             manager={pluginManager}
             workspaceId={activeWorkspaceId!}
             git={git}
