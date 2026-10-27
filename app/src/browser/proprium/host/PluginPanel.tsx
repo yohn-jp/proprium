@@ -4,6 +4,7 @@ import { decodeRegistryBytes } from "../plugins/registry.js";
 import type { InstalledPlugin, PluginInstallPreview, RegistryCatalogEntry } from "../plugins/manager.js";
 import type { PluginCapability, PluginTranscript, RuntimeSnapshot } from "../plugin-runtime/protocol.js";
 import type { BrowserLocalGit } from "../git/index.js";
+import type { RestoreEnabledOptions } from "../plugins/manager.js";
 
 const HOST_CAPABILITIES: readonly PluginCapability[] = [
   "workspace.snapshot.read", "workspace.change.propose", "workspace.ui.contribute",
@@ -23,6 +24,7 @@ type InstallIntent = "install" | "update";
 interface PluginPanelProps {
   manager: BrowserPluginManager;
   workspaceId: string;
+  activationScope: RestoreEnabledOptions["scope"];
   git: BrowserLocalGit;
   revisionKey: string;
   canApplyChanges: boolean;
@@ -97,7 +99,8 @@ function snapshotForPlugin(plugin: InstalledPlugin, git: BrowserLocalGit, worksp
   return needsWorkspaceSnapshot(plugin) ? takeSnapshot(git, workspaceId) : Promise.resolve(emptySnapshot(workspaceId));
 }
 
-export function PluginPanel({ manager, workspaceId, git, revisionKey, canApplyChanges, hostBusy, onBusyChange, onWorkspaceChanged, onRegisterLiveInvoker, onAuthoringSurfacesChanged }: PluginPanelProps): ReactElement {
+export function PluginPanel({ manager, workspaceId, activationScope, git, revisionKey, canApplyChanges, hostBusy, onBusyChange, onWorkspaceChanged, onRegisterLiveInvoker, onAuthoringSurfacesChanged }: PluginPanelProps): ReactElement {
+  const activationScopeKey = JSON.stringify(activationScope);
   const config = useMemo(registryConfig, []);
   const [plugins, setPlugins] = useState<InstalledPlugin[]>([]);
   const [registryCatalog, setRegistryCatalog] = useState<readonly RegistryCatalogEntry[]>([]);
@@ -105,7 +108,7 @@ export function PluginPanel({ manager, workspaceId, git, revisionKey, canApplyCh
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [installPlan, setInstallPlan] = useState<PluginInstallPreview | null>(null);
   const [planIntent, setPlanIntent] = useState<InstallIntent | null>(null);
-  const [grants, setGrants] = useState<Record<string, PluginCapability[]>>({});
+  const [grants, setGrants] = useState<Record<string, string[]>>({});
   const [requests, setRequests] = useState<Record<string, string>>({});
   const [transcripts, setTranscripts] = useState<Record<string, PluginTranscript>>({});
   const [pendingSnapshot, setPendingSnapshot] = useState<Record<string, SnapshotState>>({});
@@ -148,20 +151,21 @@ export function PluginPanel({ manager, workspaceId, git, revisionKey, canApplyCh
     setPlugins(await manager.installed());
     onAuthoringSurfacesChanged?.();
   }
-  const lastWorkspaceId = useRef(workspaceId);
+  const lastScopeKey = useRef(activationScopeKey);
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        if (lastWorkspaceId.current !== workspaceId) {
-          for (const plugin of await manager.installed()) if (plugin.state === "active" || plugin.state === "enabled-idle") await manager.disable(plugin.id, plugin.version);
-          lastWorkspaceId.current = workspaceId;
+        if (lastScopeKey.current !== activationScopeKey) {
+          lastScopeKey.current = activationScopeKey;
           setTranscripts({});
           setPendingSnapshot({});
           setGrants({});
           setRequests({});
           currentSnapshots.current.clear();
         }
+        await manager.restoreEnabled({ scope: JSON.parse(activationScopeKey), hostAllowed: [...AUTHORING_HOST_CAPABILITIES, ...HOST_CAPABILITIES] });
+        if (cancelled) return;
         const installed = await manager.installed();
         if (!cancelled) {
           setPlugins(installed);
@@ -172,7 +176,7 @@ export function PluginPanel({ manager, workspaceId, git, revisionKey, canApplyCh
       }
     })();
     return () => { cancelled = true; };
-  }, [manager, workspaceId, onAuthoringSurfacesChanged]);
+  }, [manager, activationScopeKey, onAuthoringSurfacesChanged]);
   async function loadRegistryCatalog(): Promise<void> {
     if (!config) return;
     setRegistryCatalog([]);
@@ -375,7 +379,8 @@ export function PluginPanel({ manager, workspaceId, git, revisionKey, canApplyCh
             {plugin.capabilities.length === 0 && <p>要求する権限はありません。</p>}
             {plugin.capabilities.map(value => {
               const grantKey = `${workspaceId}:${plugin.id}@${plugin.version}`;
-              const selected = grants[grantKey] ?? [];
+              const selected = (plugin.state === "active" || plugin.state === "enabled-idle")
+                ? plugin.grantedCapabilities ?? grants[grantKey] ?? [] : grants[grantKey] ?? [];
               return <label key={value} className="capability-choice"><input type="checkbox" checked={selected.includes(value as PluginCapability)} onChange={event => setGrants(current => ({ ...current, [grantKey]: event.target.checked ? [...selected, value as PluginCapability] : selected.filter(item => item !== value) }))} /> <span>{value}</span></label>;
             })}
           </fieldset>

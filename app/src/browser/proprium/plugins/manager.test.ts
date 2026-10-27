@@ -132,6 +132,52 @@ test("registry catalog discovers signed IDs and versions without installing or f
   assert.deepEqual(await store.listPlugins(), []);
 });
 
+test("explicit v2 grants restore only in their exact Host scope and disable revokes the intent", async () => {
+  const f=await fixture();
+  await f.addAuthoringPlugin("example.writer","2.0.0");
+  await f.publishRegistry(["1.0.0","2.0.0"],"1.0.1");
+  await f.manager.installFromRegistry(await f.manager.previewInstall({registryUrl,pluginId:"example.writer",version:"2.0.0"}));
+  const selection={scope:{workspace_id:"workspace",repository_id:42,branch:"main"},hostAllowed:["workspace.file.read"]};
+  await f.manager.restoreEnabled(selection);
+  await f.manager.enable({pluginId:"example.writer",version:"2.0.0",workspaceId:"workspace",grants:["workspace.file.read"],hostAllowed:["workspace.file.read"]});
+  const epoch=(await f.manager.verifiedActionSet("example.writer"))!.activation_epoch;
+  await assert.rejects(f.manager.authoringRuntime("example.writer").invoke({
+    request:{plugin_id:"example.writer",scope:{workspace_id:"workspace",repository_id:42,branch:"other"},deadline_ms:1000} as never,
+    caller:"ui",activation_epoch:epoch,deadline_at:Date.now()+1000,granted_capabilities:["workspace.file.read"],
+    validate_schema:()=>{},is_snapshot_current:()=>true,resolve_host_call:async()=>undefined,
+  }), /another workspace, repository or branch/);
+  await f.manager.dispose();
+  const reloaded=new BrowserPluginManager({store:f.store,fetcher:f.fetcher,registries:[{url:registryUrl,publicKey:f.registryPublicKey,artifactOrigins:approvedOrigins}]});
+  await reloaded.restoreEnabled({...selection,scope:{workspace_id:"workspace",repository_id:42,branch:"other"}});
+  assert.equal((await reloaded.verifiedActionSet("example.writer"))!.enabled,false);
+  await reloaded.restoreEnabled(selection);
+  const restored=(await reloaded.verifiedActionSet("example.writer"))!;
+  assert.equal(restored.enabled,true);
+  assert.deepEqual(restored.grants,["workspace.file.read"]);
+  assert.ok(restored.activation_epoch>epoch);
+  assert.equal((await reloaded.installed()).find(p=>p.id==="example.writer")!.state,"enabled-idle");
+  await reloaded.disable("example.writer");
+  await reloaded.dispose();
+  const again=new BrowserPluginManager({store:f.store,fetcher:f.fetcher,registries:[{url:registryUrl,publicKey:f.registryPublicKey,artifactOrigins:approvedOrigins}]});
+  await again.restoreEnabled(selection);
+  assert.equal((await again.verifiedActionSet("example.writer"))!.enabled,false);
+});
+
+test("restoration never grants a permission removed by current Host policy", async () => {
+  const f=await fixture();
+  await f.addAuthoringPlugin("example.writer","2.0.0");await f.publishRegistry(["1.0.0","2.0.0"],"1.0.1");
+  await f.manager.installFromRegistry(await f.manager.previewInstall({registryUrl,pluginId:"example.writer",version:"2.0.0"}));
+  const selection={scope:{workspace_id:"workspace",repository_id:42,branch:"main"},hostAllowed:["workspace.file.read"]};
+  await f.manager.restoreEnabled(selection);
+  await f.manager.enable({pluginId:"example.writer",version:"2.0.0",workspaceId:"workspace",grants:["workspace.file.read"],hostAllowed:["workspace.file.read"]});
+  await f.manager.dispose();
+  const next=new BrowserPluginManager({store:f.store,fetcher:f.fetcher,registries:[{url:registryUrl,publicKey:f.registryPublicKey,artifactOrigins:approvedOrigins}]});
+  await next.restoreEnabled({...selection,hostAllowed:[]});
+  assert.equal((await next.verifiedActionSet("example.writer"))!.enabled,false);
+  await next.restoreEnabled(selection);
+  assert.equal((await next.verifiedActionSet("example.writer"))!.enabled,false);
+});
+
 test("signed v2 actions and Host UI remain available while disabled, with no Worker activation", async () => {
   const { manager, store, fetcher, registryPublicKey, addAuthoringPlugin, publishRegistry } = await fixture();
   await addAuthoringPlugin("example.writer", "2.0.0");

@@ -980,6 +980,9 @@ export function HostApp(): ReactElement {
   const tools = <div className="host-controls">{authoring && <><AuthoringReview key={workspaceGeneration} service={authoring} epoch={authoringEpoch} onApplied={refreshAfterPlugin} /><AuthoringAssets key={`assets:${workspaceGeneration}`} manager={pluginManager} service={authoring} epoch={authoringEpoch} /></>}<AuthoringCommandMenu registrations={authoringRegistrations} invoke={invokeAuthoring} read={readAuthoring} navigate={navigateAuthoring} />{git && workspace && <PluginPanel
             manager={pluginManager}
             workspaceId={activeWorkspaceId!}
+            activationScope={{ workspace_id: workspace.identity.localWorkspaceId,
+              repository_id: isGitHubWorkspaceIdentity(workspace.identity) ? workspace.identity.repositoryId : null,
+              branch: workspace.identity.branch }}
             git={git}
             revisionKey={pluginRevisionKey}
             canApplyChanges={!currentFile?.dirty}
