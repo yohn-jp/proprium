@@ -79,3 +79,23 @@ test("unknown and extra input fields fail closed", () => {
   assert.equal(invalid.error.code, "invalid_input");
   guest.dispose();
 });
+
+
+test("lint output satisfies the signed schema for a local workspace", async () => {
+  const localScope = { ...scope, repository_id: null };
+  guest.initialize({ pluginId: "proprium.diagnostics", version: "0.1.0", workspaceId: scope.workspace_id });
+  let result = JSON.parse(guest.invoke(JSON.stringify({ ...request("proprium.diagnostics.lint.run.v1", { text: "彼は…笑った。" }), scope: localScope })));
+  while (result.kind === "host_call") {
+    const bytes = [...new TextEncoder().encode("severity: {}\n")];
+    result = continueWith(result, { revision: "a".repeat(64), total_bytes: bytes.length, offset: 0, bytes, next_offset: null });
+  }
+  assert.equal(result.ok, true);
+  const { assertValue } = await import("../../../app/src/browser/proprium/authoring/schema.js");
+  const manifest = JSON.parse(await (await import("node:fs/promises")).readFile(new URL("../plugin.json", import.meta.url), "utf8"));
+  const descriptor = manifest.actions.find((action: { action_id: string }) => action.action_id === "proprium.diagnostics.lint.run.v1");
+  assertValue(descriptor.output_schema, result.value);
+  assert.equal(result.value.identity.configRevisions.lint, "a".repeat(64));
+  assert.equal(result.value.identity.providerStatus.lexical, "disabled");
+  assert.equal(result.value.warnings[0].ruleId, "ellipsis-single-piece");
+  guest.dispose();
+});

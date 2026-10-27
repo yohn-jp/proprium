@@ -1121,7 +1121,9 @@ const lintRun: Handler = function* (raw, context, host) {
       draftGeneration: source.draftGeneration ?? context.snapshot.draft_generation,
       analyzerId: "proprium.diagnostics.cpu",
       analyzerVersion: "1.0.0",
+      configRevisions: { lint: config.revision },
       complete: true,
+      providerStatus: { lexical: "disabled" },
     },
   };
 };
