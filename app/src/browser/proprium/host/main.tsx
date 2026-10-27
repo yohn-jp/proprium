@@ -1,3 +1,4 @@
+import { EditorView } from "@codemirror/view";
 import { createRoot } from "react-dom/client";
 import { BrowserLocalGit } from "../git/index.js";
 import { isGitHubWorkspaceIdentity } from "../git/protocol.js";
@@ -20,11 +21,13 @@ interface PropriumHostTestApi {
 declare global {
   interface Window {
     propriumHostTest?: PropriumHostTestApi;
+    propriumHostEditorText?: () => string | null;
     propriumHostOpenLocalWorkspace?: (entry: { identity: WorkspaceIdentity; title: string; lastOpened: number }) => Promise<void>;
   }
 }
 
 if (import.meta.env.VITE_PROPRIUM_E2E === "true") {
+  window.propriumHostEditorText = () => { const node = document.querySelector<HTMLElement>(".cm-editor"); return node ? EditorView.findFromDOM(node)?.state.doc.toString() ?? null : null; };
   window.propriumHostTest = Object.freeze({
     async openWorkspace(identity: WorkspaceIdentity, files: Record<string, string> = {}): Promise<void> {
       const git = new BrowserLocalGit(identity);
