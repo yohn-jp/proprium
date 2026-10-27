@@ -662,6 +662,14 @@ function mediaType(path: string): string {
 async function captureAuthoringFiles(dir: string): Promise<PinnedFileMetadata[]> {
   const files: PinnedFileMetadata[] = [];
   const ignoreFs = createIgnoreReadCache(fs);
+  // Tracked paths are never hidden by later .gitignore changes; also retain
+  // their ancestor directories so walking an ignored subtree cannot lose them.
+  const tracked = new Set(await git.listFiles({ fs, dir }));
+  const trackedDirectories = new Set<string>();
+  for (const path of tracked) {
+    const parts = path.split("/");
+    for (let i = 1; i < parts.length; i++) trackedDirectories.add(parts.slice(0, i).join("/"));
+  }
   const pending = [""];
   while (pending.length) {
     const parent = pending.pop()!;
@@ -678,8 +686,11 @@ async function captureAuthoringFiles(dir: string): Promise<PinnedFileMetadata[]>
       const stats = await fs.lstat(absolute);
       if (stats.isSymbolicLink()) failure("invalid_path", "Symbolic links are not followed by the Browser Git adapter.");
       const ignored = await git.isIgnored({ fs: ignoreFs, dir, filepath: path });
-      if (ignored) continue;
-      if (stats.isDirectory()) { pending.push(path); continue; }
+      if (stats.isDirectory()) {
+        if (!ignored || trackedDirectories.has(path)) pending.push(path);
+        continue;
+      }
+      if (ignored && !tracked.has(path)) continue;
       if (!stats.isFile()) continue;
       const mtime = Number(stats.mtimeMs);
       const ctime = Number(stats.ctimeMs);
@@ -1480,9 +1491,9 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
   if (request.operation === "list-files") {
     const rows = await git.statusMatrix({ fs, dir: paths.dir });
     const files: Array<{ path: string; type: "blob"; oid: string; bytes: number }> = [];
-    for (const [path, , worktree] of rows) {
+    for (const [path, head, worktree, stage] of rows) {
       if (!worktree || path === ".git" || path.startsWith(".git/")) continue;
-      if (await git.isIgnored({ fs, dir: paths.dir, filepath: path })) continue;
+      if (!head && !stage && await git.isIgnored({ fs, dir: paths.dir, filepath: path })) continue;
       validateGitPath(path);
       await assertNoSymlinkParents(paths.dir, path, true);
       const file = `${paths.dir}/${path}`;
