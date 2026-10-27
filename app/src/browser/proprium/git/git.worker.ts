@@ -846,6 +846,27 @@ async function persistConfirmedRemoteHead(workspace: GitHubWorkspaceIdentity, bi
   }
 }
 
+/** A remote descendant is a valid publish proof but is not a local Git object yet.
+ * Do not label its missing local object as broken browser storage.
+ */
+async function persistPublishedObservation(workspace: GitHubWorkspaceIdentity, token: string,
+  binding: string, dir: string, head: string, expected: string | null):
+  Promise<{ state: "published"; head: string; remoteHead: string } |
+    { state: "remote-unknown"; expectedRemoteHead: string | null; observedRemoteHead: string | null }> {
+  try {
+    await git.readCommit({ fs, dir, oid: head });
+  } catch {
+    try { await hydrateRemoteHead(workspace, token, dir, head); }
+    catch (error) {
+      if (error && typeof error === "object" && "propriumCode" in error &&
+          ["authentication_expired", "permission_denied"].includes(String(error.propriumCode))) throw error;
+      return { state: "remote-unknown", expectedRemoteHead: expected, observedRemoteHead: head };
+    }
+  }
+  await persistConfirmedRemoteHead(workspace, binding, dir, head);
+  return { state: "published", head: expected ?? head, remoteHead: head };
+}
+
 async function assertRevision(dir: string, expected: string | null): Promise<void> {
   const actual = await currentHead(dir);
   if (actual !== expected) failure("revision_conflict", "The repository HEAD changed; reload status before continuing.");
@@ -1191,8 +1212,9 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
       } catch (failureValue) { pushFailure = failureValue; }
       const result = await reconcilePublish(request.workspace, request.token, request.expectedRemoteHead, request.expectedHead);
       if (result.state === "published") {
-        await persistConfirmedRemoteHead(request.workspace, paths.binding, paths.dir, result.remoteHead);
-        return result;
+        const persisted = await persistPublishedObservation(request.workspace, request.token, paths.binding,
+          paths.dir, result.remoteHead, request.expectedRemoteHead);
+        return persisted.state === "published" ? result : persisted;
       }
       if (result.state === "conflict") return result;
       if (pushFailure && typeof pushFailure === "object" && "propriumCode" in pushFailure) {
@@ -1219,8 +1241,9 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     if (reconciled.state === "published" || reconciled.state === "conflict" || reconciled.state === "remote-unknown") {
       if (reconciled.state === "conflict") return reconciled;
       if (reconciled.state === "published") {
-        await persistConfirmedRemoteHead(request.workspace, paths.binding, paths.dir, reconciled.remoteHead);
-        return reconciled;
+        const persisted = await persistPublishedObservation(request.workspace, request.token, paths.binding,
+          paths.dir, reconciled.remoteHead, request.expectedRemoteHead);
+        return persisted.state === "published" ? reconciled : persisted;
       }
     }
     if (updateFailure) {
