@@ -158,3 +158,7 @@ test("scene suggestion returns typed provider failure and never proposes on unav
   }
   assert.fail("Expected provider_unavailable");
 });
+
+test("summary generation accepts fenced JSON from a provider", () => {
+  assert.deepEqual(parseSummaryOutput('```json\n{"summaryLines":["一","二","三"]}\n```', "chapter"), { summaryLines: ["一", "二", "三"] });
+});

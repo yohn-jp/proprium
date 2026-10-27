@@ -21,7 +21,10 @@ const list = (value: unknown, label: string, max: number): string[] => {
   return value as string[];
 };
 export function parseSummaryOutput(raw: string, scope: SummaryScope): Summary {
-  let value: unknown; try { value = JSON.parse(raw); } catch { throw new PairedError("invalid_input", "Summary output is not JSON"); }
+  const cleaned = raw.trim().replace(/^```(?:json)?\s*/iu, "").replace(/```\s*$/u, "").trim();
+  const first = cleaned.indexOf("{"), last = cleaned.lastIndexOf("}");
+  const candidate = first >= 0 && last > first ? cleaned.slice(first, last + 1) : cleaned;
+  let value: unknown; try { value = JSON.parse(candidate); } catch { throw new PairedError("invalid_input", "Summary output is not JSON"); }
   if (!isObj(value)) throw new PairedError("invalid_input", "Summary output is not an object");
   const summaryLines = list(value.summaryLines, "summaryLines", 3);
   if (summaryLines.length !== 3 || summaryLines.some(line => !line.trim())) throw new PairedError("invalid_input", "Summary requires three nonempty lines");

@@ -54,3 +54,7 @@ test("selected state event delegates exact body-relative evidence to Knowledge",
   assert.equal(body.slice(captured.event.evidence[0].startOffset, captured.event.evidence[0].endOffset), "鍵を渡した。");
   assert.deepEqual(next.value, { proposalId: "proposal-1" });
 });
+
+test("state-event generation accepts fenced JSON from a provider", () => {
+  assert.deepEqual(parseStateEventCandidates('```json\n{"events":[]}\n```', { path: "m.md", revision: "a".repeat(64), text: "本文" }).events, []);
+});

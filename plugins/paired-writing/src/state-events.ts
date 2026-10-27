@@ -28,8 +28,11 @@ function manuscriptBodyOffset(text: string): number {
 export function parseStateEventCandidates(output: string, source: { path: string; revision: string; text: string }): {
   events: StateEventCandidate[]; diagnostics: Array<{ code: string; index: number; message: string }>;
 } {
+  const cleaned = output.trim().replace(/^```(?:json)?\s*/iu, "").replace(/```\s*$/u, "").trim();
+  const first = cleaned.indexOf("{"), last = cleaned.lastIndexOf("}");
+  const candidate = first >= 0 && last > first ? cleaned.slice(first, last + 1) : cleaned;
   let parsed: unknown;
-  try { parsed = JSON.parse(output); } catch { throw new PairedError("invalid_input", "Provider did not return valid state-event JSON"); }
+  try { parsed = JSON.parse(candidate); } catch { throw new PairedError("invalid_input", "Provider did not return valid state-event JSON"); }
   if (!obj(parsed) || !Array.isArray(parsed.events)) throw new PairedError("invalid_input", "Provider state events must be an array");
   if (parsed.events.length > 20) throw new PairedError("capacity", "At most 20 state events are accepted");
   const bodyOffset = manuscriptBodyOffset(source.text);
