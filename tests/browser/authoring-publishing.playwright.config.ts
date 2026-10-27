@@ -1,6 +1,7 @@
 import { defineConfig } from '@playwright/test';
 import base from './playwright.config.js';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { createPrivateKey, createPublicKey } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -16,6 +17,16 @@ if (externalRegistry && keyFile) {
   process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_URL = `${artifactOrigin}/plugins/registry.json`;
   process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_KEY = readFileSync(keyFile, 'utf8').trim();
   process.env.VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS = artifactOrigin;
+} else {
+  // The official suite's globalSetup retains a signed registry in
+  // PROPRIUM_OFFICIAL_E2E_DIR. Configure the same locally intercepted URL and
+  // pinned public key before Vite starts, including in CI's retained-build lane.
+  const signer = createPrivateKey(process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY!);
+  const publicKey = createPublicKey(signer).export({ format: 'der', type: 'spki' }).subarray(-32).toString('base64');
+  const artifactBase = process.env.PROPRIUM_AUTHORING_TEST_ARTIFACT_BASE ?? new URL('plugin-fixture/', baseURL).href;
+  process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_URL = new URL('plugin-fixture/registry.json', baseURL).href;
+  process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_KEY = publicKey;
+  process.env.VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS = new URL(artifactBase).origin;
 }
 const configPath = join(tmpdir(), `proprium-publishing-vite-${process.pid}.mjs`);
 writeFileSync(configPath, `import original from ${JSON.stringify(join(source, 'app/vite.proprium.config.ts'))}; export default (env) => ({ ...original(env), cacheDir: ${JSON.stringify(join(tmpdir(), `proprium-publishing-cache-${process.pid}`))} });\n`);

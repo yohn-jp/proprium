@@ -11,8 +11,8 @@ function utf8(text: string): number[] { return [...new TextEncoder().encode(text
 function sourceEvidence(reads: readonly ProposalRead[]): SourceSpan[] {
   return reads.flatMap((read) => {
     if (read.revision === null || read.content === undefined || read.content.length === 0) return [];
-    const bytes = new TextEncoder().encode(read.content);
-    return [{ path: read.path, revision: read.revision, start: 0, end: bytes.byteLength, quote: read.content }];
+    // SourceSpan offsets are UTF-16 code units (the Host editor's text indexing), not UTF-8 bytes.
+    return [{ path: read.path, revision: read.revision, start: 0, end: read.content.length, quote: read.content }];
   });
 }
 

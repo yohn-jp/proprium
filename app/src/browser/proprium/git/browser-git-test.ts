@@ -2,7 +2,7 @@ import { BrowserLocalGit } from "./index.js";
 import type { WorkspaceIdentity } from "./protocol.js";
 import { BrowserGitSnapshotPort } from "./authoring-snapshot-port.js";
 import { AuthoringSnapshotReader, type AuthoringScope } from "../authoring/snapshots.js";
-import { ChangeWriter, type WriterScope } from "../authoring/writer.js";
+import { ChangeWriter, ChangeWriterError, type WriterScope } from "../authoring/writer.js";
 import { IndexedDbWriterJournalStore } from "../authoring/store.js";
 import { BrowserGitWriterWorkspace } from "../authoring/writer-browser.js";
 
@@ -83,6 +83,13 @@ window.browserGitTest = {
       journal: new IndexedDbWriterJournalStore(databaseName),
       workspace: writer_workspace,
       new_proposal_id: () => crypto.randomUUID(),
+      // The test fixture admits exactly this producer/action pair. Production
+      // derives the same authority from installed, verified signed descriptors.
+      assert_action: async (pluginId, actionId) => {
+        if (pluginId !== "proprium.research" || actionId !== "proprium.research.terms.propose") {
+          throw new ChangeWriterError("capability_denied", "Action is not admitted by the test fixture.");
+        }
+      },
     });
     return { git, writer, writer_workspace, scope };
   },

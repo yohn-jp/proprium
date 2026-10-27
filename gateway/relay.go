@@ -19,6 +19,7 @@ import (
 const (
 	maxOAuthRequestBytes  = 2_048
 	maxOAuthResponseBytes = 8_192
+	maxRepositoryMetadataBytes = 256 << 10
 	maxSmartHTTPBytes     = 50 << 20
 )
 
@@ -316,7 +317,7 @@ func (s *Server) verifyRepository(ctx context.Context, route smartRoute, reposit
 		}
 		return response.StatusCode
 	}
-	body, err := readLimited(ctx, nil, response.Body, maxOAuthResponseBytes)
+	body, err := readLimited(ctx, nil, response.Body, maxRepositoryMetadataBytes)
 	if err != nil {
 		return http.StatusBadGateway
 	}

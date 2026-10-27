@@ -967,8 +967,13 @@ export class BrowserPluginManager {
         if (order === 0) throw new PluginManagerError("invalid_plugin", "Conflicting signed registry bytes reuse an observed registry version");
       }
     }
-    await this.store.putRegistry(registry);
-    await this.store.setState(latestRegistryStateKey(trust), registry.digest);
+    try {
+      // Cross-tab compare-and-advance is one durable store transaction, never a
+      // read/check followed by an independently committed latest-pointer write.
+      await this.store.advanceRegistry(registry, latestRegistryStateKey(trust));
+    } catch (error) {
+      throw new PluginManagerError("invalid_plugin", error instanceof Error ? error.message : "Atomic signed registry update failed");
+    }
     return registry;
   }
 

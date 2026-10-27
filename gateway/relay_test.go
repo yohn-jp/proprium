@@ -390,3 +390,24 @@ func TestHostValidationRejectsDNSRebindingAndAllowsConfiguredHostnames(t *testin
 		t.Fatalf("configured local listener Host rejected: %d", response.Code)
 	}
 }
+
+func TestVerifyRepositoryAcceptsNormalLargeMetadataAndBoundsOversize(t *testing.T) {
+  metadata := strings.TrimSuffix(repoMetadata("pull"), "}") + `,"description":"` + strings.Repeat("x", 16<<10) + `"}`
+  server := testServer(t, func(r *http.Request) (*http.Response, error) {
+    if r.URL.String() != "https://api.github.com/repos/Acme/Notes" {
+      t.Errorf("unexpected metadata endpoint: %s", r.URL)
+    }
+    return jsonResponseForTest(http.StatusOK, metadata, nil), nil
+  })
+  route := smartRoute{owner: "Acme", repository: "Notes"}
+  if status := server.verifyRepository(context.Background(), route, 42, "pull", "oauth-secret"); status != 0 {
+    t.Fatalf("legitimate GitHub metadata was rejected: %d", status)
+  }
+  oversized := strings.TrimSuffix(repoMetadata("pull"), "}") + `,"description":"` + strings.Repeat("x", maxRepositoryMetadataBytes) + `"}`
+  server.client = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+    return jsonResponseForTest(http.StatusOK, oversized, nil), nil
+  })}
+  if status := server.verifyRepository(context.Background(), route, 42, "pull", "oauth-secret"); status != http.StatusBadGateway {
+    t.Fatalf("oversized GitHub metadata passed the bound: %d", status)
+  }
+}

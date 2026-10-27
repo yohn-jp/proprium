@@ -14,7 +14,7 @@ import { IndexedDbBrokerStore, DerivedCacheBroker, FreshGestureAuthority, Plugin
 import { AssetGroupBroker, IndexedDbAssetGroupStore, type AssetCapacityInput, type AssetCapacityMeasurement,
   type AssetArtifactSource, type AssetReadRequest, type AssetCapacityConsent, type AssetAdmissionResult,
   type AssetTransferProgress } from "./assets.js";
-import { ChangeWriter, type ChangeSet as WriterChangeSet, type WriterCaller, type WriterProposalRecord,
+import { ChangeWriter, ChangeWriterError, type ChangeSet as WriterChangeSet, type WriterCaller, type WriterProposalRecord,
   type ProposalInspection, type ProposalState, type WriterSnapshot, type WriterReadRevision,
   type WriterUnit } from "./writer.js";
 import { IndexedDbWriterJournalStore } from "./store.js";
@@ -999,6 +999,13 @@ export function createBrowserAuthoringService(options: CreateBrowserAuthoringSer
   const writer = new ChangeWriter({
     journal: new IndexedDbWriterJournalStore(), workspace: writerWorkspace, resolve_artifact: artifactReader,
     new_proposal_id: ID,
+    assert_action: async (pluginId, actionId) => {
+      const installed = await options.manager.verifiedActionSet(pluginId);
+      if (!installed?.enabled || installed.plugin_id !== pluginId ||
+          !installed.descriptors.some(descriptor => descriptor.action_id === actionId)) {
+        throw new ChangeWriterError("capability_denied", "Host action is not declared by an active, verified plugin.");
+      }
+    },
   });
 
   const assetReaders = new Map<string, { readonly key: string; readonly read: ResolvedAssetGroup["readObject"] }>();

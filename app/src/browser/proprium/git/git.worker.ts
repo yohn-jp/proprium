@@ -662,6 +662,14 @@ function mediaType(path: string): string {
 async function captureAuthoringFiles(dir: string): Promise<PinnedFileMetadata[]> {
   const files: PinnedFileMetadata[] = [];
   const ignoreFs = createIgnoreReadCache(fs);
+  // Tracked paths are never hidden by later .gitignore changes; also retain
+  // their ancestor directories so walking an ignored subtree cannot lose them.
+  const tracked = new Set(await git.listFiles({ fs, dir }));
+  const trackedDirectories = new Set<string>();
+  for (const path of tracked) {
+    const parts = path.split("/");
+    for (let i = 1; i < parts.length; i++) trackedDirectories.add(parts.slice(0, i).join("/"));
+  }
   const pending = [""];
   while (pending.length) {
     const parent = pending.pop()!;
@@ -678,8 +686,11 @@ async function captureAuthoringFiles(dir: string): Promise<PinnedFileMetadata[]>
       const stats = await fs.lstat(absolute);
       if (stats.isSymbolicLink()) failure("invalid_path", "Symbolic links are not followed by the Browser Git adapter.");
       const ignored = await git.isIgnored({ fs: ignoreFs, dir, filepath: path });
-      if (ignored) continue;
-      if (stats.isDirectory()) { pending.push(path); continue; }
+      if (stats.isDirectory()) {
+        if (!ignored || trackedDirectories.has(path)) pending.push(path);
+        continue;
+      }
+      if (ignored && !tracked.has(path)) continue;
       if (!stats.isFile()) continue;
       const mtime = Number(stats.mtimeMs);
       const ctime = Number(stats.ctimeMs);
@@ -833,6 +844,27 @@ async function persistConfirmedRemoteHead(workspace: GitHubWorkspaceIdentity, bi
     if (error && typeof error === "object" && "propriumCode" in error) throw error;
     failure("storage_unknown", "The observed remote branch head could not be persisted with its local Git objects.");
   }
+}
+
+/** A remote descendant is a valid publish proof but is not a local Git object yet.
+ * Do not label its missing local object as broken browser storage.
+ */
+async function persistPublishedObservation(workspace: GitHubWorkspaceIdentity, token: string,
+  binding: string, dir: string, head: string, expected: string | null):
+  Promise<{ state: "published"; head: string; remoteHead: string } |
+    { state: "remote-unknown"; expectedRemoteHead: string | null; observedRemoteHead: string | null }> {
+  try {
+    await git.readCommit({ fs, dir, oid: head });
+  } catch {
+    try { await hydrateRemoteHead(workspace, token, dir, head); }
+    catch (error) {
+      if (error && typeof error === "object" && "propriumCode" in error &&
+          ["authentication_expired", "permission_denied"].includes(String(error.propriumCode))) throw error;
+      return { state: "remote-unknown", expectedRemoteHead: expected, observedRemoteHead: head };
+    }
+  }
+  await persistConfirmedRemoteHead(workspace, binding, dir, head);
+  return { state: "published", head: expected ?? head, remoteHead: head };
 }
 
 async function assertRevision(dir: string, expected: string | null): Promise<void> {
@@ -1180,8 +1212,9 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
       } catch (failureValue) { pushFailure = failureValue; }
       const result = await reconcilePublish(request.workspace, request.token, request.expectedRemoteHead, request.expectedHead);
       if (result.state === "published") {
-        await persistConfirmedRemoteHead(request.workspace, paths.binding, paths.dir, result.remoteHead);
-        return result;
+        const persisted = await persistPublishedObservation(request.workspace, request.token, paths.binding,
+          paths.dir, result.remoteHead, request.expectedRemoteHead);
+        return persisted.state === "published" ? result : persisted;
       }
       if (result.state === "conflict") return result;
       if (pushFailure && typeof pushFailure === "object" && "propriumCode" in pushFailure) {
@@ -1208,8 +1241,9 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     if (reconciled.state === "published" || reconciled.state === "conflict" || reconciled.state === "remote-unknown") {
       if (reconciled.state === "conflict") return reconciled;
       if (reconciled.state === "published") {
-        await persistConfirmedRemoteHead(request.workspace, paths.binding, paths.dir, reconciled.remoteHead);
-        return reconciled;
+        const persisted = await persistPublishedObservation(request.workspace, request.token, paths.binding,
+          paths.dir, reconciled.remoteHead, request.expectedRemoteHead);
+        return persisted.state === "published" ? reconciled : persisted;
       }
     }
     if (updateFailure) {
@@ -1480,9 +1514,9 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
   if (request.operation === "list-files") {
     const rows = await git.statusMatrix({ fs, dir: paths.dir });
     const files: Array<{ path: string; type: "blob"; oid: string; bytes: number }> = [];
-    for (const [path, , worktree] of rows) {
+    for (const [path, head, worktree, stage] of rows) {
       if (!worktree || path === ".git" || path.startsWith(".git/")) continue;
-      if (await git.isIgnored({ fs, dir: paths.dir, filepath: path })) continue;
+      if (!head && !stage && await git.isIgnored({ fs, dir: paths.dir, filepath: path })) continue;
       validateGitPath(path);
       await assertNoSymlinkParents(paths.dir, path, true);
       const file = `${paths.dir}/${path}`;
@@ -1511,6 +1545,64 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
       worktreeFile: entry.worktreeFile ? { oid: (await git.hashBlob({ object: entry.worktreeFile })).oid, data: entry.worktreeFile } : null,
     })));
     return request.operation === "review-diff" ? { head: await currentHead(paths.dir), changes } : changes;
+  }
+  if (request.operation === "rename-file") {
+    validateGitPath(request.from);
+    validateGitPath(request.to);
+    if (request.from === request.to || request.from.startsWith(`${request.to}/`) || request.to.startsWith(`${request.from}/`)) {
+      failure("invalid_path", "The rename paths collide.");
+    }
+    await assertNoSymlinkParents(paths.dir, request.from, true);
+    await assertNoSymlinkParents(paths.dir, request.to, true);
+    const sourcePath = `${paths.dir}/${request.from}`;
+    if (!(await exists(sourcePath))) failure("revision_conflict", "Rename source has disappeared.");
+    const info = await fs.lstat(sourcePath);
+    if (!info.isFile()) failure("invalid_path", "Only regular workspace files can be moved.");
+    if ((info.mode & 0o111) !== 0) failure("invalid_input", "Executable file mode cannot be preserved by this rename operation.");
+    const head = await currentHead(paths.dir);
+    if (head) {
+      const { commit } = await git.readCommit({ fs, dir: paths.dir, oid: head });
+      const original = (await commitTreeFiles(paths.dir, commit.tree)).get(request.from);
+      if (original?.mode === "100755") failure("invalid_input", "Executable Git files cannot be renamed without preserving mode.");
+    }
+    const content = new Uint8Array(await fs.readFile(sourcePath));
+    return operation({ ...request, operation: "apply-changes", readSet: [], changes: [
+      { path: request.from, content: null, expectedRevision: request.source },
+      { path: request.to, content, expectedRevision: request.destination },
+    ] });
+  }
+  if (request.operation === "scratch-checkpoint") {
+    // This entire sequence executes while holding the sole workspace Web Lock.
+    // No other tab can insert a worktree change between review, apply and commit.
+    await assertRevision(paths.dir, request.expectedHead);
+    if ((await status(paths.dir)).length) failure("revision_conflict", "Scratch checkpoint requires a clean repository.");
+    if (!Array.isArray(request.changes) || !request.changes.length || request.changes.length > MAX_WORKSPACE_CHANGE_COUNT ||
+        request.changes.some(change => !change.path.startsWith("meta/scratch/") || !(change.content instanceof Uint8Array))) {
+      failure("invalid_path", "Scratch checkpoint contains invalid changes.");
+    }
+    const pathsSeen = new Set<string>();
+    let size = 0;
+    for (const change of request.changes) {
+      validateGitPath(change.path);
+      if (pathsSeen.has(change.path)) failure("invalid_path", "Scratch checkpoint contains duplicate paths.");
+      pathsSeen.add(change.path);
+      size += change.content!.byteLength;
+      if (size > MAX_WORKSPACE_CHANGE_BYTES) failure("invalid_path", "Scratch checkpoint exceeds workspace limits.");
+    }
+    await operation({ ...request, operation: "apply-changes", readSet: [] });
+    const reviewed = new Map(request.changes.map(change => [change.path, change.content!] as const));
+    const current = await worktreeMatrix(paths.dir, request.workspace.branch);
+    if (current.length !== reviewed.size) failure("revision_conflict", "Unexpected worktree change during Scratch checkpoint.");
+    for (const entry of current) {
+      const expected = reviewed.get(entry.path);
+      if (!expected || !entry.worktreeFile ||
+          entry.worktreeFile.byteLength !== expected.byteLength ||
+          entry.worktreeFile.some((byte, index) => byte !== expected[index])) {
+        failure("revision_conflict", "Scratch bytes changed before checkpoint commit.");
+      }
+    }
+    await operation({ ...request, operation: "add", paths: [...reviewed.keys()], expectedHead: request.expectedHead });
+    return operation({ ...request, operation: "commit", expectedHead: request.expectedHead });
   }
   if (request.operation === "commit-reviewed") {
     const snapshot = request.snapshot;
@@ -1633,7 +1725,7 @@ scope.addEventListener("message", async (event: MessageEvent<LocalGitRequest>) =
   const workspaceId = request.workspace?.localWorkspaceId ?? "";
   try {
     if (!scope.navigator.locks) failure("lock_unavailable", "This browser does not provide Web Locks; local Git workspace access is disabled.");
-    const write = ["init", "write", "delete", "apply-changes", "add", "commit", "commit-reviewed", "create-branch", "verify", "remote-fetch", "remote-pull", "remote-publish"].includes(request.operation);
+    const write = ["init", "write", "delete", "apply-changes", "add", "commit", "commit-reviewed", "scratch-checkpoint", "rename-file", "create-branch", "verify", "remote-fetch", "remote-pull", "remote-publish"].includes(request.operation);
     const paths = await workspacePaths(request.workspace);
     const result = await operationQueue.run(paths.lock, () => scope.navigator.locks.request(paths.lock, { mode: write ? "exclusive" : "shared", ifAvailable: true }, async (lock) => {
       if (!lock) failure("workspace_busy", "Another tab is using this local workspace. Retry when its operation finishes.");
@@ -1641,7 +1733,7 @@ scope.addEventListener("message", async (event: MessageEvent<LocalGitRequest>) =
         failure("storage_unknown", "A previous local Git operation had an uncertain result; reopen and verify this workspace before continuing.");
       }
       const result = await operation(request);
-      if (["write", "delete", "apply-changes", "commit-reviewed", "remote-pull"].includes(request.operation)) {
+      if (["write", "delete", "apply-changes", "commit-reviewed", "scratch-checkpoint", "rename-file", "remote-pull"].includes(request.operation)) {
         authoringMutationGenerations.set(paths.lock, (authoringMutationGenerations.get(paths.lock) ?? 0) + 1);
       }
       return result;

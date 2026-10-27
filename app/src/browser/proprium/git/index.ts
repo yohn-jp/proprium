@@ -36,7 +36,7 @@ import {
 import { createGitHubAccountSession, GitHubSyncError } from "./github-sync.js";
 import type { GitHubAccount, GitHubAccountSession, GitHubDevicePrompt, GitHubFetchResult, GitHubPullResult, GitHubPublishResult, GitHubRemoteHead, GitHubRepository, GitHubSyncClient, GitHubRemoteOperation } from "./github-sync.js";
 
-export { isGitHubWorkspaceIdentity, validateGitPath, validateWorkspaceIdentity } from "./protocol.js";
+export { isGitHubWorkspaceIdentity, isValidGitBranchName, validateGitPath, validateWorkspaceIdentity } from "./protocol.js";
 export type { AppliedWorkspaceChange, AuthoringSnapshotFile, AuthoringSnapshotMetadata, AuthoringSnapshotPage, AuthoringSnapshotRange, CommitAuthor, CommitDiff, CommitFileChange, CommitSummary, DiffChange, FileRevision, FileRevisionExpectation, GitHubWorkspaceIdentity, LocalGitError, LocalGitErrorCode, LocalWorkspaceIdentity, RemoteConfirmedFiles, StatusEntry, WorkspaceChange, WorkspaceFile, WorkspaceIdentity };
 export { GitHubSyncError } from "./github-sync.js";
 export { createGitHubAccountSession } from "./github-sync.js";
@@ -246,6 +246,25 @@ export class BrowserLocalGit {
   releaseAuthoringSnapshot(snapshotId: string): Promise<void> {
     validateSnapshotId(snapshotId);
     return this.call({ operation: "authoring-snapshot-release", snapshotId });
+  }
+
+  /** Apply, stage and commit a clean Scratch as one exclusive workspace operation. */
+  checkpointScratch(changes: readonly WorkspaceChange[], expectedHead: string | null, message: string, author: CommitAuthor):
+    Promise<{ oid: string; head: string; localState: "draft" | "local-committed" }> {
+    if (!Array.isArray(changes) || !changes.length || changes.length > MAX_WORKSPACE_CHANGE_COUNT ||
+        changes.some(change => !change.path.startsWith("meta/scratch/") || !(change.content instanceof Uint8Array)) ||
+        changes.reduce((size, change) => size + (change.content?.byteLength ?? 0), 0) > MAX_WORKSPACE_CHANGE_BYTES) {
+      return Promise.reject(new BrowserLocalGitError("invalid_input", "Scratch checkpoint contains invalid paths or bytes."));
+    }
+    for (const change of changes) validateGitPath(change.path);
+    return this.call({ operation: "scratch-checkpoint", changes: [...changes], expectedHead, message, author });
+  }
+
+  /** Atomic fail-closed move: executable files cannot silently lose Git mode. */
+  renameFile(from: string, to: string, source: FileRevision, destination: FileRevision): Promise<void> {
+    validateGitPath(from); validateGitPath(to);
+    if (from === to) return Promise.reject(new BrowserLocalGitError("invalid_path", "Source and destination must differ."));
+    return this.call({ operation: "rename-file", from, to, source, destination });
   }
 
   status(): Promise<LocalGitStatus> { return this.call({ operation: "status" }); }

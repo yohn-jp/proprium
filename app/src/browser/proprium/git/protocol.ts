@@ -190,6 +190,8 @@ export type LocalGitRequest =
   | { id: string; workspace: WorkspaceIdentity; operation: "diff" }
   | { id: string; workspace: WorkspaceIdentity; operation: "review-diff" }
   | { id: string; workspace: WorkspaceIdentity; operation: "commit-reviewed"; snapshot: CommitReviewSnapshot; message: string; author: CommitAuthor }
+  | { id: string; workspace: WorkspaceIdentity; operation: "scratch-checkpoint"; changes: WorkspaceChange[]; expectedHead: string | null; message: string; author: CommitAuthor }
+  | { id: string; workspace: WorkspaceIdentity; operation: "rename-file"; from: string; to: string; source: FileRevision; destination: FileRevision }
   | { id: string; workspace: WorkspaceIdentity; operation: "commit-diff"; oid: string }
   | { id: string; workspace: WorkspaceIdentity; operation: "remote-confirmed-files"; paths: string[] }
   | { id: string; workspace: WorkspaceIdentity; operation: "add"; paths: string[]; expectedHead: string | null }
@@ -209,6 +211,15 @@ export interface LocalGitResponse {
   error?: LocalGitError;
 }
 
+/** Validate a branch refname without rejecting legal plus signs or Unicode. */
+export function isValidGitBranchName(name: unknown): name is string {
+  return typeof name === "string" && name.length > 0 && name.length <= 255 &&
+    name !== "@" && !name.startsWith("-") && !name.startsWith("/") && !name.endsWith("/") &&
+    !name.endsWith(".") && !name.includes("..") && !name.includes("//") && !name.includes("@{") &&
+    !/[\u0000-\u0020\u007f~^:?*\[\\]/u.test(name) &&
+    name.split("/").every(part => !!part && !part.startsWith(".") && !part.toLowerCase().endsWith(".lock"));
+}
+
 export function validateWorkspaceIdentity(value: WorkspaceIdentity): void {
   if (!value || typeof value !== "object") throw Object.assign(new TypeError("invalid_identity: workspace identity must be an object"), { code: "invalid_identity" });
   if (value.provider === "local") {
@@ -218,7 +229,7 @@ export function validateWorkspaceIdentity(value: WorkspaceIdentity): void {
     if (typeof value.name !== "string" || !value.name.trim() || value.name.length > 120 || /[\u0000-\u001f\u007f]/u.test(value.name)) {
       throw Object.assign(new TypeError("invalid_identity: local workspace name must contain 1-120 printable characters"), { code: "invalid_identity" });
     }
-    if (!/^[A-Za-z0-9._/-]+$/u.test(value.branch) || value.branch.startsWith("/") || value.branch.endsWith("/") || value.branch.includes("..") || value.branch.includes("//")) {
+    if (!isValidGitBranchName(value.branch)) {
       throw Object.assign(new TypeError("invalid_identity: branch is invalid"), { code: "invalid_identity" });
     }
     if (!/^[A-Za-z0-9._-]{8,128}$/u.test(value.localWorkspaceId)) {
@@ -240,7 +251,7 @@ export function validateWorkspaceIdentity(value: WorkspaceIdentity): void {
   if (!/^[A-Za-z0-9-]+$/u.test(value.owner) || !/^[A-Za-z0-9._-]+$/u.test(value.repository)) {
     throw Object.assign(new TypeError("invalid_identity: owner or repository is invalid"), { code: "invalid_identity" });
   }
-  if (!/^[A-Za-z0-9._/-]+$/u.test(value.branch) || value.branch.startsWith("/") || value.branch.endsWith("/") || value.branch.includes("..") || value.branch.includes("//")) {
+  if (!isValidGitBranchName(value.branch)) {
     throw Object.assign(new TypeError("invalid_identity: branch is invalid"), { code: "invalid_identity" });
   }
   if (!/^[A-Za-z0-9._-]{8,128}$/u.test(value.localWorkspaceId)) {

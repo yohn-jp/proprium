@@ -1,5 +1,5 @@
 import type { AppliedWorkspaceChange, FileRevisionExpectation, WorkspaceChange } from "../git/index.js";
-import { validateGitPath } from "../git/index.js";
+import { validateGitPath, isValidGitBranchName } from "../git/index.js";
 import type { ChangeSet as WireChangeSet, ChangeUnit, FileOperation, ReadPrecondition, Scope, Snapshot, SourceSpan } from "./types.js";
 
 /** The canonical H0 authoring scope. These identifiers are issued by the Host. */
@@ -164,6 +164,8 @@ export interface WriterDependencies {
   /** Host resolves exact sealed bytes after checking artifact owner and scope. */
   readonly resolve_artifact?: (scope: WriterScope, snapshot: WriterSnapshot, artifact_id: string, producer_plugin_id: string) => Promise<Uint8Array>;
   readonly new_proposal_id: () => string;
+  /** Verify that the admitted, signed manifest owns the action ID. */
+  readonly assert_action: (pluginId: string, actionId: string) => Promise<void>;
   readonly now?: () => string;
 }
 
@@ -251,8 +253,11 @@ function idemKey(caller: WriterCaller, scope: WriterScope): string { return `${s
 function sameSnapshot(a: WriterSnapshot, b: WriterSnapshot): boolean {
   return a.id === b.id && a.local_commit === b.local_commit && a.worktree_generation === b.worktree_generation && a.draft_generation === b.draft_generation && (a.remote_commit ?? null) === (b.remote_commit ?? null);
 }
+function sameWorkspace(a: WriterScope, b: WriterScope): boolean {
+  return a.workspace_id === b.workspace_id && a.repository_id === b.repository_id && a.branch === b.branch;
+}
 function sameScope(a: WriterScope, b: WriterScope): boolean {
-  return a.workspace_id === b.workspace_id && a.repository_id === b.repository_id && a.branch === b.branch && a.generation === b.generation;
+  return sameWorkspace(a, b) && a.generation === b.generation;
 }
 function resolvedRead(item: WriterReadRevision, baseScope: WriterScope, baseSnapshot: WriterSnapshot): { readonly scope: WriterScope; readonly snapshot: WriterSnapshot; readonly key: string; readonly isBase: boolean } {
   if ((item.scope === undefined) !== (item.snapshot === undefined)) fail("invalid_input", "Foreign read preconditions require both scope and snapshot.");
@@ -291,8 +296,7 @@ function isCanonicalJson(value: unknown): boolean {
 }
 
 function validateScope(scope: WriterScope): void {
-  if (!record(scope) || !onlyKeys(scope, ["workspace_id", "repository_id", "branch", "generation"]) || !text(scope.workspace_id, 256) || /[\u0000-\u001f\u007f]/u.test(scope.workspace_id) || !text(scope.branch, 1024) ||
-      !/^[A-Za-z0-9._/-]+$/u.test(scope.branch) || scope.branch.startsWith("/") || scope.branch.endsWith("/") || scope.branch.includes("..") || scope.branch.includes("//") ||
+  if (!record(scope) || !onlyKeys(scope, ["workspace_id", "repository_id", "branch", "generation"]) || !text(scope.workspace_id, 256) || /[\u0000-\u001f\u007f]/u.test(scope.workspace_id) || !isValidGitBranchName(scope.branch) ||
       !text(scope.generation, 256) || /[\u0000-\u001f\u007f]/u.test(scope.generation) ||
       !(scope.repository_id === null || Number.isSafeInteger(scope.repository_id) && scope.repository_id > 0)) fail("invalid_input", "ChangeSet scope is invalid.");
 }
@@ -343,7 +347,7 @@ function validateChangeSet(set: ChangeSet, caller: WriterCaller, observedReads: 
     fail("invalid_input", "ChangeSet envelope is incomplete or exceeds Host limits.");
   }
   if (!onlyKeys(caller as unknown as Record<string, unknown>, ["caller", "producer_plugin_id", "action_id", "scope", "idempotency_key", "source_payload", "request_digest", "submitted_at"]) || !text(caller.producer_plugin_id, 128) || !/^[a-z][a-z0-9.-]{2,127}$/u.test(caller.producer_plugin_id) ||
-      !text(caller.action_id, 256) || !caller.action_id.startsWith(`${caller.producer_plugin_id}.`) || caller.caller !== "ui" && caller.caller !== "mcp" && caller.caller !== "plugin" ||
+      !text(caller.action_id, 256) || !/^[a-z][a-z0-9._-]*$/u.test(caller.action_id) || caller.caller !== "ui" && caller.caller !== "mcp" && caller.caller !== "plugin" ||
       !text(caller.idempotency_key, 256) || !(caller.source_payload instanceof Uint8Array) || caller.source_payload.byteLength > MAX_SOURCE_PAYLOAD_BYTES ||
       !REVISION.test(caller.request_digest) || !text(caller.submitted_at, 64)) {
     fail("invalid_input", "Host action identity is invalid.");
@@ -521,18 +525,21 @@ export class ChangeWriter {
   /** Stable action timestamp persisted before it can be returned to a guest. */
   async timestamp(scope: WriterScope, pluginId: string, actionId: string, idempotencyKey: string): Promise<{ readonly timestamp: string }> {
     validateScope(scope);
-    if (!text(pluginId, 128) || !/^[a-z][a-z0-9.-]{2,127}$/u.test(pluginId) || !text(actionId, 256) || !actionId.startsWith(`${pluginId}.`) || !text(idempotencyKey, 256)) {
+    if (!text(pluginId, 128) || !/^[a-z][a-z0-9.-]{2,127}$/u.test(pluginId) || !text(actionId, 256) || !/^[a-z][a-z0-9._-]*$/u.test(actionId) || !text(idempotencyKey, 256)) {
       fail("invalid_input", "Timestamp request identity is invalid.");
     }
     const key = `${scopeKey(scope)}\u0000${pluginId}\u0000${actionId}\u0000${idempotencyKey}`;
-    return this.dependencies.workspace.with_exclusive_writer(scope, () => this.dependencies.journal.transact(scope, currentValue => {
+    return this.dependencies.workspace.with_exclusive_writer(scope, async () => {
+      await this.dependencies.assert_action(pluginId, actionId);
+      return this.dependencies.journal.transact(scope, currentValue => {
       const current = defaultState(currentValue);
       const existing = current.timestamps[key];
       if (existing) return { next: current, value: Object.freeze({ timestamp: existing }) };
       const timestamp = this.now();
       if (!text(timestamp, 64) || Number.isNaN(Date.parse(timestamp))) fail("storage_unknown", "Host clock returned an invalid timestamp.");
       return { next: Object.freeze({ ...current, timestamps: Object.freeze({ ...current.timestamps, [key]: timestamp }) }), value: Object.freeze({ timestamp }) };
-    }));
+      });
+    });
   }
 
   async propose(set: ChangeSet, hostCaller: Omit<WriterCaller, "submitted_at">, observedReads: readonly WriterReadRevision[]): Promise<ProposalAdmission> {
@@ -541,6 +548,7 @@ export class ChangeWriter {
     if (!sameScope(set.scope, hostCaller.scope)) fail("invalid_input", "Proposal scope must equal the Host selected workspace scope.");
     const key = idemKey(caller, set.scope);
     return this.dependencies.workspace.with_exclusive_writer(set.scope, async () => {
+      await this.dependencies.assert_action(caller.producer_plugin_id, caller.action_id);
       // Resolve a lost-response retry before consulting an ephemeral artifact lease.
       const existing = defaultState(await this.dependencies.journal.read(set.scope)).idempotency[key];
       if (existing) {
@@ -619,7 +627,7 @@ export class ChangeWriter {
     return this.dependencies.workspace.with_exclusive_writer(scope, async () => {
       let persisted = await this.getProposal(scope, proposalId);
       if (persisted.record.status !== "proposed" && persisted.record.status !== "approved" && persisted.record.status !== "partially_applied" && persisted.record.status !== "failed") fail("conflict", `Proposal in ${persisted.record.status} state cannot be applied.`);
-      if (!sameScope(persisted.record.scope, scope)) fail("invalid_input", "Proposal belongs to another workspace scope.");
+      if (!sameWorkspace(persisted.record.scope, scope)) fail("invalid_input", "Proposal belongs to another workspace.");
       const closure = dependencyClosure(persisted.set, requestedUnitIds);
       const alreadyApplied = new Set(persisted.record.units.filter(unit => unit.status === "applied").map(unit => unit.id));
       for (const id of closure) if (alreadyApplied.has(id) && !requestedUnitIds.includes(id)) continue;
@@ -767,8 +775,8 @@ export class ChangeWriter {
     return this.dependencies.workspace.with_exclusive_writer(scope, async () => {
       const state = defaultState(await this.dependencies.journal.read(scope));
       const journal = state.write_ahead;
-      if (!journal || !sameScope(journal.scope, scope)) {
-        const unresolved = Object.values(state.proposals).find(item => sameScope(item.record.scope, scope) && (item.record.status === "applying" || item.record.status === "storage_unknown"));
+      if (!journal || !sameWorkspace(journal.scope, scope)) {
+        const unresolved = Object.values(state.proposals).find(item => sameWorkspace(item.record.scope, scope) && (item.record.status === "applying" || item.record.status === "storage_unknown"));
         if (unresolved) {
           await this.dependencies.workspace.block_writes(scope, "An applying proposal has no retained write-ahead journal.");
           fail("storage_unknown", "An applying proposal has no retained write-ahead journal.");
@@ -849,7 +857,7 @@ export class ChangeWriter {
     const after = decodeCursor(cursor, scope, "proposals");
     const state = defaultState(await this.dependencies.journal.read(scope));
     const ordered = Object.values(state.proposals)
-      .filter(item => sameScope(item.record.scope, scope) && (!status || item.record.status === status))
+      .filter(item => sameWorkspace(item.record.scope, scope) && (!status || item.record.status === status))
       .map(item => item.record)
       .sort((a, b) => a.submitted_at.localeCompare(b.submitted_at) || a.proposal_id.localeCompare(b.proposal_id))
       .filter(item => !after || `${item.submitted_at}\n${item.proposal_id}` > after);
@@ -1033,7 +1041,7 @@ export class ChangeWriter {
   private async getProposal(scope: WriterScope, proposalId: string): Promise<PersistedProposal> {
     const state = defaultState(await this.dependencies.journal.read(scope));
     const proposal = state.proposals[proposalId];
-    if (!proposal || !sameScope(proposal.record.scope, scope)) fail("file_not_found", "Proposal does not exist in this workspace scope.");
+    if (!proposal || !sameWorkspace(proposal.record.scope, scope)) fail("file_not_found", "Proposal does not exist in this workspace.");
     return proposal;
   }
 
@@ -1041,7 +1049,7 @@ export class ChangeWriter {
     return this.dependencies.journal.transact(scope, currentValue => {
       const current = defaultState(currentValue);
       const proposal = current.proposals[proposalId];
-      if (!proposal || !sameScope(proposal.record.scope, scope)) fail("file_not_found", "Proposal does not exist in this workspace scope.");
+      if (!proposal || !sameWorkspace(proposal.record.scope, scope)) fail("file_not_found", "Proposal does not exist in this workspace.");
       return update(current, proposal);
     });
   }

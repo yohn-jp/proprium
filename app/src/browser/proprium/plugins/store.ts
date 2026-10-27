@@ -1,5 +1,5 @@
 import type { PluginManifest } from "../plugin-artifact.js";
-import type { PluginDependency, SignedRegistrySnapshot } from "./registry.js";
+import { compareVersions, type PluginDependency, type SignedRegistrySnapshot } from "./registry.js";
 
 export interface InstalledPluginRecord {
   readonly key: string;
@@ -28,6 +28,8 @@ export interface PluginStore {
   deletePlugin(key: string): Promise<void>;
   getRegistry(url: string, digest: string): Promise<SignedRegistrySnapshot | undefined>;
   putRegistry(snapshot: SignedRegistrySnapshot): Promise<void>;
+  /** Atomically advance the highest signed version with its retained snapshot. */
+  advanceRegistry(snapshot: SignedRegistrySnapshot, latestStateKey: string): Promise<void>;
   getState(key: string): Promise<string | undefined>;
   setState(key: string, value: string | undefined): Promise<void>;
 }
@@ -94,6 +96,46 @@ export class IndexedDbPluginStore implements PluginStore {
     await this.transaction(transaction);
   }
 
+  async advanceRegistry(snapshot: SignedRegistrySnapshot, latestStateKey: string): Promise<void> {
+    const db = await this.open();
+    const transaction = db.transaction(["registries", "state"], "readwrite", { durability: "strict" });
+    const registries = transaction.objectStore("registries");
+    const state = transaction.objectStore("state");
+    const current = state.get(latestStateKey) as IDBRequest<{ key: string; value: string } | undefined>;
+    return new Promise((resolve, reject) => {
+      let failed = false;
+      const abort = (error: Error) => {
+        failed = true;
+        try { transaction.abort(); } catch { /* Transaction already terminated. */ }
+        reject(error);
+      };
+      const persist = () => {
+        registries.put({ key: `${snapshot.url}\n${snapshot.digest}`, snapshot });
+        state.put({ key: latestStateKey, value: snapshot.digest });
+      };
+      current.onsuccess = () => {
+        const priorDigest = current.result?.value;
+        if (!priorDigest || priorDigest === snapshot.digest) { persist(); return; }
+        const prior = registries.get(`${snapshot.url}\n${priorDigest}`) as IDBRequest<{ key: string; snapshot: SignedRegistrySnapshot } | undefined>;
+        prior.onsuccess = () => {
+          const existing = prior.result?.snapshot;
+          if (!existing || existing.digest !== priorDigest) {
+            abort(new Error("Latest signed registry proof is missing or corrupt")); return;
+          }
+          const order = compareVersions(snapshot.document.version, existing.document.version);
+          if (order < 0) { abort(new Error("Signed registry version rollback is rejected")); return; }
+          if (order === 0) { abort(new Error("Conflicting signed registry bytes reuse an observed registry version")); return; }
+          persist();
+        };
+        prior.onerror = () => abort(new Error("Latest registry state could not be read"));
+      };
+      current.onerror = () => abort(new Error("Latest registry pointer could not be read"));
+      transaction.oncomplete = () => { if (!failed) resolve(); };
+      transaction.onerror = () => { if (!failed) reject(new Error("Atomic registry advance failed")); };
+      transaction.onabort = () => { if (!failed) reject(new Error("Atomic registry advance was interrupted")); };
+    });
+  }
+
   async getState(key: string): Promise<string | undefined> {
     const db = await this.open();
     const item = await this.request<{ key: string; value: string } | undefined>(db.transaction("state", "readonly").objectStore("state").get(key));
@@ -139,6 +181,18 @@ export class MemoryPluginStore implements PluginStore {
   }
   async putRegistry(snapshot: SignedRegistrySnapshot): Promise<void> {
     this.registries.set(`${snapshot.url}\n${snapshot.digest}`, { ...snapshot, bytes: Uint8Array.from(snapshot.bytes), signature: Uint8Array.from(snapshot.signature) });
+  }
+  async advanceRegistry(snapshot: SignedRegistrySnapshot, latestStateKey: string): Promise<void> {
+    const digest = this.state.get(latestStateKey);
+    if (digest && digest !== snapshot.digest) {
+      const prior = this.registries.get(`${snapshot.url}\n${digest}`);
+      if (!prior || prior.digest !== digest) throw new Error("Latest signed registry proof is missing or corrupt");
+      const order = compareVersions(snapshot.document.version, prior.document.version);
+      if (order < 0) throw new Error("Signed registry version rollback is rejected");
+      if (order === 0) throw new Error("Conflicting signed registry bytes reuse an observed registry version");
+    }
+    await this.putRegistry(snapshot);
+    this.state.set(latestStateKey, snapshot.digest);
   }
   async getState(key: string): Promise<string | undefined> { return this.state.get(key); }
   async setState(key: string, value: string | undefined): Promise<void> { if (value === undefined) this.state.delete(key); else this.state.set(key, value); }

@@ -129,9 +129,7 @@ export function RestoredEditor(props: Props): ReactElement {
     if (!props.author.name.trim() || !props.author.email.includes("@")) throw new Error("Git author name/emailを設定してください。");
     const before = await props.git.status();
     if (before.entries.length) throw new Error("先に既存の変更をCheckpointしてください。スクラッチは回復記録に保持しています。");
-    await props.git.applyChanges(changes);
-    const staged = await props.git.add(changes.map(change => change.path), before.head);
-    await props.git.commit(`Scratch ${entry.sceneId}`, props.author, staged.head);
+    await props.git.checkpointScratch(changes, before.head, `Scratch ${entry.sceneId}`, props.author);
     await journalRef.current?.removeEntry(entry); setEntries(await journalRef.current?.getRepository(repo, authorScope) ?? []); await props.onScratchApplied();
   };
   const recovered = discoverWorkspaceDrafts(recoveryEntries, workspace, authorScope).filter(entry => entry.documentPath === file.path && entry.text !== file.text);

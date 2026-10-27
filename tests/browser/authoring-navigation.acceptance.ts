@@ -17,7 +17,7 @@ const fixture: Record<string, string> = {
   'meta/proprium/plugins/proprium.narrative/resume.v1.yaml': `schemaVersion: 1\npositions:\n  - deviceId: portable-test-device\n    repositoryId: 301\n    branch: main\n    sceneId: s1\n    manuscriptPath: manuscript/custom/a.md\n    manuscriptRevision: ${revisionA}\n    sentenceIndex: 1\n    scrollTop: 0\n    updatedAt: 2026-01-01T00:00:00Z\n`,
 };
 async function setup(page: Page) {
-  const registryDir = resolve(process.env.PROPRIUM_PUBLISHING_REGISTRY_DIR!);
+  const registryDir = resolve(process.env.PROPRIUM_OFFICIAL_E2E_DIR ?? process.env.PROPRIUM_PUBLISHING_REGISTRY_DIR!);
   const registryUrl = new URL(process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_URL!);
   const registryPrefix = registryUrl.pathname.slice(0, registryUrl.pathname.lastIndexOf('/') + 1);
   await page.route(`${registryUrl.origin}${registryPrefix}**`, async route => {

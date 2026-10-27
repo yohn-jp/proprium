@@ -4,7 +4,7 @@ import { resolve, sep } from 'node:path';
 import { showPanel } from './restored-ui.helpers.js';
 
 test('Semantic local preference persists without model or provider requests', async ({ page }) => {
-  const registryDir = resolve(process.env.PROPRIUM_PUBLISHING_REGISTRY_DIR!);
+  const registryDir = resolve(process.env.PROPRIUM_OFFICIAL_E2E_DIR ?? process.env.PROPRIUM_PUBLISHING_REGISTRY_DIR!);
   const registryUrl = new URL(process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_URL!);
   const prefix = registryUrl.pathname.slice(0, registryUrl.pathname.lastIndexOf('/') + 1);
   const unexpected: string[] = [];
