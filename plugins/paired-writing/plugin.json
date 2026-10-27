@@ -18,7 +18,8 @@
     "artifact.create",
     "artifact.append",
     "artifact.seal",
-    "artifact.discard"
+    "artifact.discard",
+    "plugin.preferences.read"
   ],
   "dependencies": [
     {
@@ -13617,6 +13618,658 @@
         "plugin"
       ],
       "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.paired-writing",
+      "action_id": "paired.workspace-settings.read",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "workspace": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "revision": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "settings": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "defaultPresetId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "presets": {
+                    "type": "array",
+                    "maxItems": 32,
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "model": {
+                          "type": "string",
+                          "minLength": 0,
+                          "maxLength": 512
+                        },
+                        "maxConcurrency": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 8
+                        },
+                        "sampling": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "temperature": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 2
+                            },
+                            "topP": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "minP": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "presencePenalty": {
+                              "type": "number",
+                              "minimum": -2,
+                              "maximum": 2
+                            },
+                            "frequencyPenalty": {
+                              "type": "number",
+                              "minimum": -2,
+                              "maximum": 2
+                            },
+                            "repetitionPenalty": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 2
+                            }
+                          },
+                          "required": []
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "label",
+                        "model"
+                      ]
+                    }
+                  },
+                  "featurePresetIds": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "dialogue-sketch-turn": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "dialogue-sketch": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "zukan-proposal": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "scene-summary": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "chapter-summary": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "rewrite": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "synonym-suggest": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "speaker-attribution-llm": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "continuation-options": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "contradiction-check": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "state-event-draft": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "first-read-reaction": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "setting-qa": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    },
+                    "required": []
+                  },
+                  "maxConcurrentModels": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 8
+                  },
+                  "totalCuBudget": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 64
+                  },
+                  "modelCuWeights": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "patternProperties": {
+                      "^.{1,256}$": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 64
+                      }
+                    },
+                    "maxProperties": 256
+                  }
+                },
+                "required": [
+                  "defaultPresetId",
+                  "presets",
+                  "featurePresetIds"
+                ]
+              }
+            },
+            "required": [
+              "revision",
+              "settings"
+            ]
+          },
+          "local": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "defaultPresetId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "presets": {
+                "type": "array",
+                "maxItems": 32,
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "model": {
+                      "type": "string",
+                      "minLength": 0,
+                      "maxLength": 512
+                    },
+                    "maxConcurrency": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 8
+                    },
+                    "sampling": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "temperature": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 2
+                        },
+                        "topP": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "minP": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "presencePenalty": {
+                          "type": "number",
+                          "minimum": -2,
+                          "maximum": 2
+                        },
+                        "frequencyPenalty": {
+                          "type": "number",
+                          "minimum": -2,
+                          "maximum": 2
+                        },
+                        "repetitionPenalty": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 2
+                        }
+                      },
+                      "required": []
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "model"
+                  ]
+                }
+              },
+              "featurePresetIds": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "dialogue-sketch-turn": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "dialogue-sketch": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "zukan-proposal": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "scene-summary": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "chapter-summary": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "rewrite": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "synonym-suggest": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "speaker-attribution-llm": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "continuation-options": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "contradiction-check": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "state-event-draft": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "first-read-reaction": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "setting-qa": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  }
+                },
+                "required": []
+              },
+              "maxConcurrentModels": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 8
+              },
+              "totalCuBudget": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 64
+              },
+              "modelCuWeights": {
+                "type": "object",
+                "additionalProperties": false,
+                "patternProperties": {
+                  "^.{1,256}$": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 64
+                  }
+                },
+                "maxProperties": 256
+              }
+            },
+            "required": []
+          },
+          "effective": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "defaultPresetId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "presets": {
+                "type": "array",
+                "maxItems": 32,
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "model": {
+                      "type": "string",
+                      "minLength": 0,
+                      "maxLength": 512
+                    },
+                    "maxConcurrency": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 8
+                    },
+                    "sampling": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "temperature": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 2
+                        },
+                        "topP": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "minP": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "presencePenalty": {
+                          "type": "number",
+                          "minimum": -2,
+                          "maximum": 2
+                        },
+                        "frequencyPenalty": {
+                          "type": "number",
+                          "minimum": -2,
+                          "maximum": 2
+                        },
+                        "repetitionPenalty": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 2
+                        }
+                      },
+                      "required": []
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "model"
+                  ]
+                }
+              },
+              "featurePresetIds": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "dialogue-sketch-turn": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "dialogue-sketch": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "zukan-proposal": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "scene-summary": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "chapter-summary": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "rewrite": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "synonym-suggest": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "speaker-attribution-llm": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "continuation-options": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "contradiction-check": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "state-event-draft": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "first-read-reaction": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "setting-qa": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  }
+                },
+                "required": []
+              },
+              "maxConcurrentModels": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 8
+              },
+              "totalCuBudget": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 64
+              },
+              "modelCuWeights": {
+                "type": "object",
+                "additionalProperties": false,
+                "patternProperties": {
+                  "^.{1,256}$": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 64
+                  }
+                },
+                "maxProperties": 256
+              }
+            },
+            "required": [
+              "defaultPresetId",
+              "presets",
+              "featurePresetIds"
+            ]
+          },
+          "provenance": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "defaultPresetId": {
+                "enum": [
+                  "local",
+                  "workspace",
+                  "default"
+                ]
+              },
+              "presets": {
+                "enum": [
+                  "local",
+                  "workspace",
+                  "default"
+                ]
+              },
+              "featurePresetIds": {
+                "enum": [
+                  "local",
+                  "workspace",
+                  "default"
+                ]
+              },
+              "maxConcurrentModels": {
+                "enum": [
+                  "local",
+                  "workspace",
+                  "default"
+                ]
+              },
+              "totalCuBudget": {
+                "enum": [
+                  "local",
+                  "workspace",
+                  "default"
+                ]
+              },
+              "modelCuWeights": {
+                "enum": [
+                  "local",
+                  "workspace",
+                  "default"
+                ]
+              }
+            },
+            "required": [
+              "defaultPresetId",
+              "presets",
+              "featurePresetIds",
+              "maxConcurrentModels",
+              "totalCuBudget",
+              "modelCuWeights"
+            ]
+          }
+        },
+        "required": [
+          "workspace",
+          "local",
+          "effective",
+          "provenance"
+        ]
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "plugin.preferences.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
     }
   ],
   "ui": [
@@ -13869,6 +14522,23 @@
             "body": {
               "id": "proposal-result",
               "type": "detail",
+              "value": {
+                "data_key": "last_action_result"
+              }
+            }
+          },
+          {
+            "id": "settings-tab",
+            "title": "Model settings",
+            "body": {
+              "id": "paired-settings-detail",
+              "type": "detail",
+              "title": "Workspace and local settings",
+              "description": "Model aliases are preferences; provider access and consent remain Host controlled.",
+              "load_action": {
+                "action_id": "paired.workspace-settings.read",
+                "input_template": {}
+              },
               "value": {
                 "data_key": "last_action_result"
               }
