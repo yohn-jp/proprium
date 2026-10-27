@@ -2948,13 +2948,79 @@
         "label": "文章分析には、利用者が明示的に有効化した署名済み日本語トークナイザーが必要です。"
       },
       "body": {
-        "id": "research-analyzer-unavailable",
-        "type": "status",
-        "title": "ローカル解析器",
-        "state": "unavailable",
-        "messages": {
-          "unavailable": "この Research 配布物には形態素解析器が含まれていません。解析データを取得したり、外部へ送信したりしません。"
-        }
+        "id": "research-analyzer-tabs",
+        "type": "tabs",
+        "title": "ローカル形態素解析",
+        "tabs": [
+          {
+            "id": "analysis-input",
+            "title": "入力",
+            "body": {
+              "id": "research-analysis-form",
+              "type": "form",
+              "title": "入力した文章を解析",
+              "description": "解析にはローカル辞書が必要です。辞書が利用できない場合は理由が表示されます。入力は原稿として保存されません。",
+              "fields": [
+                {
+                  "id": "text",
+                  "label": "解析する文章",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 1024
+                }
+              ],
+              "submit": {
+                "action_id": "research.nlp.analyze",
+                "input_template": {
+                  "text": {
+                    "data_key": "form.text"
+                  },
+                  "source": {
+                    "kind": "literal"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "analysis-tokens",
+            "title": "解析結果",
+            "body": {
+              "id": "research-analysis-tokens",
+              "type": "table",
+              "title": "形態素",
+              "rows": {
+                "data_key": "last_action_result.tokens"
+              },
+              "columns": [
+                {
+                  "key": "surface",
+                  "label": "表記"
+                },
+                {
+                  "key": "pos",
+                  "label": "品詞"
+                },
+                {
+                  "key": "reading",
+                  "label": "読み"
+                },
+                {
+                  "key": "base",
+                  "label": "基本形"
+                },
+                {
+                  "key": "start",
+                  "label": "開始"
+                },
+                {
+                  "key": "end",
+                  "label": "終了"
+                }
+              ]
+            }
+          }
+        ]
       }
     },
     {

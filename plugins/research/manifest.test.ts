@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
-import { assertDescriptor } from "../../app/src/browser/proprium/authoring/schema.js";
+import { pathToFileURL, fileURLToPath } from "node:url";
+const schemaPath = process.env.PROPRIUM_AUTHORING_SCHEMA ?? fileURLToPath(new URL("../../app/src/browser/proprium/authoring/schema.ts", import.meta.url));
+const { assertDescriptor, assertSurface } = await import(pathToFileURL(schemaPath).href);
 import { createResearchHandlers } from "./guest.js";
 
 test("Research official manifest declares every implemented action and only actionable Host surfaces", async () => {
@@ -43,6 +45,7 @@ test("Research official manifest declares every implemented action and only acti
   };
   for (const raw of metadata.ui) {
     assert.ok(raw && typeof raw === "object" && !Array.isArray(raw));
+    assertSurface(raw);
     const surface = raw as Record<string, unknown>;
     assert.equal(typeof surface.id, "string");
     assert.ok(!surfaceIds.has(surface.id as string), `duplicate UI surface ${String(surface.id)}`);
@@ -55,4 +58,15 @@ test("Research official manifest declares every implemented action and only acti
   }
   assert.ok(bindings.length > 0);
   for (const actionId of bindings) assert.ok(actionIds.includes(actionId), `surface binding references undeclared action ${actionId}`);
+});
+
+test("analyzer exposes local literal analysis and its results", async () => {
+  const metadata = JSON.parse(await readFile(new URL("./plugin.json", import.meta.url), "utf8"));
+  const surface = metadata.ui.find((item: any) => item.id === "nlp.analyzer");
+  assert.equal(surface.body.type, "tabs");
+  const form = surface.body.tabs.find((item: any) => item.id === "analysis-input").body;
+  assert.equal(form.submit.action_id, "research.nlp.analyze");
+  assert.deepEqual(form.submit.input_template.source, { kind: "literal" });
+  assert.deepEqual(form.submit.input_template.text, { data_key: "form.text" });
+  assert.deepEqual(surface.body.tabs.find((item: any) => item.id === "analysis-tokens").body.rows, { data_key: "last_action_result.tokens" });
 });
