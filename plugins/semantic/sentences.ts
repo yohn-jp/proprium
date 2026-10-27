@@ -44,7 +44,7 @@ function splitAtClosingBrackets(line: string, lineStart: number, segment: Senten
 
 function splitLine(line: string, lineStart: number): SentenceSegment[] {
   if (line.length === 0) return [{ text: "", start: lineStart, end: lineStart }];
-  if (typeof Intl.Segmenter !== "function") {
+  if (typeof Intl === "undefined" || typeof Intl.Segmenter !== "function") {
     throw Object.assign(new Error("This runtime does not provide the pinned Japanese sentence segmenter"), { code: "dependency_unavailable" });
   }
   const segmenter = new Intl.Segmenter("ja", { granularity: "sentence" });

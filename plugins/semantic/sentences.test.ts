@@ -10,3 +10,11 @@ test("sentence offsets preserve Japanese brackets, multiline boundaries, and UTF
   const finalSentence = offsets.find(({ start, end }) => text.slice(start, end) === "🌊")!;
   assert.equal(finalSentence.end - finalSentence.start, 2);
 });
+
+test('missing Intl reports an explicit unavailable dependency', () => {
+  const intl = globalThis.Intl;
+  try {
+    Object.defineProperty(globalThis, 'Intl', { value: undefined, configurable: true });
+    assert.throws(() => splitIntoSentenceOffsets('文章。'), (error: unknown) => Boolean(error && typeof error === 'object' && 'code' in error && error.code === 'dependency_unavailable'));
+  } finally { Object.defineProperty(globalThis, 'Intl', { value: intl, configurable: true, writable: true }); }
+});
