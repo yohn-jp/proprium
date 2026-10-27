@@ -166,15 +166,15 @@ export function publishingFilename(project: PublishingProject, scope: Publishing
 }
 
 export function stripManuscriptMarkup(text: string): string {
-  return text.replace(/[|｜]([^《|\n｜]+?)《([^》]+)》/gu, "$1").replace(/《《([^》]+)》》/gu, "$1");
+  return text.replace(/[|｜]([^《|\n｜]+?)《([^》\r\n]+)》/gu, "$1").replace(/《《([^》]+)》》/gu, "$1");
 }
 
 export function toKakuyomuDialect(text: string): string {
-  return text.replace(/[|｜]([^《|\n｜]+?)《([^》]+)》/gu, (_match, base: string, reading: string) => `｜${base}《${reading}》`);
+  return text.replace(/[|｜]([^《|\n｜]+?)《([^》\r\n]+)》/gu, (_match, base: string, reading: string) => `｜${base}《${reading}》`);
 }
 
 export function toNarouDialect(text: string): string {
-  const withRuby = text.replace(/[|｜]([^《|\n｜]+?)《([^》]+)》/gu, (_match, base: string, reading: string) => `|${base}《${reading}》`);
+  const withRuby = text.replace(/[|｜]([^《|\n｜]+?)《([^》\r\n]+)》/gu, (_match, base: string, reading: string) => `|${base}《${reading}》`);
   return withRuby.replace(/《《([^》]+)》》/gu, (_match, inner: string) => [...inner].map(character => `|${character}《・》`).join(""));
 }
 
@@ -246,7 +246,7 @@ function validNcName(value: string): string {
 function inlineMarkup(text: string): string {
   const tokens: string[] = [];
   const protectedText = text
-    .replace(/[|｜]([^《|\n｜]+?)《([^》]+)》/gu, (match) => {
+    .replace(/[|｜]([^《|\n｜]+?)《([^》\r\n]+)》/gu, (match) => {
       const index = tokens.push(match) - 1;
       return `\u0001${index}\u0002`;
     })

@@ -135,3 +135,10 @@ test("vertical print preserves canonical scene order and preflight stays non-blo
   assert.match(warning, /5 件/u);
   assert.equal(preflightWarningMessage({ proofread: true, "names-ruby": true, "export-scope": true, "platform-rules": true, "episode-meta": true }), null);
 });
+
+test("incomplete ruby markup does not consume text across lines during export", () => {
+  const text = "|星《ほし\n次の行》";
+  assert.equal(stripManuscriptMarkup(text), text);
+  assert.equal(toKakuyomuDialect(text), text);
+  assert.equal(toNarouDialect(text), text);
+});
