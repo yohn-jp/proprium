@@ -2,7 +2,7 @@ import YAML from "yaml";
 import type { ActionRequest, ChangeUnit, ReadPrecondition } from "../../../app/src/browser/proprium/authoring/types.js";
 import type { GuestHost, HostCall } from "../../shared/guest.js";
 import { PairedError } from "./types.js";
-import { invokeAction, readText, withStagingSnapshot } from "./host.js";
+import { invokeAction, readNarrativeScene, readText, withStagingSnapshot } from "./host.js";
 import { assertBoundedJson, filePath, identity, isRecord } from "./validation.js";
 import { canonicalJson, sha256 } from "./sha256.js";
 import { createContentReference } from "./artifact-content.js";
@@ -119,7 +119,7 @@ export function* compileManuscriptReplacement(
   const sceneId = identity(target.sceneId, `operation ${operation.id}.target.sceneId`);
   const manuscriptId = identity(target.manuscriptId, `operation ${operation.id}.target.manuscriptId`);
   const scene = options.metadataPath === undefined
-    ? yield* invokeAction<SceneContextValue>(host, request, "proprium.narrative", "proprium.narrative.scene.context", { scene_id: sceneId })
+    ? yield* readNarrativeScene<SceneContextValue>(host, request, sceneId)
     : undefined;
   if (scene && scene.scene_id !== sceneId) throw new PairedError("scene_not_found", `Scene not found: ${sceneId}`);
   const metadataPath = filePath(options.metadataPath ?? scene!.metadata_path, "scene.metadata_path");

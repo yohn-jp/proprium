@@ -33,8 +33,12 @@ class HostHarness {
     this.calls.push({ operation, payload });
     if (operation === "workspace.plugin.invoke") {
       assert.equal(payload.plugin_id, "proprium.narrative");
-      assert.equal(payload.action_id, "proprium.narrative.scene.context");
-      const result: ActionResult<typeof scene> = { ok: true, request_id: "nested-request", scope, snapshot: this.activeSnapshot, value: scene, warnings: [] };
+      assert.ok(["proprium.narrative.scene.context", "proprium.narrative.scene.open"].includes(String(payload.action_id)));
+      const { metadata_path, ...context } = scene;
+      const value = payload.action_id === "proprium.narrative.scene.open"
+        ? { scene: { id: scene.scene_id, metadata_path, metadata_revision: scene.metadata_revision }, manuscript_path: scene.manuscript_path, manuscript_revision: scene.manuscript_revision }
+        : context;
+      const result: ActionResult<typeof value> = { ok: true, request_id: "nested-request", scope, snapshot: this.activeSnapshot, value, warnings: [] };
       return result;
     }
     if (operation === "workspace.file.read") {

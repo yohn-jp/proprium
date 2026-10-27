@@ -1,7 +1,7 @@
 import type { ActionRequest } from "../../../app/src/browser/proprium/authoring/types.js";
 import type { GuestHost, HostCall } from "../../shared/guest.js";
 import { PairedError } from "./types.js";
-import { cacheGet, cachePut, invokeAction, readText } from "./host.js";
+import { cacheGet, cachePut, invokeAction, readNarrativeScene, readText } from "./host.js";
 import { byteLength, countUnicodeScalars, exactKeys, filePath, finiteInteger, identity, record } from "./validation.js";
 
 const MAX_CONTEXT_CHARACTERS = 50_000;
@@ -64,7 +64,6 @@ interface SceneContextValue {
   readonly title: string;
   readonly volume: { readonly id: string; readonly title: string };
   readonly chapter: { readonly id: string; readonly title: string };
-  readonly metadata_path: string;
   readonly manuscript_path: string;
   readonly metadata_revision: string;
   readonly manuscript_revision: string;
@@ -146,8 +145,7 @@ export function* captureContext(
   if (row.range !== undefined && !included.includes("selection")) throw new PairedError("invalid_input", "A supplied range must be explicitly included");
   if (included.includes("draft") !== (row.shareDraft !== undefined)) throw new PairedError("invalid_input", "Draft context requires both draft inclusion and an explicit draft reference");
 
-  const scene = yield* invokeAction<SceneContextValue>(host, request, "proprium.narrative", "proprium.narrative.scene.context", { scene_id: sceneId });
-  if (!scene || scene.scene_id !== sceneId) throw new PairedError("scene_not_found", `Scene not found in the pinned workspace: ${sceneId}`);
+  const scene = yield* readNarrativeScene<SceneContextValue>(host, request, sceneId);
   const metadataPath = filePath(scene.metadata_path, "scene.metadata_path");
   const manuscriptPath = filePath(scene.manuscript_path, "scene.manuscript_path");
   const metadataRevision = identity(scene.metadata_revision, "scene.metadata_revision");

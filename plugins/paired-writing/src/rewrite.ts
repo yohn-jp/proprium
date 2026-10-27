@@ -2,7 +2,7 @@ import type { ActionRequest, ChangeSet } from "../../../app/src/browser/proprium
 import type { GuestHost, HostCall } from "../../shared/guest.js";
 import { propose } from "../../shared/operations.js";
 import { PairedError } from "./types.js";
-import { invokeAction, readText } from "./host.js";
+import { invokeAction, readNarrativeScene, readText } from "./host.js";
 import { buildRewriteFallbackSuggestions, buildRewriteLocalSuggestions } from "./rewrite-local.js";
 import { exactKeys, filePath, finiteInteger, identity, record } from "./validation.js";
 import { canonicalJson, sha256 } from "./sha256.js";
@@ -71,7 +71,7 @@ interface PinnedFile {
 
 function* selectedSource(input: unknown, host: GuestHost, request: ActionRequest, includeInstruction: boolean): Generator<HostCall, { parsed: SuggestInput | ProposeInput; scene: SceneValue; manuscript: PinnedFile; selection: { start: number; end: number; text: string } }, unknown> {
   const parsed = validateRewriteInput(input, includeInstruction as true) as SuggestInput | ProposeInput;
-  const scene = yield* invokeAction<SceneValue>(host, request, "proprium.narrative", "proprium.narrative.scene.context", { scene_id: parsed.sceneId });
+  const scene = yield* readNarrativeScene<SceneValue>(host, request, parsed.sceneId);
   if (!scene || scene.scene_id !== parsed.sceneId) throw new PairedError("scene_not_found", `Scene not found: ${parsed.sceneId}`);
   if (scene.manuscript_revision !== parsed.manuscriptRevision) throw new PairedError("snapshot_stale", "Manuscript revision changed since the selection was made");
   const path = filePath(scene.manuscript_path, "scene.manuscript_path");
