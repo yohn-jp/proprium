@@ -8,6 +8,7 @@ import {
   placeholder as cmPlaceholder,
 } from "@codemirror/view";
 import { forwardRef, useEffect, useImperativeHandle, useRef, type CSSProperties } from "react";
+import { manuscriptSourceText } from "./cm/sourceText";
 import { bracketPairsExtension } from "./cm/bracketPairs";
 import { editorCompositionExtension, isViewComposing } from "./cm/compositionGuard";
 import { ellipsisNormalizeExtension } from "./cm/ellipsisNormalize";
@@ -17,12 +18,26 @@ import { isValidEditorRange, type ResolveEditorTerms } from "./terms";
 import { createUiSentencePositionIndexCache, type UiSentencePositionIndexCache } from "../resume/continueCandidates";
 import "./terminology.css";
 
+/** Follow the actual composed layout: Host panes may scroll while CM expands. */
+function positionScrollContainer(view: EditorView): HTMLElement {
+  let element: Element | null = view.scrollDOM;
+  const seen = new Set<Element>();
+  while (element && !seen.has(element)) {
+    seen.add(element);
+    if (element instanceof HTMLElement && /^(auto|scroll|overlay)$/u.test(getComputedStyle(element).overflowY) &&
+        element.scrollHeight > element.clientHeight + 1) return element;
+    const root = element.getRootNode();
+    element = element.assignedSlot ?? element.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
+  }
+  return (view.dom.ownerDocument.scrollingElement as HTMLElement | null) ?? view.scrollDOM;
+}
+
 export interface ManuscriptInputHandle {
   focus(): void;
   flushComposition(): Promise<string>;
   insert(symbol: WritingSymbolId): void;
   selectRange(start: number, end: number): boolean;
-  restorePosition(position: { cursorSentenceIndex: number | null; scrollTop: number }): void;
+  restorePosition(position: { cursorSentenceIndex: number | null; scrollTop: number; selection?: { anchor: number; head: number } }): boolean;
   getScrollTop(): number;
 }
 
@@ -32,7 +47,7 @@ export interface ManuscriptInputProps {
   readOnly?: boolean;
   onChange: (value: string) => void;
   onSelectionLengthChange?: (length: number) => void;
-  onCursorPositionChange?: (cursorSentenceIndex: number | null, scrollTop: number) => void;
+  onCursorPositionChange?: (cursorSentenceIndex: number | null, scrollTop: number, selection?: { anchor: number; head: number }) => void;
   placeholder?: string;
   labelledBy: string;
   style?: CSSProperties;
@@ -85,11 +100,12 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
   }
 
   function reportPosition(view: EditorView): void {
-    if (suppressPositionRef.current) return;
+    if (suppressPositionRef.current || !view.dom.getClientRects().length) return;
     const selection = view.state.selection.main;
     latestRef.current.onCursorPositionChange?.(
       sentencePositionIndex(view.state.doc).indexAtOffset(selection.head),
-      Math.max(0, view.scrollDOM.scrollTop),
+      Math.max(0, positionScrollContainer(view).scrollTop),
+      { anchor: selection.anchor, head: selection.head },
     );
   }
 
@@ -135,20 +151,29 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
     },
     restorePosition(position) {
       const view = viewRef.current;
-      if (!view) return;
+      if (!view || isViewComposing(view)) return false;
       const offset = sentencePositionIndex(view.state.doc).offsetAtIndex(position.cursorSentenceIndex);
+      if ((position.cursorSentenceIndex !== null && offset === null) || !Number.isFinite(position.scrollTop) || position.scrollTop < 0) return false;
+      const selected = position.selection;
+      if (selected && !isValidEditorRange(view.state.doc.toString(), Math.min(selected.anchor, selected.head), Math.max(selected.anchor, selected.head))) return false;
       suppressPositionRef.current = true;
-      if (offset !== null) {
+      if (selected || offset !== null) {
         view.dispatch({
-          selection: { anchor: Math.max(0, Math.min(offset, view.state.doc.length)) },
+          selection: selected ?? { anchor: offset! },
           annotations: Transaction.addToHistory.of(false),
         });
       }
-      view.scrollDOM.scrollTop = Math.max(0, position.scrollTop);
-      requestAnimationFrame(() => { suppressPositionRef.current = false; });
+      const scroll = positionScrollContainer(view), doc = view.state.doc;
+      scroll.scrollTop = Math.max(0, position.scrollTop);
+      requestAnimationFrame(() => {
+        if (viewRef.current === view && view.state.doc === doc && !isViewComposing(view)) scroll.scrollTop = position.scrollTop;
+        suppressPositionRef.current = false;
+      });
+      return true;
     },
     getScrollTop() {
-      return Math.max(0, viewRef.current?.scrollDOM.scrollTop ?? 0);
+      const view = viewRef.current;
+      return view ? Math.max(0, positionScrollContainer(view).scrollTop) : 0;
     },
   }), []);
 
@@ -158,6 +183,7 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
     const state = EditorState.create({
       doc: value,
       extensions: [
+        manuscriptSourceText,
         history(),
         editabilityCompartment.of(editabilityExtensions(readOnly)),
         drawSelection(),
@@ -194,7 +220,8 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
             if (!externalSyncRef.current) {
               latestRef.current.onCursorPositionChange?.(
                 (changedDocumentIndex ?? sentencePositionIndex(update.state.doc)).indexAtOffset(selection.head),
-                Math.max(0, viewRef.current?.scrollDOM.scrollTop ?? 0),
+                Math.max(0, viewRef.current ? positionScrollContainer(viewRef.current).scrollTop : 0),
+                { anchor: selection.anchor, head: selection.head },
               );
             }
           }
@@ -208,10 +235,15 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
     reportComposition(view);
     const onScroll = () => reportPosition(view);
     view.scrollDOM.addEventListener("scroll", onScroll, { passive: true });
+    const outerScroll = positionScrollContainer(view);
+    if (outerScroll !== view.scrollDOM) outerScroll.addEventListener("scroll", onScroll, { passive: true });
+    view.dom.ownerDocument.addEventListener("scroll", onScroll, { passive: true, capture: true });
     return () => {
       reportedComposition.current = null;
       latestRef.current.onCompositionChange?.(false);
       view.scrollDOM.removeEventListener("scroll", onScroll);
+      if (outerScroll !== view.scrollDOM) outerScroll.removeEventListener("scroll", onScroll);
+      view.dom.ownerDocument.removeEventListener("scroll", onScroll, true);
       view.destroy();
       viewRef.current = null;
     };

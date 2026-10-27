@@ -5,7 +5,9 @@ import { filePath, identity } from "./validation.js";
 import { sha256 } from "./sha256.js";
 
 const INLINE_CONTENT_LIMIT = 128 * 1024;
-const ARTIFACT_CHUNK_BYTES = 256 * 1024;
+const ARTIFACT_CHUNK_BYTES = 64 * 1024;
+const DEFAULT_ARTIFACT_LIMIT = 128 * 1024 * 1024;
+const MAX_HOST_CHUNK_BYTES = 256 * 1024;
 
 export type ContentReference = { readonly content: number[] } |
   { readonly content_artifact: string; readonly artifact_id: string };
@@ -21,16 +23,25 @@ export function* createContentReference(
   const bytes = new TextEncoder().encode(text);
   if (bytes.byteLength <= INLINE_CONTENT_LIMIT) return { content: Array.from(bytes) };
   const filename = path.slice(path.lastIndexOf("/") + 1);
-  const artifactId = identity(yield* host.request<unknown>("artifact.create", {
+  const created = yield* host.request<unknown>("artifact.create", {
     media_type: path.endsWith(".md") ? "text/markdown" : "application/octet-stream",
     filename,
     scope: request.scope,
     snapshot: request.snapshot,
-  }), "artifact_id", 512);
+  });
+  const receipt = created && typeof created === "object" && !Array.isArray(created) ? created as Record<string, unknown> : undefined;
+  const artifactId = identity(receipt ? receipt.artifact_id : created, "artifact_id", 512);
+  const maxBytes = receipt?.max_bytes ?? DEFAULT_ARTIFACT_LIMIT;
+  const maxChunk = receipt?.max_chunk_bytes ?? ARTIFACT_CHUNK_BYTES;
   try {
+    if (!Number.isSafeInteger(maxBytes) || (maxBytes as number) < 1 || !Number.isSafeInteger(maxChunk) || (maxChunk as number) < 1 || (maxChunk as number) > MAX_HOST_CHUNK_BYTES) {
+      throw new PairedError("storage_unknown", "Host returned invalid artifact limits");
+    }
+    if (bytes.byteLength > (maxBytes as number)) throw new PairedError("artifact_too_large", "Content exceeds the negotiated Host artifact limit");
+    const chunkSize = Math.min(ARTIFACT_CHUNK_BYTES, maxChunk as number);
     let sequence = 0;
-    for (let offset = 0; offset < bytes.byteLength; offset += ARTIFACT_CHUNK_BYTES) {
-      const chunk = Array.from(bytes.slice(offset, offset + ARTIFACT_CHUNK_BYTES));
+    for (let offset = 0; offset < bytes.byteLength; offset += chunkSize) {
+      const chunk = Array.from(bytes.slice(offset, offset + chunkSize));
       yield* host.request("artifact.append", { artifact_id: artifactId, sequence: sequence++, bytes: chunk });
     }
     yield* host.request("artifact.seal", { artifact_id: artifactId, sha256: sha256(bytes), total_bytes: bytes.byteLength });

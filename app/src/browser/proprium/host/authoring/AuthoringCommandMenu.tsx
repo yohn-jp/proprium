@@ -50,7 +50,12 @@ export function AuthoringCommandMenu({ registrations, invoke, read, navigate }: 
         status={active.registration.status}
         message={active.registration.message}
         onClose={close}
-        onInvoke={({ actionId, input, event }) => invoke(event, active.registration.pluginId, actionId, input)}
+        onInvoke={async ({ actionId, input, event }) => {
+          const output = await invoke(event, active.registration.pluginId, actionId, input, { surfaceId: active.surface.id });
+          const result = output.action_result;
+          if (result.ok && result.value && typeof result.value === "object" && "navigation" in result.value) close();
+          return output;
+        }}
         onRead={({ actionId, input, signal }) => read(active.registration.pluginId, actionId, input, signal)}
         onNavigate={navigate}
       />}

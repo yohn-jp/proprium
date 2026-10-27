@@ -1,0 +1,3 @@
+$ pnpm --filter @scriptorium/contracts build && pnpm --filter @proprium/host typecheck:proprium
+$ tsc -p tsconfig.json
+$ tsc --noEmit -p tsconfig.proprium.json

@@ -2,10 +2,11 @@ import { PluginArtifactError, verifyPluginArtifact, type AssetGroupRef, type Plu
 import { BrowserPluginRuntime } from "../plugin-runtime/runtime.js";
 import { CAPABILITIES, type PluginCapability, type PluginTranscript, type RuntimeContext, type RuntimeSnapshot } from "../plugin-runtime/protocol.js";
 import { BrowserAuthoringPluginRuntime, V2PluginRuntimeError, type V2Caller, type V2InvokeOptions } from "../plugin-runtime/v2/index.js";
-import type { ActionDescriptor, ActionRequest, ActionResult, SurfaceDeclaration } from "../authoring/types.js";
+import type { ActionDescriptor, ActionRequest, ActionResult, SurfaceDeclaration, Scope } from "../authoring/types.js";
 import { assertValue } from "../authoring/schema.js";
 import { admitRegistry, admitRegistryManifest, compareVersions, PluginRegistryError, registryArtifactURL, registryManifestEntry, registrySignatureUrl, satisfiesVersion, type PluginDependency, type PluginRegistryEntry, type PluginRegistryTrust, type SignedRegistrySnapshot } from "./registry.js";
 import { IndexedDbPluginStore, pluginKey, type InstalledPluginRecord, type PluginStore } from "./store.js";
+import { RuntimeReservations } from "./runtime-reservations.js";
 
 export { PluginRegistryError } from "./registry.js";
 export type { PluginCapability, PluginTranscript, RuntimeSnapshot };
@@ -72,6 +73,10 @@ export interface EnablePluginOptions {
   readonly hostAllowed: readonly string[];
   readonly context?: RuntimeContext;
 }
+export interface RestoreEnabledOptions {
+  readonly scope: Pick<Scope, "workspace_id" | "repository_id" | "branch">;
+  readonly hostAllowed: readonly string[];
+}
 
 export interface InvokePluginOptions {
   readonly pluginId: string;
@@ -118,6 +123,7 @@ export interface ResolvedAssetGroup {
 }
 
 export interface InstalledPlugin {
+  readonly grantedCapabilities?: readonly string[];
   readonly id: string;
   readonly version: string;
   /** Exact registry-admitted manifest digest. Omitted when admission has been revoked or failed. */
@@ -157,6 +163,7 @@ type ActivePlugin =
   | { readonly abi: "v1"; readonly version: string; readonly runtime: BrowserPluginRuntime; transcript?: PluginTranscript }
   | { readonly abi: "v2"; readonly version: string; readonly runtime: BrowserAuthoringPluginRuntime };
 interface EnabledPlugin {
+  readonly intentKey?: string;
   readonly version: string;
   readonly workspaceId: string;
   readonly activationEpoch: number;
@@ -204,6 +211,9 @@ function stableVersions(entries: readonly PluginRegistryEntry[], id: string): Pl
 function activeStateKey(pluginId: string): string { return `active:${pluginId}`; }
 function previousStateKey(pluginId: string): string { return `previous:${pluginId}`; }
 function activationEpochKey(pluginId: string): string { return `activation-epoch:${pluginId}`; }
+function enabledIntentKey(scope: RestoreEnabledOptions["scope"], pluginId: string): string {
+  return `enabled-intent:${canonicalJson(scope)}:${pluginId}`;
+}
 function validEpoch(value: string | undefined): number { const epoch = Number(value ?? "0"); return Number.isSafeInteger(epoch) && epoch >= 0 ? epoch : 0; }
 function registryRootFingerprint(publicKey: Uint8Array): string {
   return Array.from(publicKey, byte => byte.toString(16).padStart(2, "0")).join("");
@@ -226,7 +236,10 @@ export class BrowserPluginManager {
   private readonly store: PluginStore;
   private readonly trusts: Map<string, PluginRegistryTrust>;
   private readonly active = new Map<string, ActivePlugin>();
+  private readonly reservations = new RuntimeReservations();
   private readonly enabled = new Map<string, EnabledPlugin>();
+  private activationSelection?: RestoreEnabledOptions;
+  private activationRestored = false;
   private operation = Promise.resolve();
   private closed = false;
 
@@ -390,6 +403,7 @@ export class BrowserPluginManager {
           id: record.id, version: record.version, ...(availableManifest ? { manifestDigest: record.manifestSha256 } : {}), activeVersion,
           state: revoked ? "revoked" : live?.version === record.version ? "active" : enabled?.version === record.version ? "enabled-idle" : "installed",
           capabilities: availableManifest?.capabilities ?? [],
+          ...(enabled?.version === record.version ? { grantedCapabilities: enabled.grants } : {}),
           ...(availableManifest ? { manifest: availableManifest } : {}),
           actions: availableManifest?.schema === "proprium.plugin/v2" ? availableManifest.actions : [],
           surfaces: availableManifest?.schema === "proprium.plugin/v2" ? availableManifest.ui : [],
@@ -506,7 +520,7 @@ export class BrowserPluginManager {
 
   /** Adapter consumed by the shared UI/MCP action dispatcher. */
   authoringRuntime(pluginId: string): ManagedActionRuntime {
-    return Object.freeze({ invoke: async (options: InvokeManagedActionOptions): Promise<ActionResult> => {
+    return Object.freeze({ invoke: (options: InvokeManagedActionOptions): Promise<ActionResult> => this.reservations.run(pluginId, async () => {
       const enabled = this.enabled.get(pluginId);
       if (!enabled || enabled.activationEpoch !== options.activation_epoch || options.request.plugin_id !== pluginId) {
         throw new PluginManagerError("not_active", "Plugin action belongs to a stale or disabled activation");
@@ -514,14 +528,18 @@ export class BrowserPluginManager {
       if (!Number.isSafeInteger(options.deadline_at) || Date.now() >= options.deadline_at) {
         throw new V2PluginRuntimeError("timeout", "Plugin action deadline has expired");
       }
-      const remainingMs = Math.floor(options.deadline_at - Date.now());
-      const deadlineMs = Math.min(options.request.deadline_ms, remainingMs);
-      if (deadlineMs < 1) throw new V2PluginRuntimeError("timeout", "Plugin action deadline has expired");
       const granted = enabled.grants.filter(capability => enabled.hostAllowed.includes(capability)).sort();
       if (canonicalJson(granted) !== canonicalJson([...options.granted_capabilities].sort())) {
         throw new V2PluginRuntimeError("capability_denied", "Action grant set differs from the active Host grant set");
       }
+      if (!options.request.scope || enabled.workspaceId !== options.request.scope.workspace_id || (this.activationSelection &&
+          canonicalJson(this.activationSelection.scope) !== canonicalJson({ workspace_id: options.request.scope.workspace_id,
+            repository_id: options.request.scope.repository_id, branch: options.request.scope.branch }))) {
+        throw new PluginManagerError("not_active", "Plugin grants belong to another workspace, repository or branch");
+      }
       const active = await this.ensureActive(pluginId);
+      const deadlineMs = Math.min(options.request.deadline_ms, Math.floor(options.deadline_at - Date.now()));
+      if (deadlineMs < 1) throw new V2PluginRuntimeError("timeout", "Plugin action deadline has expired");
       if (this.enabled.get(pluginId) !== enabled || enabled.activationEpoch !== options.activation_epoch) {
         throw new PluginManagerError("not_active", "Plugin action activation changed before invocation");
       }
@@ -543,7 +561,7 @@ export class BrowserPluginManager {
         }
         throw error;
       } finally { options.signal?.removeEventListener("abort", cancel); }
-    } });
+    }) });
   }
 
   /** Records explicit capability grants. It does not start a Worker until the first invocation. */
@@ -551,11 +569,64 @@ export class BrowserPluginManager {
     return this.serialize(() => this.enableInternal(options));
   }
 
+  /** Restore only a previously explicit grant for the same selected scope and signed package. */
+  restoreEnabled(options: RestoreEnabledOptions): Promise<void> {
+    return this.serialize(async () => {
+      this.assertOpen();
+      const scope = options.scope;
+      if (!scope || typeof scope.workspace_id !== "string" || !scope.workspace_id || scope.workspace_id.length > 256 ||
+          typeof scope.branch !== "string" || !scope.branch || scope.branch.length > 1024 ||
+          !(scope.repository_id === null || (Number.isSafeInteger(scope.repository_id) && scope.repository_id! > 0))) {
+        throw new PluginManagerError("invalid_plugin", "Activation scope is invalid");
+      }
+      const selection = { scope: Object.freeze({ workspace_id: scope.workspace_id, repository_id: scope.repository_id, branch: scope.branch }),
+        hostAllowed: Object.freeze([...new Set(options.hostAllowed)].sort()) };
+      if (this.activationRestored && canonicalJson(this.activationSelection) === canonicalJson(selection)) return;
+      this.activationSelection = selection;
+      this.activationRestored = false;
+      const live = [...this.active.values()];
+      this.active.clear(); this.enabled.clear();
+      await Promise.all(live.map(item => item.abi === "v1" ? item.runtime.destroy() : item.runtime.stop()));
+      for (const record of await this.store.listPlugins()) {
+        const key = enabledIntentKey(selection.scope, record.id);
+        const raw = await this.store.getState(key);
+        if (!raw) continue;
+        let intent: { version: string; digest: string; registryRoot: string; grants: string[]; dependencies: unknown };
+        try {
+          if (raw.length > 65536) throw new Error("oversized");
+          intent = JSON.parse(raw);
+          if (!intent || typeof intent !== "object" || Array.isArray(intent) || typeof intent.version !== "string") throw new Error("malformed");
+        }
+        catch { await this.store.setState(key, undefined); continue; }
+        if (intent.version !== record.version) continue;
+        try {
+          const { manifest } = await this.verifyStoredPlugin(record.key, false);
+          if (manifest.schema !== "proprium.plugin/v2" || intent.digest !== record.manifestSha256 ||
+              intent.registryRoot !== record.registryRootFingerprint ||
+              canonicalJson(intent.dependencies) !== canonicalJson(record.resolvedDependencies) ||
+              await this.store.getState(activeStateKey(record.id)) !== record.version ||
+              !Array.isArray(intent.grants) || intent.grants.length > 128 ||
+              intent.grants.some(capability => typeof capability !== "string" || !manifest.capabilities.includes(capability) || !selection.hostAllowed.includes(capability))) {
+            throw new Error("Stored grant no longer matches the admitted package or policy");
+          }
+          await this.enableInternal({ pluginId: record.id, version: record.version, workspaceId: selection.scope.workspace_id,
+            grants: intent.grants, hostAllowed: manifest.capabilities.filter(capability => selection.hostAllowed.includes(capability)) });
+        } catch {
+          await this.store.setState(key, undefined);
+        }
+      }
+      this.activationRestored = true;
+    });
+  }
+
   private async enableInternal(options: EnablePluginOptions): Promise<void> {
     this.assertOpen();
     if (this.enabled.has(options.pluginId)) throw new PluginManagerError("already_active", `Plugin ${options.pluginId} is already enabled`);
     const record = await this.requireInstalled(options.pluginId, options.version);
     const { manifest } = await this.verifyStoredPlugin(record.key, false);
+    if (this.activationSelection && this.activationSelection.scope.workspace_id !== options.workspaceId) {
+      throw new PluginManagerError("capability_denied", "Activation grants belong to another selected workspace");
+    }
     const context = options.context ?? { pluginId: options.pluginId, version: options.version, workspaceId: options.workspaceId };
     if (context.pluginId !== options.pluginId || context.version !== options.version || context.workspaceId !== options.workspaceId) {
       throw new PluginManagerError("invalid_plugin", "Plugin activation context does not match the selected version and workspace");
@@ -565,14 +636,21 @@ export class BrowserPluginManager {
         options.hostAllowed.some(capability => !declaredCapabilities.has(capability))) {
       throw new PluginManagerError("capability_denied", "Plugin activation grants must be declared by its signed manifest");
     }
+    const grants = [...new Set(options.grants.filter(capability => options.hostAllowed.includes(capability)))];
     const currentVersion = await this.store.getState(activeStateKey(options.pluginId));
     if (currentVersion && currentVersion !== options.version) await this.store.setState(previousStateKey(options.pluginId), currentVersion);
     const activationEpoch = validEpoch(await this.store.getState(activationEpochKey(options.pluginId))) + 1;
     await this.store.setState(activationEpochKey(options.pluginId), String(activationEpoch));
     await this.store.setState(activeStateKey(options.pluginId), options.version);
+    const intentKey = manifest.schema === "proprium.plugin/v2" && this.activationSelection
+      ? enabledIntentKey(this.activationSelection.scope, options.pluginId) : undefined;
+    if (intentKey) await this.store.setState(intentKey, JSON.stringify({ version: options.version,
+      digest: record.manifestSha256, registryRoot: record.registryRootFingerprint,
+      dependencies: record.resolvedDependencies, grants }));
     this.enabled.set(options.pluginId, Object.freeze({
+      ...(intentKey ? { intentKey } : {}),
       version: options.version, workspaceId: options.workspaceId,
-      activationEpoch, grants: Object.freeze([...options.grants]),
+      activationEpoch, grants: Object.freeze(grants),
       hostAllowed: Object.freeze([...options.hostAllowed]), context: Object.freeze({ ...context }),
     }));
   }
@@ -607,7 +685,11 @@ export class BrowserPluginManager {
     return this.serialize(async () => {
       this.assertOpen();
       const active = this.active.get(pluginId);
-      if (active?.runtime.state === "active") return active;
+      if (active?.runtime.state === "active") {
+        this.active.delete(pluginId);
+        this.active.set(pluginId, active);
+        return active;
+      }
       if (active) {
         this.active.delete(pluginId);
         await (active.abi === "v1" ? active.runtime.destroy() : active.runtime.stop()).catch(() => undefined);
@@ -635,7 +717,19 @@ export class BrowserPluginManager {
         await verifyPluginArtifact(manifest, path, bytes);
       });
       try {
-        await runtime.start({ context: enabled.context, user_grants: enabled.grants, host_allowed: enabled.hostAllowed });
+        for (;;) {
+          try {
+            await runtime.start({ context: enabled.context, user_grants: enabled.grants, host_allowed: enabled.hostAllowed });
+            break;
+          } catch (error) {
+            if (!(error instanceof V2PluginRuntimeError) || error.code !== "overloaded" || runtime.state !== "idle") throw error;
+            const idle = [...this.active].find(([id, instance]) => instance.abi === "v2" && !this.reservations.isBusy(id));
+            if (!idle) throw error;
+            // Only discard execution resources. Installation, grants and activation stay intact.
+            this.active.delete(idle[0]);
+            if (idle[1].abi === "v2") await idle[1].runtime.stop().catch(() => undefined);
+          }
+        }
         const instance: ActivePlugin = { abi: "v2", version: enabled.version, runtime };
         this.active.set(pluginId, instance);
         return instance;
@@ -655,6 +749,7 @@ export class BrowserPluginManager {
     const enabled = this.enabled.get(pluginId);
     if (version && enabled && version !== enabled.version) throw new PluginManagerError("not_active", `Plugin ${pluginId}@${version} is not enabled`);
     if (!active && !enabled) return;
+    if (enabled?.intentKey) await this.store.setState(enabled.intentKey, undefined);
     this.active.delete(pluginId);
     this.enabled.delete(pluginId);
     const epoch = validEpoch(await this.store.getState(activationEpochKey(pluginId))) + 1;

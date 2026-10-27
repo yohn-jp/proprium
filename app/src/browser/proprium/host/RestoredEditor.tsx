@@ -6,6 +6,7 @@ import type { RepositoryIdentity, SnapshotId } from "@scriptorium/contracts";
 import type { BrowserLocalGit } from "../git/index.js";
 import type { WorkspaceIdentity } from "../git/protocol.js";
 import { discoverWorkspaceDrafts, draftBaseMatches, journalRepositoryForWorkspace, notifyWorkspaceDraftsChanged, workspaceBreadcrumb } from "./workspace-drafts.js";
+import type { HostWritingResume, WritingResumeSelection } from "./writing-resume.js";
 
 interface Props {
   workspace: WorkspaceIdentity;
@@ -34,6 +35,9 @@ interface Props {
   onTermNavigate?(targetPath: string, termId: string, event: Event): void;
   hostNavigationSelection?: { readonly requestId: string; readonly start: number; readonly end: number };
   onHostNavigationSelectionApplied?(requestId: string): void;
+  onWritingPosition?(path: string, sentenceIndex: number | null, scrollTop: number, selection: WritingResumeSelection | null): void;
+  hostResume?: HostWritingResume & { readonly requestId: number };
+  onHostResumeApplied?(requestId: number, restored: boolean): void;
 }
 
 /** The recovered Scriptorium editor, with Browser Host-owned storage and Git ports. */
@@ -52,6 +56,10 @@ export function RestoredEditor(props: Props): ReactElement {
   const [recoveryEntries, setRecoveryEntries] = useState<JournalEntry[]>([]);
   const activeRef = useRef(true);
   const fileVersion = useRef({ path: file.path, revision: file.revision.oid, value: 0 });
+  const resumeRequest = useMemo(() => props.hostResume ? { id: props.hostResume.requestId, repositoryKey: repositoryKey(repo), sceneId: file.path,
+    cursorSentenceIndex: props.hostResume.position.sentence_index, scrollTop: props.hostResume.position.scroll_top,
+    ...(props.hostResume.selection ? { selection: props.hostResume.selection } : {}) } : null, [props.hostResume, repo, file.path]);
+  const resumeApplied = useCallback((id: number, restored?: boolean) => latest.current.onHostResumeApplied?.(id, restored === true), []);
   if (fileVersion.current.path !== file.path || fileVersion.current.revision !== file.revision.oid) fileVersion.current = { path: file.path, revision: file.revision.oid, value: fileVersion.current.value + 1 };
 
   useEffect(() => {
@@ -158,7 +166,9 @@ export function RestoredEditor(props: Props): ReactElement {
       scene={{ id: file.path, title: file.path.split("/").at(-1) ?? file.path, text: file.text ?? "", revision: file.revision.oid ?? "" }} path={file.path} breadcrumb={workspaceBreadcrumb(workspace)}
       text={file.text ?? ""} textRevision={fileVersion.current.value} flushPendingReactPublish={() => undefined}
       onTextChange={props.onChange} onRetryDraft={() => { void persistText(file.text ?? "").catch(error => setJournalError(String(error))); }}
-      onCursorPositionChange={() => undefined} onReadingPageChange={() => undefined} resumeRequest={null} onResumeRequestApplied={() => undefined}
+      onCursorPositionChange={(_sceneId, sentenceIndex, scrollTop, selection) => props.onWritingPosition?.(file.path, sentenceIndex, scrollTop, selection ?? null)}
+      onReadingPageChange={() => undefined}
+      resumeRequest={resumeRequest} onResumeRequestApplied={resumeApplied}
       durability={published ? "saved" : checkpointBusy ? "checkpointing" : props.localCommitted && !file.dirty ? "checkpointed" : "draft"} draftStored={!file.dirty || storedText === file.text} journalError={journalError}
       conflict={null} canResolveDraft={false} onRebase={() => undefined} onRestoreRemote={() => undefined}
       resolveTerms={props.resolveTerms} onTermNavigate={props.onTermNavigate}

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { guest } from "../guest.js";
+import { sha256 } from "../src/core.js";
 
 const scope = { workspace_id: "workspace-a", repository_id: 7, branch: "main", generation: "generation-1" };
 const snapshot = { id: "snapshot-1", local_commit: "commit-1", worktree_generation: "tree-1", draft_generation: null };
@@ -78,4 +79,54 @@ test("unknown and extra input fields fail closed", () => {
   assert.equal(invalid.ok, false);
   assert.equal(invalid.error.code, "invalid_input");
   guest.dispose();
+});
+
+
+test("lint output satisfies the signed schema for a local workspace", async () => {
+  const localScope = { ...scope, repository_id: null };
+  guest.initialize({ pluginId: "proprium.diagnostics", version: "0.1.0", workspaceId: scope.workspace_id });
+  let result = JSON.parse(guest.invoke(JSON.stringify({ ...request("proprium.diagnostics.lint.run.v1", { text: "彼は…笑った。" }), scope: localScope })));
+  while (result.kind === "host_call") {
+    const bytes = [...new TextEncoder().encode("severity: {}\n")];
+    result = continueWith(result, { revision: "a".repeat(64), total_bytes: bytes.length, offset: 0, bytes, next_offset: null });
+  }
+  assert.equal(result.ok, true);
+  const { assertValue } = await import("../../../app/src/browser/proprium/authoring/schema.js");
+  const manifest = JSON.parse(await (await import("node:fs/promises")).readFile(new URL("../plugin.json", import.meta.url), "utf8"));
+  const descriptor = manifest.actions.find((action: { action_id: string }) => action.action_id === "proprium.diagnostics.lint.run.v1");
+  assertValue(descriptor.output_schema, result.value);
+  assert.equal(result.value.identity.configRevisions.lint, "a".repeat(64));
+  assert.equal(result.value.identity.providerStatus.lexical, "disabled");
+  assert.equal(result.value.warnings[0].ruleId, "ellipsis-single-piece");
+  guest.dispose();
+});
+
+test("project scans reject repeating cursors and duplicate file identities", () => {
+  for (const action of ["proprium.diagnostics.project.consistency.run.v1", "proprium.diagnostics.project.continuity.run.v1"]) {
+    for (const duplicate of [false, true]) {
+      guest.initialize({ pluginId: "proprium.diagnostics", version: "0.1.0", workspaceId: scope.workspace_id });
+      let result = JSON.parse(guest.invoke(JSON.stringify(request(action, {}))));
+      const entry = { path: "manuscript/a.md", revision: "a".repeat(64), byte_length: 1, media_type: "text/markdown" };
+      result = continueWith(result, { entries: duplicate ? [entry] : [], next_cursor: "cursor-1" });
+      assert.equal(result.operation, "workspace.file.list");
+      result = continueWith(result, { entries: duplicate ? [entry] : [], next_cursor: duplicate ? null : "cursor-1" });
+      assert.equal(result.ok, false);
+      assert.equal(result.error.code, "snapshot_stale");
+      guest.dispose();
+    }
+  }
+});
+
+
+test("project scans reject cursors beyond the computed result set", () => {
+  for (const kind of ["consistency", "continuity"]) {
+    guest.initialize({ pluginId: "proprium.diagnostics", version: "0.1.0", workspaceId: scope.workspace_id });
+    const digest = sha256(JSON.stringify(kind === "continuity" ? ["continuity", snapshot.id, null] : [snapshot.id, null]));
+    const cursor = `${kind === "continuity" ? "dcn1" : "dcp1"}.${digest}.1`;
+    let result = JSON.parse(guest.invoke(JSON.stringify(request(`proprium.diagnostics.project.${kind}.run.v1`, { cursor }))));
+    result = continueWith(result, { entries: [], next_cursor: null });
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, "snapshot_stale");
+    guest.dispose();
+  }
 });

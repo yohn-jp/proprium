@@ -8,6 +8,16 @@ const scope: Scope = { workspace_id: "ws-a", repository_id: 1, branch: "main", g
 const snapshot: Snapshot = { id: "snap-a", local_commit: null, worktree_generation: "g1", draft_generation: null };
 const cacheKey = { plugin_id: "proprium.research", snapshot, schema_version: 1, config_digest: "cfg", key: "terms" };
 
+test("artifact MIME supports canonical UTF-8 text without accepting header injection", async () => {
+  const broker = new ArtifactBroker(new MemoryBrokerStore());
+  const artifact = await broker.create("proprium.publishing", { filename: "book.txt", media_type: "text/plain; charset=utf-8", scope, snapshot });
+  assert.ok(artifact.artifact_id);
+  await broker.discard("proprium.publishing", artifact.artifact_id);
+  for (const media_type of ["text/plain; charset=shift_jis", "text/plain; charset=utf-8\r\nx-header: value", "text/plain; charset=utf-8; extra=value"]) {
+    await assert.rejects(broker.create("proprium.publishing", { filename: "book.txt", media_type, scope, snapshot }), { code: "invalid_input" });
+  }
+});
+
 test("derived cache is namespaced, snapshot-keyed, and supports eviction", async () => {
   const store = new MemoryBrokerStore(); const broker = new DerivedCacheBroker(store);
   assert.deepEqual(await broker.get("proprium.research", cacheKey), { found: false });

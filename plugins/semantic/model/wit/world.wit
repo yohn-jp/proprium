@@ -6,6 +6,7 @@ interface inference {
   finish-asset: func(group-id: string, file-path: string) -> result<_, string>;
   load-embedding: func() -> result<_, string>;
   embed-passages: func(texts: list<string>) -> result<list<list<f32>>, string>;
+  split-sentence-ends: func(text: string) -> list<u32>;
   release: func();
 }
 

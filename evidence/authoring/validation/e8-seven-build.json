@@ -1,0 +1,74 @@
+{
+  "source_commit": "e8f7c33560890fc50053438b1648660a7eb43dca",
+  "registry_sha256": "312e3152a78e1ec337d34d99256c71166799765a8c8b23088787192599aa8cb2",
+  "registry_path": "/workspace/proprium-build-output/e8-seven-registry/registry.json",
+  "public_key_path": "/workspace/proprium-build-output/e8-seven-public-key.txt",
+  "build_log": "/workspace/proprium-build-output/e8-seven-build.log",
+  "verify_log": "/workspace/proprium-build-output/e8-seven-verify.log",
+  "verification_mode": "all (signature, artifacts, manifests, dependency closure; does not assert all eight official plugins)",
+  "plugins": [
+    {
+      "id": "proprium.diagnostics",
+      "version": "0.1.0",
+      "manifestPath": "proprium/diagnostics/0.1.0/manifest/28a363593cad642abea41ce3f441eec5777795d09828ddce31fd851caf0c7ebd.json",
+      "manifestSha256": "28a363593cad642abea41ce3f441eec5777795d09828ddce31fd851caf0c7ebd",
+      "manifestSignature": "/iA8MQPtZ2V1gx1ksvXF0xERLSFtKhiS78NleOkCdFpJ8KiWNgq+TxDtxVkafaIZ/Stu9ze2n1kRdvEuRb5PBA==",
+      "publisherKey": "sa9+YMGuS8lEgrCsgl8fkK1G8X3DO2M1RKIIvYRKpr0="
+    },
+    {
+      "id": "proprium.knowledge",
+      "version": "0.1.0",
+      "manifestPath": "proprium/knowledge/0.1.0/manifest/fd98e2e3a289572c66ee7ae231af917e01ee85e7614829ee3e667b3384a296ff.json",
+      "manifestSha256": "fd98e2e3a289572c66ee7ae231af917e01ee85e7614829ee3e667b3384a296ff",
+      "manifestSignature": "JHZ+2PPfcUoFE9Jr8cBxvc1jv5MYJLugxsGmM6esoMJEIY5Pi/yUD8D6q42xiVg70fb5ghcPXi1k3hLxmqU0DQ==",
+      "publisherKey": "sa9+YMGuS8lEgrCsgl8fkK1G8X3DO2M1RKIIvYRKpr0="
+    },
+    {
+      "id": "proprium.narrative",
+      "version": "0.1.0",
+      "manifestPath": "proprium/narrative/0.1.0/manifest/ae9f10a9157a1aaf85ff22fde3f49592448ed120989f1c2e049644d4db4e0869.json",
+      "manifestSha256": "ae9f10a9157a1aaf85ff22fde3f49592448ed120989f1c2e049644d4db4e0869",
+      "manifestSignature": "KLGNyTCK8TvA1cAlwgGJzN/rF/7DhtNdHWnYAtpXn9mWiRx96ngoywZ8GFhv2ptu3tdGIc14vjiBmZNLJYSTAQ==",
+      "publisherKey": "sa9+YMGuS8lEgrCsgl8fkK1G8X3DO2M1RKIIvYRKpr0="
+    },
+    {
+      "id": "proprium.publishing",
+      "version": "0.1.0",
+      "manifestPath": "proprium/publishing/0.1.0/manifest/0d192ccca5772525235c88d607aaf4120163db21d5e3db242ea7317115a7597e.json",
+      "manifestSha256": "0d192ccca5772525235c88d607aaf4120163db21d5e3db242ea7317115a7597e",
+      "manifestSignature": "pbyxWWMV3tNx3f17zFPqPyR1vAVoyFap83cqLR7lCFWZwHe+rEqU0McA9rkEaJKQUzL8lOgAQLHTxzwoLgj+CA==",
+      "publisherKey": "sa9+YMGuS8lEgrCsgl8fkK1G8X3DO2M1RKIIvYRKpr0="
+    },
+    {
+      "id": "proprium.research",
+      "version": "1.0.0",
+      "manifestPath": "proprium/research/1.0.0/manifest/122145998f8f998d7e09d87f703390e9763ec9720ec9c93667279c0b2cb11377.json",
+      "manifestSha256": "122145998f8f998d7e09d87f703390e9763ec9720ec9c93667279c0b2cb11377",
+      "manifestSignature": "+9nxLT3tzy7mQlqYJFp2DT3OR8EXC/f/G8hUyeCAN1on/6rnVUkv9aNI7V4dJVcC/6UPOTubR3EMAVf6NqM6Bw==",
+      "publisherKey": "sa9+YMGuS8lEgrCsgl8fkK1G8X3DO2M1RKIIvYRKpr0="
+    },
+    {
+      "id": "proprium.semantic",
+      "version": "0.1.0",
+      "manifestPath": "proprium/semantic/0.1.0/manifest/f3c8efbbe655792987b4512ad4b97cc44b9b178962ebda65a9eb23d68259d50a.json",
+      "manifestSha256": "f3c8efbbe655792987b4512ad4b97cc44b9b178962ebda65a9eb23d68259d50a",
+      "manifestSignature": "GT5LuU779Nn+EopIGTx+EcBFJutSPybHv18jx4f8mRPCmvPS5CF5t7dPq0zsO0wNSxOAu5A8HGObB+wBudX2CA==",
+      "publisherKey": "sa9+YMGuS8lEgrCsgl8fkK1G8X3DO2M1RKIIvYRKpr0="
+    },
+    {
+      "id": "proprium.speaker",
+      "version": "0.1.0",
+      "manifestPath": "proprium/speaker/0.1.0/manifest/d172fa13b715380c6f685a7bdd8dc0671a379d75d3431bf01b7230bb0b664c97.json",
+      "manifestSha256": "d172fa13b715380c6f685a7bdd8dc0671a379d75d3431bf01b7230bb0b664c97",
+      "manifestSignature": "mVZDgg8eRN4bqIYS0k1CxSexvU3gediTCdpx5fYsH2cECHsczbTAxlcIzVQr2eUA4h6T7C3IBvMgJKUmnfnEDA==",
+      "publisherKey": "sa9+YMGuS8lEgrCsgl8fkK1G8X3DO2M1RKIIvYRKpr0="
+    }
+  ],
+  "source_commit_published": "30f00e5515d0a592631c31a26ba9c71e445e7b40",
+  "public_key_base64": "E1+FQDQcZ2MSZ4wfjeoiSxZ2Ydc0BHEV6XPOMsdnEXE=",
+  "scope_note": "Seven selected actual components only. Ephemeral test signatures; not a production release, latest UI acceptance, or full R01-R14 certification. Paired Writing excluded and frozen.",
+  "build_artifact": "evidence/authoring/validation/e8-seven-build.txt",
+  "build_sha256": "fa7177bd23a72f93d494a8192e7b3a7613325820c46cfb3eff354f98ebd3519e",
+  "verify_artifact": "evidence/authoring/validation/e8-seven-verify.txt",
+  "verify_sha256": "f0eea8b793899c1ca81b737614e11d6b77aa01c131a0e3aa8e9205b322e0eaac"
+}

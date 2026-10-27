@@ -69,14 +69,18 @@ function validUtc(value: unknown): value is string {
   return typeof value === "string" && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/u.test(value) && Number.isFinite(Date.parse(value));
 }
 function validateMarker(value: unknown): Marker {
-  const row = record(value, "resume marker");
+  if (value === null || typeof value !== "object" || Array.isArray(value) ||
+      (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)) {
+    fail("unsupported_format", "Resume marker must be a YAML mapping", { path: MARKER_PATH });
+  }
+  const row = value as Row;
   const required = ["deviceId", "repositoryId", "branch", "sceneId", "manuscriptPath", "manuscriptRevision", "sentenceIndex", "scrollTop", "updatedAt"];
   for (const key of required) if (!(key in row)) fail("unsupported_format", `Resume marker is missing ${key}`);
   if (typeof row.deviceId !== "string" || !row.deviceId || row.deviceId.length > 256 ||
       !Number.isSafeInteger(row.repositoryId) || Number(row.repositoryId) < 1 ||
       typeof row.branch !== "string" || !row.branch || row.branch.length > 256 ||
       typeof row.sceneId !== "string" || !row.sceneId || row.sceneId.length > 256 ||
-      typeof row.manuscriptRevision !== "string" || !row.manuscriptRevision ||
+      typeof row.manuscriptRevision !== "string" || !/^[a-f0-9]{64}$/u.test(row.manuscriptRevision) ||
       !(row.sentenceIndex === null || Number.isSafeInteger(row.sentenceIndex) && Number(row.sentenceIndex) > 0) ||
       typeof row.scrollTop !== "number" || !Number.isFinite(row.scrollTop) || row.scrollTop < 0 || !validUtc(row.updatedAt)) {
     fail("unsupported_format", "Resume marker fields are invalid");
@@ -139,7 +143,7 @@ export function* listPortableResumeMarks(host: NarrativeHost, request: ActionReq
   const repositoryId = request.scope.repository_id;
   if (repositoryId === null) return { items: [], next_cursor: null, source_revision: null };
   const identity = validateIdentity(yield* host.request<unknown>("workspace.identity.read", {
-    scope: request.scope, snapshot: request.snapshot, paths: [MARKER_PATH],
+    paths: [MARKER_PATH],
   }));
   const markerFile = yield* readTextFile(host, request, MARKER_PATH, true);
   if (markerFile.revision === null) {
@@ -225,7 +229,7 @@ export function* proposePortableResumeMark(host: NarrativeHost, request: ActionR
   const input = parseProposeInput(value);
   if (request.scope.repository_id === null) fail("capability_denied", "Portable resume requires a bound GitHub repository");
   if (request.snapshot.draft_generation !== null) fail("dirty_draft", "Save locally first before proposing a portable reading position");
-  const identity = validateIdentity(yield* host.request<unknown>("workspace.identity.read", { scope: request.scope, snapshot: request.snapshot }));
+  const identity = validateIdentity(yield* host.request<unknown>("workspace.identity.read", {}));
   const work = yield* readWorkSnapshot(host, request);
   const scene = currentScene(work, input.scene_id);
   if (!scene) fail("scene_not_found", `Scene ${input.scene_id} was not found`);

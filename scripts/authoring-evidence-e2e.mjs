@@ -1,12 +1,16 @@
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, createPublicKey } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const registryDirectory = process.env.PROPRIUM_AUTHORING_REGISTRY_DIR;
-const registryPublicKey = process.env.PROPRIUM_AUTHORING_REGISTRY_PUBLIC_KEY ?? process.env.PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY;
+const registryDirectory = process.env.PROPRIUM_AUTHORING_REGISTRY_DIR ?? process.env.PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR;
+const registryPublicKey = process.env.PROPRIUM_AUTHORING_REGISTRY_PUBLIC_KEY ?? process.env.PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY ??
+  (process.env.PROPRIUM_AUTHORING_REGISTRY_PUBLIC_KEY_FILE
+    ? (await readFile(process.env.PROPRIUM_AUTHORING_REGISTRY_PUBLIC_KEY_FILE, "utf8")).trim()
+    : process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_KEY_FILE
+    ? createPublicKey(await readFile(process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_KEY_FILE, "utf8")).export({ format: "der", type: "spki" }).subarray(-32).toString("base64") : undefined);
 if (!registryDirectory) throw new Error("Set PROPRIUM_AUTHORING_REGISTRY_DIR to the actual independently built signed authoring registry directory.");
 if (!registryPublicKey) throw new Error("Set PROPRIUM_AUTHORING_REGISTRY_PUBLIC_KEY to the separately pinned Ed25519 public key; no test key will be generated.");
 

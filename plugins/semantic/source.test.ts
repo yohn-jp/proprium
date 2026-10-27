@@ -8,7 +8,7 @@ function evidenceText(content: string, passage: { evidence: { start: number; end
 }
 
 test("markdown body passages preserve exact source spans and UTF-16 offsets", () => {
-  const content = "# ignored before front matter\r\n---\r\ntitle: Station\r\n---\r\n\r\n駅前で会う。🌸次の場面。\r\n";
+  const content = "---\r\ntitle: Station\r\n---\r\n\r\n駅前で会う。🌸次の場面。\r\n";
   const entity = parseSemanticSourceFile("manuscript/chapter-1.md", "rev-1", content)!;
   assert.equal(entity.id, "ms-chapter-1");
   assert.equal(entity.type, "manuscript");
@@ -56,4 +56,11 @@ test("malformed YAML is skipped and escaped YAML text without a lossless source 
     () => parseSemanticSourceFile("bible/characters/a.yaml", "rev-escaped", 'id: a\ndescription: "A\\nB"\n'),
     (error: unknown) => Boolean(error && typeof error === "object" && "code" in error && error.code === "capacity"),
   );
+});
+
+
+test("markdown before a later delimiter remains manuscript text", () => {
+  const content = "# Prologue\n---\ntitle: Station\n---\nStory.";
+  const entity = parseSemanticSourceFile("manuscript/chapter-1.md", "rev-1", content)!;
+  assert.equal(entity.passages[0]!.evidence.quote, "# Prologue");
 });

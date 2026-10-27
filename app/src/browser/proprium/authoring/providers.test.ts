@@ -62,6 +62,47 @@ function broker(options: {
 
 function trustedClick(): Event { return { isTrusted: true } as Event; }
 
+test("action provider route waits for separate exact-preview consent and checks freshness before egress", async () => {
+  let sends=0;
+  const {instance}=broker({fetcher:async()=>{sends++;return new Response(JSON.stringify({answer:"untrusted"}),{headers:{"content-type":"application/json"}});}});
+  let stale=false;
+  await assert.rejects(instance.requestWithConsent(input(),context,async (owner,preview,send) => {
+    assert.equal(sends,0);
+    assert.deepEqual(preview.context,context);
+    assert.deepEqual(preview.request.payload,input().payload);
+    const consent=owner.authorize(trustedClick(),preview);
+    stale=true;
+    return send(consent);
+  },async()=>{if(stale)throw Object.assign(new Error("stale"),{code:"snapshot_stale"});}),{code:"snapshot_stale"});
+  assert.equal(sends,0);
+});
+
+test("action provider route denies absent consent UI and cancels a pending preview", async () => {
+  let sends=0;
+  const {instance}=broker({fetcher:async()=>{sends++;throw new Error("must not send");}});
+  await assert.rejects(instance.requestWithConsent(input(),context,undefined,async()=>{}),{code:"provider_unavailable"});
+  const controller=new AbortController();
+  let shown!:()=>void;
+  const displayed=new Promise<void>(resolve=>{shown=resolve;});
+  const pending=instance.requestWithConsent(input(),context,async()=>{shown();return new Promise<never>(()=>{});},async()=>{},controller.signal);
+  await displayed;controller.abort();
+  await assert.rejects(pending,{code:"cancelled"});
+  assert.equal(sends,0);
+});
+
+test("cancelling an action after provider send preserves unknown external outcome", async () => {
+  const controller=new AbortController();
+  let sent!:()=>void;
+  const started=new Promise<void>(resolve=>{sent=resolve;});
+  const {instance}=broker({fetcher:async (_url,init)=>{
+    sent();
+    return new Promise<Response>((_resolve,reject)=>init!.signal!.addEventListener("abort",()=>reject(new DOMException("aborted","AbortError")),{once:true}));
+  }});
+  const pending=instance.requestWithConsent(input(),context,async(owner,preview,send)=>send(owner.authorize(trustedClick(),preview)),async()=>{},controller.signal);
+  await started;controller.abort();
+  await assert.rejects(pending,{code:"external_state_unknown"});
+});
+
 async function prepared(instance: ProviderRequestBroker, value = input()) {
   return instance.prepare(value, context);
 }
@@ -121,7 +162,7 @@ test("default-deny reports provider_unavailable without resolving credentials or
     gestures: new FreshGestureAuthority(),
     fetcher: async () => { networkCalls += 1; return new Response("{}"); },
   });
-  assert.deepEqual(instance.status(), { available: false, provider_ids: [] });
+  assert.deepEqual(instance.status(), { available: false, provider_ids: [], providers: [] });
   await assert.rejects(instance.prepare(input(), context), error => error instanceof ProviderRequestError && error.code === "provider_unavailable");
   assert.equal(credentialLookups, 0);
   assert.equal(networkCalls, 0);

@@ -3,9 +3,29 @@ import { createGuest } from "../shared/guest.js";
 import { captureContext, readContextManifest } from "./src/context.js";
 import { proposeRewrite, suggestRewrite } from "./src/rewrite.js";
 import { changeSetObservations, changeSetStatus, inspectChangeSet, listChangeSets, readProposalContent } from "./src/receipts.js";
+import { previewSynonyms } from "./src/synonym-preview.js";
+import { previewQa } from "./src/assistance-preview.js";
+import { readProviderStatus } from "./src/provider-status.js";
+import { answerQa } from "./src/qa-answer.js";
+import { generateProvider } from "./src/provider-generation.js";
+import { handlers as continuationHandlers } from "./src/continuation-contribution.js";
+import { handlers as adapterHandlers } from "./src/adapter-contribution.js";
+import { summaryStateHandlers } from "./src/summary-state-contribution.js";
+import { handlers as dialogueZukanHandlers } from "./src/dialogue-zukan-contribution.js";
+import { proposeWorkspaceSettings, readWorkspaceSettings } from "./src/settings.js";
 import { proposeChangeSet, validateChangeSet } from "./src/changeset-workflow.js";
 
 export const guest = createGuest("proprium.paired-writing", {
+  ...continuationHandlers(generateProvider),
+  ...adapterHandlers(generateProvider),
+  ...summaryStateHandlers(generateProvider),
+  ...dialogueZukanHandlers(generateProvider),
+  "paired.qa.answer": (input, context, host) => answerQa(input, host, context as ActionRequest),
+  "paired.provider.status": (input, _context, host) => readProviderStatus(input, host),
+  "paired.qa.preview": (input, context, host) => previewQa(input, host, context as ActionRequest),
+  "paired.synonyms.preview": (input, context, host) => previewSynonyms(input, host, context as ActionRequest),
+  "paired.workspace-settings.propose": (input, context, host) => proposeWorkspaceSettings(input, host, context as ActionRequest),
+  "paired.workspace-settings.read": (input, context, host) => readWorkspaceSettings(input, host, context as ActionRequest),
   "paired.context.capture": (input, context, host) => captureContext(input, host, context as ActionRequest),
   "paired.context.manifest": (input, context, host) => readContextManifest(input, host, context as ActionRequest),
   "paired.rewrite.suggest": (input, context, host) => suggestRewrite(input, host, context as ActionRequest),

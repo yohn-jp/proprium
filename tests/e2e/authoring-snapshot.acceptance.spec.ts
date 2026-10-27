@@ -93,3 +93,46 @@ test("Browser Git authoring snapshots page large works, preserve UTF-8 bytes, an
   expect(result.decodedMatches).toBe(true);
   expect(result.stale).toBe("snapshot_stale");
 });
+
+test("pinned action bytes remain exact while strict reads reject stale and uncached views", async ({ page }) => {
+  await page.goto("/browser-git-test.html");
+  await expect(page.locator("#ready")).toHaveText("ready");
+  const result = await page.evaluate(async () => {
+    const { git, reader, scope } = window.browserGitTest.openAuthoringSession(`pinned-${crypto.randomUUID()}`);
+    await git.init();
+    const bytes = new TextEncoder().encode("原稿\r\n|漢字《かんじ》\r\n");
+    await git.applyChanges([
+      { path: "cached/scene.md", content: bytes, expectedRevision: { oid: null } },
+      { path: "unlisted/scene.md", content: bytes, expectedRevision: { oid: null } },
+      { path: "large/scene.md", content: new Uint8Array(4 * 1024 * 1024 + 1).fill(65), expectedRevision: { oid: null } },
+    ]);
+    const errorCode = async (operation: () => Promise<unknown>) => {
+      try { await operation(); return "none"; } catch (error) { return (error as { code?: string }).code ?? "unknown"; }
+    };
+    const lease = await reader.pin(scope);
+    await reader.list(lease, { prefix: "cached/" });
+    const before = await git.read("cached/scene.md");
+    await git.write("cached/scene.md", new TextEncoder().encode("変更済み\r\n"), before.revision);
+    const pinned = await reader.readPinned(lease, "cached/scene.md");
+    const originalMatches = pinned.bytes.length === bytes.length && pinned.bytes.every((byte, index) => byte === bytes[index]);
+    const strict = await errorCode(() => reader.read(lease, "cached/scene.md"));
+    const invalidated = await errorCode(() => reader.readPinned(lease, "cached/scene.md"));
+    const unlistedLease = await reader.pin(scope);
+    const unlisted = await git.read("unlisted/scene.md");
+    await git.write("unlisted/scene.md", new TextEncoder().encode("新しい本文"), unlisted.revision);
+    const uncached = await errorCode(() => reader.readPinned(unlistedLease, "unlisted/scene.md"));
+    const largeLease = await reader.pin(scope);
+    await reader.list(largeLease, { prefix: "large/" });
+    const large = await git.read("large/scene.md");
+    await git.write("large/scene.md", new Uint8Array(4 * 1024 * 1024 + 1).fill(66), large.revision);
+    const boundedFallback = await errorCode(() => reader.readPinned(largeLease, "large/scene.md", { length: 64 }));
+    const releasedLease = await reader.pin(scope);
+    await reader.list(releasedLease, { prefix: "cached/" });
+    await reader.release(releasedLease);
+    const released = await errorCode(() => reader.readPinned(releasedLease, "cached/scene.md"));
+    git.close();
+    return { originalMatches, strict, invalidated, uncached, boundedFallback, released };
+  });
+  expect(result).toEqual({ originalMatches: true, strict: "snapshot_stale", invalidated: "snapshot_stale",
+    uncached: "snapshot_stale", boundedFallback: "snapshot_stale", released: "snapshot_stale" });
+});

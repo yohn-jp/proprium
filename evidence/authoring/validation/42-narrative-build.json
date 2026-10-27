@@ -1,0 +1,25 @@
+{
+  "source_commit": "42c53475135a7449be803ef5707c01f1a4135f96",
+  "registry_sha256": "d715043440de1049e37c2fb4b54001be1d8be38777048e7ff6eafab3ba67042f",
+  "registry_path": "/workspace/proprium-build-output/42-narrative-registry/registry.json",
+  "public_key_path": "/workspace/proprium-build-output/42-narrative-public-key.txt",
+  "build_log": "/workspace/proprium-build-output/42-narrative-build.log",
+  "verify_log": "/workspace/proprium-build-output/42-narrative-verify.log",
+  "verification_mode": "all",
+  "plugins": [
+    {
+      "id": "proprium.narrative",
+      "version": "0.1.0",
+      "manifestPath": "proprium/narrative/0.1.0/manifest/fa26543aafe79f5b738ee74410bab1c2d127cfc1e9ee1c0f69611544ec390410.json",
+      "manifestSha256": "fa26543aafe79f5b738ee74410bab1c2d127cfc1e9ee1c0f69611544ec390410",
+      "manifestSignature": "u98FCt4mIVa0kWc/C9w5kmXRfWib75jbTnGNu9Z2pgm4SV4keh2OnH45ZfTXzCRep34dpB+isTUskIRI5sYKCQ==",
+      "publisherKey": "qE+Y26Rp2bhhv4Bippu0OkdTiUPQsTVqS1vkR0VQQT8="
+    }
+  ],
+  "public_key_base64": "AB42SfWEYL8495V8yUmxs3RN05IwM+7NkEwdeLtwSRQ=",
+  "scope_note": "Local signed fixture only. This subset build does not certify seven/eight plugins at one release SHA or production distribution.",
+  "build_artifact": "evidence/authoring/validation/42-narrative-build.txt",
+  "build_sha256": "5fdad4eb03586e27c2329f05c826ff76bae89d19b6c0a60430fa857c19806a73",
+  "verify_artifact": "evidence/authoring/validation/42-narrative-verify.txt",
+  "verify_sha256": "b67712c28a820bdbb554693c9b7762dd4eb7bc8307b4edb644a057621e441917"
+}

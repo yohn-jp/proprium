@@ -107,6 +107,7 @@ export interface ResumeRequest {
   cursorSentenceIndex: number | null;
   scrollTop: number;
   pageIndex?: number | null;
+  selection?: { anchor: number; head: number };
 }
 
 export interface ScratchAttachmentDraft {
@@ -197,10 +198,10 @@ export function SceneEditor({
   readOnly?: boolean;
   onTextChange: (next: string) => void;
   onRetryDraft: () => void;
-  onCursorPositionChange: (sceneId: string, cursorSentenceIndex: number | null, scrollTop: number) => void;
+  onCursorPositionChange: (sceneId: string, cursorSentenceIndex: number | null, scrollTop: number, selection?: { anchor: number; head: number }) => void;
   onReadingPageChange: (sceneId: string, pageIndex: number) => void;
   resumeRequest: ResumeRequest | null;
-  onResumeRequestApplied: (requestId: number) => void;
+  onResumeRequestApplied: (requestId: number, restored?: boolean) => void;
   durability: Durability;
   draftStored: boolean;
   journalError: string;
@@ -302,12 +303,13 @@ export function SceneEditor({
       return;
     }
     const frame = requestAnimationFrame(() => {
-      editorRef.current?.restorePosition({
+      const restored = editorRef.current?.restorePosition({
         cursorSentenceIndex: resumeRequest.cursorSentenceIndex,
         scrollTop: resumeRequest.scrollTop,
+        selection: resumeRequest.selection,
       });
-      editorRef.current?.focus();
-      onResumeRequestApplied(resumeRequest.id);
+      if (restored) editorRef.current?.focus();
+      onResumeRequestApplied(resumeRequest.id, restored === true);
     });
     return () => cancelAnimationFrame(frame);
   }, [repositoryKey, scene.id, resumeRequest, onResumeRequestApplied]);
@@ -450,7 +452,7 @@ export function SceneEditor({
               externalTextRevision={textRevision}
               readOnly={editorReadOnly}
               onChange={onEditorTextChange}
-              onCursorPositionChange={(cursorSentenceIndex, scrollTop) => onCursorPositionChange(scene.id, cursorSentenceIndex, scrollTop)}
+              onCursorPositionChange={(cursorSentenceIndex, scrollTop, selection) => onCursorPositionChange(scene.id, cursorSentenceIndex, scrollTop, selection)}
               onSelectionLengthChange={setSelectionLength}
               resolveTerms={reading ? undefined : resolveTerms}
               onTermNavigate={onTermNavigate}

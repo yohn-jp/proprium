@@ -1,0 +1,16 @@
+{
+  "source_revision": "a6526697a39a50e0f896bed83f19a1f680613ec5",
+  "gateway": {
+    "status": "PASS",
+    "url": "https://github.com/yohn-jp/proprium/actions/runs/40479932986"
+  },
+  "browser": {
+    "status": "FAIL",
+    "url": "https://github.com/yohn-jp/proprium/actions/runs/40479932994",
+    "failed_steps": [
+      "Exercise all eight signed installs and persisted activation",
+      "Exercise official typed actions through the live Gateway"
+    ],
+    "note": "Other completed steps passed, including actual eight-component build, base browser acceptance, signed official Host, Knowledge/Research, Publishing, static offline and adapter scenarios. Failed steps remain failures; no overall CI PASS."
+  }
+}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactElement } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from "react";
 import { BrowserLocalGit, BrowserLocalGitError } from "../git/index.js";
 import type { FileRevisionExpectation, WorkspaceChange, WorkspaceIdentity, GitHubWorkspaceIdentity } from "../git/protocol.js";
 import { isGitHubWorkspaceIdentity, validateGitPath } from "../git/protocol.js";
@@ -104,6 +104,10 @@ export function LiveMcpPanel({
   const mountedRef = useRef(true);
   const applyingProposalRef = useRef(false);
   const onPendingProposalsChangeRef = useRef(onPendingProposalsChange);
+  // The SSE connection outlives renders and may connect before authoring is ready.
+  // Dispatch each request through the current Host authority, not the first render.
+  const executePluginRef = useRef(onExecutePlugin);
+  useLayoutEffect(() => { executePluginRef.current = onExecutePlugin; }, [onExecutePlugin]);
 
   useEffect(() => {
     onPendingProposalsChangeRef.current = onPendingProposalsChange;
@@ -223,7 +227,7 @@ export function LiveMcpPanel({
           result = await targetGit.log(limit as number);
         } else if (request.tool === "plugin_call") {
           if (!active) throw new Error("repository_not_active: open this repository in the Browser Host to invoke its plugins.");
-          result = await onExecutePlugin(request.arguments, controller.signal);
+          result = await executePluginRef.current(request.arguments, controller.signal);
         } else {
           result = await submitProposal(request.arguments, targetGit, target);
         }

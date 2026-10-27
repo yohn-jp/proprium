@@ -1,0 +1,10 @@
+[WebServer] (node:130815) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:130835) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [desktop-chromium] › tests/browser/authoring-official.acceptance.spec.ts:280:5 › local authoring edits, reviews, commits and recovers a large work (1.9m)
+
+  1 passed (2.0m)

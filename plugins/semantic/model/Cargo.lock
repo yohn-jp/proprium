@@ -886,6 +886,7 @@ dependencies = [
  "sha2",
  "tokenizers",
  "tract-onnx",
+ "unicode-segmentation",
  "wit-bindgen-rt",
 ]
 

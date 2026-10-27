@@ -1,10 +1,11 @@
-import type { ActionRequest, ActionResult, Scope, Snapshot, SurfaceDeclaration, ArtifactMetadata,
+import type { ActionRequest, ActionResult, Scope, Snapshot, SurfaceDeclaration, ArtifactMetadata, JsonSchema,
   CacheKey, ChangeSet as WireChangeSet, ChangeUnit as WireChangeUnit } from "./types.js";
 import { AuthoringSnapshotReader, type SnapshotLease, type SnapshotPort, type SnapshotPage, type SnapshotFile,
   type SnapshotRange } from "./snapshots.js";
 import { BrowserGitSnapshotPort } from "../git/authoring-snapshot-port.js";
 import { BrowserLocalGit } from "../git/index.js";
 import type { RemoteConfirmedFiles, WorkspaceIdentity } from "../git/protocol.js";
+import { validateGitPath } from "../git/protocol.js";
 import { BrowserPluginManager, type InstalledPlugin, type ResolvedAssetGroup } from "../plugins/manager.js";
 import { AuthoringActionDispatcher, type ActionIdempotencyStore, type IdempotencyKey, type IdempotencyClaim,
   type HostOperationContext, type InvocationContext, type TrustedActionPrincipal, type StageLeaseInvocation } from "./actions.js";
@@ -19,6 +20,11 @@ import { ChangeWriter, type ChangeSet as WriterChangeSet, type WriterCaller, typ
 import { IndexedDbWriterJournalStore } from "./store.js";
 import { BrowserGitWriterWorkspace } from "./writer-browser.js";
 import { ChangeStageStore, type ChangeStageContext, type ChangeStageRead } from "./stages.js";
+import { ProviderRequestBroker, type ProviderBrokerOptions, type ProviderConsentRequest, type ProviderRequestInput } from "./providers.js";
+import { ProviderUsageHistory } from "./provider-usage.js";
+import { AuthoringTaskRegistry, SEMANTIC_PROGRESS_KEY } from "./tasks.js";
+import { assertValue } from "./schema.js";
+import { sourceTextDecoder } from "./source-text.js";
 
 export interface AuthoringWorkspaceSelection {
   readonly git: BrowserLocalGit;
@@ -31,6 +37,8 @@ export interface AuthoringEditorState {
   readonly dirty: boolean;
   readonly draft_generation: string | null;
   readonly composing: boolean;
+  readonly resume_position?: { readonly scene_id: string; readonly manuscript_path: string;
+    readonly manuscript_revision: string; readonly sentence_index: number | null; readonly scroll_top: number } | null;
 }
 export type AuthoringPrincipal = TrustedActionPrincipal;
 export interface AuthoringGesturePort {
@@ -66,10 +74,11 @@ export interface BrowserAuthoringAuthority {
   issue(principal: AuthoringPrincipal, plugin_id: string, action_id: string): Promise<HostInvocationContext>;
   issueChild(parent: InvocationContext, caller_plugin_id: string, target_plugin_id: string, action_id: string,
     staging_snapshot?: string): Promise<HostInvocationContext>;
-  assertCurrent(context: InvocationContext): Promise<void>;
+  assertCurrent(context: InvocationContext, pinnedRead?: boolean): Promise<void>;
   isSnapshotCurrent(context: InvocationContext): boolean;
 }
 export interface AuthoringServiceBackends {
+  readonly providerRequest?: (payload: Record<string, unknown>, context: AuthoringHostOperationContext) => Promise<unknown>;
   /** Host capability routes use these same authorities as UI action calls. */
   readonly identityRead?: (context: AuthoringSnapshotContext, paths: readonly string[]) => Promise<unknown>;
   readonly repositorySnapshotRead?: (payload: Record<string, unknown>, context: AuthoringHostOperationContext) =>
@@ -128,6 +137,9 @@ export interface AuthoringHostArtifact {
 }
 
 export interface CreateBrowserAuthoringServiceOptions {
+  /** Optional Host-only configuration; never supplied by a plugin or Git settings. */
+  readonly provider?: Omit<ProviderBrokerOptions, "gestures">;
+  readonly onProviderConsent?: ProviderConsentRequest;
   readonly manager: BrowserPluginManager;
   readonly git: BrowserLocalGit;
   readonly workspace: WorkspaceIdentity;
@@ -167,6 +179,7 @@ export interface AuthoringHostPort {
 }
 export type AuthoringHostOperationContext = HostOperationContext;
 export interface BrowserAuthoringCapabilityPorts {
+  providerRequest(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
   identityRead(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
   repositorySnapshotRead(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
   fileList(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
@@ -213,16 +226,48 @@ export class BrowserAuthoringService {
   private readonly invocationStageLeases = new Map<string, Set<string>>();
   private readonly controllers = new Map<string, AbortController>();
   private readonly abortListeners = new Map<string, { signal: AbortSignal; listener: () => void }>();
+  private readonly uiProposalRetryKeys = new Map<string, string>();
+  private readonly verifiedUiContinuations = new Set<string>();
+  private actionSnapshotQueue: Promise<unknown> = Promise.resolve();
   private disposed = false;
+  private retainedActionSnapshot: AuthoringSnapshotContext | null = null;
+  private readonly tasks = new AuthoringTaskRegistry();
 
   constructor(private readonly options: BrowserAuthoringServiceOptions) {
     this.nextRequestId = options.createRequestId ?? ID;
     this.dispatcher = new AuthoringActionDispatcher({
       installed: pluginId => options.manager.verifiedActionSet(pluginId),
       authority: this.authority,
-      runtime: { invoke: invoke => options.manager.authoringRuntime(invoke.request.plugin_id).invoke(invoke) },
+      runtime: { invoke: invoke => {
+        if(invoke.request.plugin_id==="proprium.narrative"&&[
+          "proprium.narrative.reading-marks.create","proprium.narrative.reading-marks.create-ui","proprium.narrative.reading-marks.delete",
+        ].includes(invoke.request.action_id)){
+          const editor=options.editorState();
+          if(editor.dirty||editor.composing)throw Object.assign(new Error("Save locally and finish composition before changing reading marks"),{code:"dirty_draft"});
+        }
+        if (invoke.request.plugin_id === "proprium.semantic") {
+          const request=invoke.request, epoch=invoke.activation_epoch;
+          if(request.action_id==="proprium.semantic.task.status")return Promise.resolve({request_id:request.request_id,scope:request.scope,snapshot:request.snapshot,ok:true as const,
+            value:{snapshot:request.snapshot,activeTasks:this.tasks.status(request.scope,request.snapshot,epoch)},warnings:[]});
+          if(request.action_id==="proprium.semantic.task.cancel")return Promise.resolve({request_id:request.request_id,scope:request.scope,snapshot:request.snapshot,ok:true as const,
+            value:{snapshot:request.snapshot,taskId:request.input.taskId,cancelled:this.tasks.cancel(request.scope,epoch,String(request.input.taskId))},warnings:[]});
+          if(request.action_id==="proprium.semantic.index.rebuild"){
+            this.tasks.begin(request.request_id,epoch,request.scope,request.snapshot,String(request.input.taskId),()=>this.controllers.get(request.request_id)?.abort());
+            return options.manager.authoringRuntime(request.plugin_id).invoke(invoke).finally(()=>this.tasks.finish(request.request_id));
+          }
+        }
+        if (invoke.request.plugin_id === "proprium.narrative" && invoke.request.action_id === "proprium.narrative.resume.mark.propose") {
+          const editor = options.editorState(), position = editor.resume_position, input = invoke.request.input;
+          if (editor.dirty || editor.composing) throw Object.assign(new Error("Save locally and finish composition before capturing a portable position"), { code: "dirty_draft" });
+          if (invoke.caller !== "ui" || !position || editor.path !== position.manuscript_path) throw Object.assign(new Error("Host has no current saved editor position"), { code: "capability_denied" });
+          if (input.scene_id !== position.scene_id || input.expected_manuscript_revision !== position.manuscript_revision) throw Object.assign(new Error("Portable position belongs to another scene or body revision"), { code: "snapshot_stale" });
+          if (input.sentence_index !== position.sentence_index || input.scroll_top !== position.scroll_top) throw invalid("Portable position differs from the Host-captured cursor");
+        }
+        return options.manager.authoringRuntime(invoke.request.plugin_id).invoke(invoke);
+      } },
       capabilities: this.capabilityPorts(),
       idempotency: options.idempotency,
+      hostControlAction: (pluginId,actionId) => pluginId==="proprium.semantic" && ["proprium.semantic.task.status","proprium.semantic.task.cancel"].includes(actionId),
     });
   }
 
@@ -244,18 +289,69 @@ export class BrowserAuthoringService {
   }
 
   /** Captures the browser's real trusted event before any asynchronous work. */
-  async invokeUi(event: Event, pluginId: string, actionId: string, input: Record<string, unknown>): Promise<ActionResult> {
+  /** Host settings guard; this identity is never chosen by a guest. */
+  localPreferenceScope(): string {
+    const selected=this.options.selectWorkspace();
+    if(this.disposed||!selected)throw staleScope();
+    return canonicalJson({identity:selected.identity,generation:selected.generation,actor:this.options.actorId?.()??"local"});
+  }
+
+  async readLocalPreference(expectedScope:string,pluginId:string,key:string,schemaVersion:number):Promise<{found:boolean;value?:unknown}>{
+    if(this.localPreferenceScope()!==expectedScope)throw staleScope();
+    const value=await this.requireBackend("plugin.preferences.read",this.options.backends.preferenceRead)(pluginId,
+      {key,schema_version:schemaVersion,user_partition:this.options.actorId?.()??"local"});
+    if(this.localPreferenceScope()!==expectedScope)throw staleScope();
+    return value as {found:boolean;value?:unknown};
+  }
+
+  /** Explicit Host UI route. No guest or MCP action can call this method. */
+  async writeLocalPreference(event:Event,expectedScope:string,pluginId:string,key:string,schemaVersion:number,value:unknown):Promise<void>{
+    if(this.localPreferenceScope()!==expectedScope)throw staleScope();
+    const gesture=this.options.gestures.issue(event);
+    const payload={key,schema_version:schemaVersion,value:structuredClone(value),user_partition:this.options.actorId?.()??"local"};
+    await this.requireBackend("Host preference controls",this.options.backends.preferenceWrite)(pluginId,payload,gesture);
+    if(this.localPreferenceScope()!==expectedScope)throw staleScope();
+  }
+
+  async invokeUi(event: Event, pluginId: string, actionId: string, input: Record<string, unknown>, followNavigation = false,
+    validateNavigation?: (result: ActionResult) => void): Promise<ActionResult> {
     const principal = this.makePrincipal("ui", event);
+    if (followNavigation) {
+      if (!principal.user_gesture_token || !this.options.gestures.consume(principal.user_gesture_token as object)) throw deniedGesture();
+      this.verifiedUiContinuations.add(principal.request_id);
+    }
     try {
-      return await this.dispatcher.invoke({ plugin_id: pluginId, action_id: actionId, input,
-        ...(typeof input.idempotency_key === "string" ? { idempotency_key: input.idempotency_key } : {}) }, principal);
-    } finally { await this.releaseRequest(principal.request_id); this.preferenceGestures.delete(principal.request_id); }
+      let idempotencyKey = typeof input.idempotency_key === "string" ? input.idempotency_key : undefined;
+      let retryIdentity: string | undefined;
+      const descriptor = (await this.options.manager.verifiedActionSet(pluginId))?.descriptors.find(item => item.action_id === actionId);
+      if (!idempotencyKey && descriptor) {
+        retryIdentity = canonicalJson({ pluginId, actionId, input });
+        idempotencyKey = this.uiProposalRetryKeys.get(retryIdentity) ?? this.nextRequestId();
+        this.uiProposalRetryKeys.set(retryIdentity, idempotencyKey);
+      }
+      const result = await this.dispatcher.invoke({ plugin_id: pluginId, action_id: actionId, input,
+        ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}) }, principal);
+      if (result.ok && retryIdentity) this.uiProposalRetryKeys.delete(retryIdentity);
+      if (followNavigation && result.ok && isRecord(result.value) && isRecord(result.value.navigation)) {
+        validateNavigation?.(result);
+        const navigation = result.value.navigation;
+        const expected = navigation.expected_context;
+        if (!isRecord(expected) || !sameScope(expected.scope as unknown as Scope, result.scope) ||
+            !sameJson(expected.snapshot, result.snapshot) || !isRecord(navigation.target) ||
+            typeof navigation.target.path !== "string" || !["open", "reveal"].includes(String(navigation.intent))) throw invalid("Navigation intent has no matching action snapshot");
+        await this.navigateHost(navigation.target as unknown as AuthoringNavigationTarget, navigation.intent as "open" | "reveal", {
+          schema_version: 1, request_id: result.request_id, plugin_id: pluginId, action_id: actionId,
+          scope: result.scope, snapshot: result.snapshot, input, deadline_ms: 30_000,
+        });
+      }
+      return result;
+    } finally { await this.releaseRequest(principal.request_id); this.preferenceGestures.delete(principal.request_id); this.verifiedUiContinuations.delete(principal.request_id); }
   }
 
   /** Runs the normal UI action through the same dispatcher as MCP and admits a host-owned result artifact. */
   async invokeUiWithArtifacts(event: Event, pluginId: string, actionId: string,
-    input: Record<string, unknown>): Promise<UiActionWithArtifact> {
-    const action_result = await this.invokeUi(event, pluginId, actionId, input);
+    input: Record<string, unknown>, validateNavigation?: (result: ActionResult) => void): Promise<UiActionWithArtifact> {
+    const action_result = await this.invokeUi(event, pluginId, actionId, input, true, validateNavigation);
     if (!action_result.ok || !isRecord(action_result.value) || typeof action_result.value.artifact_id !== "string" ||
         !this.options.artifactHandle) return { action_result };
     try {
@@ -285,9 +381,17 @@ export class BrowserAuthoringService {
 
   /** Gateway code passes an authenticated Host principal created at the Access boundary. */
   async invokeMcp(pluginId: string, actionId: string, input: Record<string, unknown>, actorId: string,
-    requestId = this.nextRequestId(), idempotencyKey?: string): Promise<ActionResult> {
+    requestId = this.nextRequestId(), idempotencyKey?: string, signal?: AbortSignal): Promise<ActionResult> {
     const principal: AuthoringPrincipal = { caller: "mcp", actor_id: actorId, request_id: requestId,
       selected_scope: this.scope(this.requireSelection()) };
+    if (signal) {
+      const controller = new AbortController();
+      this.controllers.set(requestId, controller);
+      const listener = () => controller.abort(signal.reason);
+      this.abortListeners.set(requestId, { signal, listener });
+      signal.addEventListener("abort", listener, { once: true });
+      if (signal.aborted) listener();
+    }
     try { return await this.dispatcher.invoke({ plugin_id: pluginId, action_id: actionId, input,
       ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}) }, principal); }
     finally { await this.releaseRequest(principal.request_id); }
@@ -309,6 +413,10 @@ export class BrowserAuthoringService {
 
   async inspectProposal(proposalId: string, cursor?: string, limit = 20, includeSource = false): Promise<ProposalInspection> {
     return this.requireWriter().inspect(this.scope(this.requireSelection()), proposalId, cursor, limit, includeSource);
+  }
+
+  async readProposalContent(proposalId: string, ref: string, offset = 0, length = 65_536) {
+    return this.requireWriter().read_content(this.scope(this.requireSelection()), proposalId, ref, offset, length);
   }
 
   async applyProposal(event: Event, proposalId: string, unitIds: readonly string[]): Promise<WriterProposalRecord> {
@@ -343,12 +451,14 @@ export class BrowserAuthoringService {
 
   /** Release ephemeral reader leases and abort outstanding UI reads. The shared manager is Host-owned. */
   async dispose(): Promise<void> {
+    this.tasks.dispose();
     if (this.disposed) return;
     this.disposed = true;
     for (const controller of this.controllers.values()) controller.abort();
     for (const listener of this.abortListeners.values()) listener.signal.removeEventListener("abort", listener.listener);
     this.abortListeners.clear();
     this.controllers.clear();
+    await this.actionSnapshotQueue;
     const contexts = [...this.leases.values()];
     this.leases.clear(); this.foreignLeases.clear(); this.requestLeases.clear();
     await Promise.allSettled(contexts.map(context => context.reader.release(context.lease)));
@@ -396,8 +506,12 @@ export class BrowserAuthoringService {
     pluginId: string, gesture?: object, operationContext?: AuthoringHostOperationContext): Promise<T> {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw invalid("Host payload must be an object");
     const context = this.findLease(request.scope, request.snapshot);
-    await this.assertCurrent(context);
+    if (operation === "workspace.file.read" && context.reader.supportsPinnedReads) this.assertSelection(context);
+    else await this.assertCurrent(context);
     switch (operation) {
+      case "provider.request":
+        if (!operationContext || !this.options.backends.providerRequest) throw missing(operation);
+        return await this.options.backends.providerRequest(payload, operationContext) as T;
       case "workspace.identity.read": {
         if (!this.options.backends.identityRead) throw missing(operation);
         return await this.options.backends.identityRead(context, Array.isArray(payload.paths) ? payload.paths as string[] : []) as T;
@@ -429,7 +543,7 @@ export class BrowserAuthoringService {
         const boundScope = isScope(payload.scope) ? payload.scope : request.scope;
         const pinned = await this.resolveReadContext(boundScope, request.snapshot, payload.snapshot, operationContext);
         const path = requiredString(payload.path, "path");
-        const range = await pinned.reader.read(pinned.lease, path, { offset: optionalNumber(payload.offset) ?? 0,
+        const range = await pinned.reader.readPinned(pinned.lease, path, { offset: optionalNumber(payload.offset) ?? 0,
           length: Math.min(optionalNumber(payload.length) ?? 65_536, 65_536) });
         return { revision: range.revision, total_bytes: range.total_bytes, offset: range.offset,
           bytes: [...range.bytes], next_offset: range.next_offset } as T;
@@ -448,7 +562,12 @@ export class BrowserAuthoringService {
           return value as T;
         }
       case "workspace.derived.cache.get": return await this.requireBackend(operation, this.options.backends.cacheGet)(pluginId, payload) as T;
-      case "workspace.derived.cache.put": return await this.requireBackend(operation, this.options.backends.cachePut)(pluginId, payload) as T;
+      case "workspace.derived.cache.put":
+        if(pluginId==="proprium.semantic"&&isRecord(payload.key)&&payload.key.key===SEMANTIC_PROGRESS_KEY){
+          if(!operationContext)throw invalid("Task progress needs an active Host invocation");
+          return this.tasks.update(operationContext.request.request_id,operationContext.activation_epoch,operationContext.request.scope,payload.value) as T;
+        }
+        return await this.requireBackend(operation, this.options.backends.cachePut)(pluginId, payload) as T;
       case "workspace.derived.cache.evict": return await this.requireBackend(operation, this.options.backends.cacheEvict)(pluginId, payload) as T;
       case "plugin.preferences.read": return await this.requireBackend(operation, this.options.backends.preferenceRead)(pluginId, payload) as T;
       case "artifact.create": return await this.requireBackend(operation, this.options.backends.artifactCreate)(pluginId, request, payload) as T;
@@ -480,6 +599,7 @@ export class BrowserAuthoringService {
     const route = (operation: string, payload: Record<string, unknown>, context: AuthoringHostOperationContext) =>
       this.hostRequest(operation, payload, context.request, context.plugin_id, this.preferenceGestures.get(context.request.request_id), context);
     return {
+      providerRequest: routed("provider.request", (p, c) => route("provider.request", p, c)),
       identityRead: routed("workspace.identity.read", (p, c) => route("workspace.identity.read", p, c)),
       repositorySnapshotRead: routed("workspace.repository.snapshot.read", (p, c) => route("workspace.repository.snapshot.read", p, c)),
       fileList: routed("workspace.file.list", (p, c) => route("workspace.file.list", p, c)),
@@ -551,9 +671,10 @@ export class BrowserAuthoringService {
     await this.options.backends.navigate(target, intent, { scope: request.scope, snapshot: request.snapshot, editor });
   }
 
-  private async assertInvocationCurrent(context: InvocationContext): Promise<void> {
+  private async assertInvocationCurrent(context: InvocationContext, pinnedRead = false): Promise<void> {
     const saved = this.findLease(context.scope, context.snapshot);
-    await this.assertCurrent(saved);
+    if (pinnedRead && saved.reader.supportsPinnedReads) this.assertSelection(saved);
+    else await this.assertCurrent(saved);
   }
 
   private async resolveReadContext(scope: Scope, base: Snapshot, selector: unknown,
@@ -598,7 +719,7 @@ export class BrowserAuthoringService {
   private async readUtf16Span(context: AuthoringSnapshotContext, path: string, start: number, end: number): Promise<string> {
     const stat = await this.snapshotStat(context, path);
     if (!stat) throw Object.assign(new Error("Evidence file is missing"), { code: "file_not_found" });
-    const decoder = new TextDecoder("utf-8", { fatal: true });
+    const decoder = sourceTextDecoder();
     let text = "";
     for (let offset = 0; offset < stat.byte_length;) {
       const length = Math.min(65_536, stat.byte_length - offset);
@@ -625,13 +746,16 @@ export class BrowserAuthoringService {
     this.leases.set(snapshotKey(scope, lease.snapshot), context);
     return context;
   }
-  private async assertCurrent(context: AuthoringSnapshotContext): Promise<void> {
+  private assertSelection(context: AuthoringSnapshotContext): void {
     const current = this.requireSelection();
     if (!sameScope(context.scope, this.scope(current)) && !this.isForeignLease(context)) {
       throw Object.assign(new Error("Workspace selection changed"), { code: "snapshot_stale" });
     }
+  }
+  private async assertCurrent(context: AuthoringSnapshotContext): Promise<void> {
+    this.assertSelection(context);
     const saved = this.findLease(context.scope, context.snapshot);
-    await saved.reader.list(saved.lease, { prefix: "", limit: 1 });
+    await saved.reader.assertCurrent(saved.lease);
   }
   private findLease(scope: Scope, snapshot: Snapshot): AuthoringSnapshotContext {
     const direct = this.leases.get(snapshotKey(scope, snapshot));
@@ -691,11 +815,32 @@ export class BrowserAuthoringService {
       if (!principal.selected_scope || !sameScope(principal.selected_scope, scope)) throw staleScope();
       const installed = await this.options.manager.verifiedActionSet(plugin_id);
       if (!installed?.activation_epoch) throw Object.assign(new Error("Plugin is unavailable or disabled"), { code: "plugin_unavailable" });
-      const pinned = await this.pin(selected);
+      const obtain = async () => {
+        this.requireSelection();
+        let current = this.retainedActionSnapshot;
+        if (current) {
+          try { await this.assertCurrent(current); }
+          catch (error) {
+            if ((error as { code?: string }).code !== "snapshot_stale") throw error;
+            this.retainedActionSnapshot = null;
+            if (![...this.requestLeases.values()].includes(current)) await this.release(current);
+            current = null;
+          }
+        }
+        if (!current) {
+          current = await this.pin(selected);
+          if (this.disposed) { await this.release(current); throw staleScope(); }
+          this.retainedActionSnapshot = current;
+        }
+        return current;
+      };
+      const pending = this.actionSnapshotQueue.then(obtain, obtain);
+      this.actionSnapshotQueue = pending.then(() => undefined, () => undefined);
+      const pinned = await pending;
       this.requestLeases.set(principal.request_id, pinned);
       const controller = this.controllers.get(principal.request_id) ?? new AbortController();
       this.controllers.set(principal.request_id, controller);
-      const user_gesture_verified = !!principal.user_gesture_token && this.options.gestures.consume(principal.user_gesture_token as object);
+      const user_gesture_verified = this.verifiedUiContinuations.has(principal.request_id) || (!!principal.user_gesture_token && this.options.gestures.consume(principal.user_gesture_token as object));
       return Object.freeze({ ...pinned, caller: principal.caller, actor_id: principal.actor_id,
         request_id: principal.request_id, invocation_id: principal.request_id, deadline_at: Date.now() + 30_000, user_gesture_verified,
         activation_epoch: installed.activation_epoch, grants: installed.grants,
@@ -713,7 +858,7 @@ export class BrowserAuthoringService {
         grants: installed.grants, host_capabilities: installed.host_capabilities, signal: parent.signal,
         call_stack: Object.freeze([...parent.call_stack, `${target_plugin_id}:${action_id}`]) });
     },
-    assertCurrent: context => this.assertInvocationCurrent(context),
+    assertCurrent: (context, pinnedRead) => this.assertInvocationCurrent(context, pinnedRead),
     isSnapshotCurrent: context => this.isSnapshotCurrent(context),
   };
 
@@ -725,7 +870,7 @@ export class BrowserAuthoringService {
     if (listener) listener.signal.removeEventListener("abort", listener.listener);
     this.abortListeners.delete(requestId);
     this.requestLeases.delete(requestId);
-    if (context) await this.release(context);
+    if (context && context !== this.retainedActionSnapshot && ![...this.requestLeases.values()].includes(context)) await this.release(context);
   }
   private requireBackend<K extends keyof AuthoringServiceBackends>(operation: string,
     handler: AuthoringServiceBackends[K]): (...args: unknown[]) => Promise<unknown> {
@@ -754,6 +899,7 @@ export function createBrowserAuthoringService(options: CreateBrowserAuthoringSer
       typeof options.onMutationBusy !== "function") throw invalid("Browser authoring Host dependencies are incomplete");
 
   const brokerStore = new IndexedDbBrokerStore();
+  const providerUsage = new ProviderUsageHistory(brokerStore);
   const hostIdentity = new IndexedDbHostIdentityStore();
   const freshGestures = new FreshGestureAuthority();
   const claimedEvents = new WeakSet<Event>();
@@ -765,6 +911,7 @@ export function createBrowserAuthoringService(options: CreateBrowserAuthoringSer
     issue: event => freshGestures.issue(event),
     consume: token => freshGestures.consume(token),
   };
+  const providerBroker = new ProviderRequestBroker({ ...options.provider, gestures });
   const workspaceSelection = (): AuthoringWorkspaceSelection => ({ git: options.git, identity: options.workspace, generation: options.generation });
   const scopeFor = (selection = workspaceSelection()): Scope => ({
     workspace_id: selection.identity.localWorkspaceId,
@@ -773,7 +920,12 @@ export function createBrowserAuthoringService(options: CreateBrowserAuthoringSer
     generation: selection.generation,
   });
   let remoteHead: string | null = null;
-  const readRemote = options.getRemoteConfirmed ?? ((paths: readonly string[]) => options.git.readConfirmedRemoteFiles(paths));
+  const readRemote = async (paths: readonly string[]): Promise<RemoteConfirmedFiles> => {
+    for (const path of paths) validateGitPath(path);
+    if (options.workspace.provider === "local") return { remote_commit: null,
+      files: paths.map(path => ({ path, revision: null, remote_confirmed: false })) };
+    return options.getRemoteConfirmed ? options.getRemoteConfirmed(paths) : options.git.readConfirmedRemoteFiles(paths);
+  };
   const writerWorkspace = new BrowserGitWriterWorkspace(options.git, options.workspace, {
     selected_scope: () => scopeFor(),
     remote_commit: () => remoteHead,
@@ -792,8 +944,29 @@ export function createBrowserAuthoringService(options: CreateBrowserAuthoringSer
 
   const artifacts = new ArtifactBroker(brokerStore);
   const cache = new DerivedCacheBroker(brokerStore);
+  const preferenceSchemas = new Map<string,JsonSchema>();
+  const admitPreferenceSchema = async (pluginId:string,key:string,version:number) => {
+    const installed=await options.manager.verifiedActionSet(pluginId);
+    if(!installed?.enabled||!installed.grants.includes("plugin.preferences"))throw Object.assign(new Error("Enable the plugin and grant local preferences first"),{code:"capability_denied"});
+    // This key reuses the signed, closed settings patch declaration. The Host
+    // interprets its schema; it does not execute plugin settings code.
+    if(pluginId==="proprium.paired-writing"&&key==="model-settings"&&version===1){
+      const descriptor=installed.descriptors.find(row=>row.action_id==="paired.workspace-settings.propose");
+      const properties=descriptor&&typeof descriptor.input_schema==="object" ? descriptor.input_schema.properties as Record<string,JsonSchema>|undefined : undefined;
+      if(properties?.patch)preferenceSchemas.set(`${pluginId}:${key}:${version}`,properties.patch);
+    }
+    if(pluginId==="proprium.semantic"&&key==="reranker.enabled"&&version===1){
+      const descriptor=installed.descriptors.find(row=>row.action_id==="proprium.semantic.settings.update");
+      if(descriptor)preferenceSchemas.set(`${pluginId}:${key}:${version}`,descriptor.input_schema);
+    }
+  };
   const preferences = new PluginPreferencesBroker(brokerStore, freshGestures,
-    (pluginId, key, schemaVersion, value) => options.validatePreference?.(pluginId, key, schemaVersion, value) ?? false);
+    (pluginId, key, schemaVersion, value) => {
+      if(options.validatePreference)return options.validatePreference(pluginId,key,schemaVersion,value);
+      const schema=preferenceSchemas.get(`${pluginId}:${key}:${schemaVersion}`);
+      if(!schema)return false;
+      try{assertValue(schema,value,"Local preference");return true;}catch{return false;}
+    });
   const basePort = {
     assert_snapshot: (scope: Scope, snapshot: WriterSnapshot) => writerWorkspace.assert_snapshot(scope, snapshot),
     assert_read_set: (scope: Scope, snapshot: WriterSnapshot, readSet: WriterChangeSet["read_set"]) => writerWorkspace.assert_read_set(scope, snapshot, readSet),
@@ -914,9 +1087,19 @@ export function createBrowserAuthoringService(options: CreateBrowserAuthoringSer
     cacheGet: async (pluginId, payload) => cache.get(pluginId, payload.key as CacheKey),
     cachePut: async (pluginId, payload) => cache.put(pluginId, payload.key as CacheKey, payload.value),
     cacheEvict: async (pluginId, payload) => cache.evict(pluginId, payload.key as CacheKey | undefined),
-    preferenceRead: async (pluginId, payload) => preferences.read(pluginId,
-      requiredString(payload.user_partition, "user_partition"), requiredString(payload.key, "key"),
-      requiredInteger(payload.schema_version, "schema_version")),
+    preferenceRead: async (pluginId, payload) => {
+      const key=requiredString(payload.key,"key"),version=requiredInteger(payload.schema_version,"schema_version");
+      await admitPreferenceSchema(pluginId,key,version);
+      return preferences.read(pluginId,requiredString(payload.user_partition,"user_partition"),key,version);
+    },
+    preferenceWrite: async (pluginId,payload,gesture) => {
+      const key=requiredString(payload.key,"key"),version=requiredInteger(payload.schema_version,"schema_version");
+      const actor=options.actorId?.()??"local";
+      if(actor!==payload.user_partition)throw staleScope();
+      await admitPreferenceSchema(pluginId,key,version);
+      if((options.actorId?.()??"local")!==actor)throw staleScope();
+      return preferences.write(pluginId,actor,key,version,payload.value,gesture);
+    },
     artifactCreate: async (pluginId, request, payload) => artifacts.create(pluginId, {
       media_type: requiredString(payload.media_type, "media_type"), filename: requiredString(payload.filename, "filename"),
       scope: request.scope, snapshot: request.snapshot,
@@ -943,7 +1126,22 @@ export function createBrowserAuthoringService(options: CreateBrowserAuthoringSer
         default: throw missing(operation);
       }
     },
-    capabilitiesQuery: options.queryCapabilities,
+    capabilitiesQuery: async (payload,context) => {
+      if(payload.capability_id==="provider.request")return { ...providerBroker.status(), ...(!providerBroker.status().available ? { reason: "No Host provider is configured" } : {}) };
+      if(payload.capability_id==="provider.usage.v1")return providerUsage.read(context.plugin_id,context.actor_id,context.request.scope);
+      return options.queryCapabilities ? options.queryCapabilities(payload,context) : {available:false,reason:"Optional Host capability is not configured"};
+    },
+    providerRequest: async (payload, context) => {
+      const input=payload as unknown as ProviderRequestInput;
+      const identity={plugin_id:context.plugin_id,action_id:context.descriptor.action_id,scope:context.request.scope,snapshot:context.request.snapshot};
+      const previous=await providerBroker.replay(input,identity);
+      if(previous)return previous;
+      const receipt=await providerUsage.begin(context.plugin_id,context.actor_id,context.request.scope,input);
+      try {
+        const output=await providerBroker.requestWithConsent(input,identity,options.onProviderConsent,()=>service.authority.assertCurrent(context),context.signal);
+        await providerUsage.finish(receipt);return output;
+      } catch(error) { await providerUsage.finish(receipt,error);throw error; }
+    },
     changeTimestamp: request => {
       if (!request.idempotency_key) throw invalid("Stable idempotency key is required for a timestamp");
       return writer.timestamp(request.scope, request.plugin_id, request.action_id, request.idempotency_key);

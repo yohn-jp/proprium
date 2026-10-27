@@ -109,6 +109,11 @@ export class ProviderRequestError extends AuthoringError {
   }
 }
 
+/** Host UI resolves this only after a fresh click on the exact immutable preview. */
+export type ProviderConsentRequest = (broker: ProviderRequestBroker, preview: ProviderRequestPreview,
+  send: (consent: object, signal?: AbortSignal) => Promise<ProviderRequestResult>,
+  signal?: AbortSignal) => Promise<ProviderRequestResult>;
+
 interface NormalizedProvider {
   readonly provider_id: string;
   readonly label: string;
@@ -264,8 +269,47 @@ export class ProviderRequestBroker {
   }
 
   /** Static capability status; this never resolves credentials or contacts a provider. */
-  status(): { available: boolean; provider_ids: string[] } {
-    return { available: this.providers.size > 0 && Boolean(this.options.credentials && this.fetcher), provider_ids: [...this.providers.keys()].sort() };
+  status(): { available: boolean; provider_ids: string[]; providers: Array<{provider_id:string;models:Array<{model_id:string;label:string}>}> } {
+    return { available: this.providers.size > 0 && Boolean(this.options.credentials && this.fetcher), provider_ids: [...this.providers.keys()].sort(),
+      providers: [...this.providers.values()].map(provider => ({ provider_id: provider.provider_id,
+        models: [...provider.models.values()].map(model => ({ model_id: model.model_id, label: model.label })) })) };
+  }
+
+  /** Replay only an already-known exact attempt; never issues consent, credentials or network. */
+  async replay(input: ProviderRequestInput, context: ProviderRequestContext): Promise<ProviderRequestResult | undefined> {
+    const preview=await this.prepare(input,context),state=this.prepared.get(preview as object)!;
+    const previous=this.attempts.get(state.namespace);
+    if(!previous)return undefined;
+    if(previous.fingerprint!==state.fingerprint)throw new ProviderRequestError("idempotency_conflict","Provider input changed for this request ID.");
+    if(previous.state==="complete")return structuredClone(previous.result);
+    if(previous.state==="failed")throw previous.error;
+    return previous.promise;
+  }
+
+  /** Shared UI/MCP/plugin route. Caller identity never substitutes for request consent. */
+  async requestWithConsent(input: ProviderRequestInput, context: ProviderRequestContext,
+    approve: ProviderConsentRequest | undefined, assertCurrent: () => Promise<void>, signal?: AbortSignal): Promise<ProviderRequestResult> {
+    if (!approve) throw providerUnavailable();
+    const cancelled = () => new ProviderRequestError("cancelled", "Provider request was cancelled before sending.");
+    if (signal?.aborted) throw cancelled();
+    const preview = await this.prepare(input, context);
+    let sending = false;
+    const send = async (consent: object, approvalSignal?: AbortSignal): Promise<ProviderRequestResult> => {
+      if (signal?.aborted || approvalSignal?.aborted) throw cancelled();
+      await assertCurrent();
+      if (signal?.aborted || approvalSignal?.aborted) throw cancelled();
+      const signals = [signal, approvalSignal].filter((value): value is AbortSignal => value !== undefined);
+      sending = true;
+      return this.request(preview, consent, signals.length ? AbortSignal.any(signals) : undefined);
+    };
+    return new Promise<ProviderRequestResult>((resolve, reject) => {
+      // Once sending starts, the broker owns cancellation/unknown-outcome semantics.
+      const abort = () => { if (!sending) reject(cancelled()); };
+      signal?.addEventListener("abort", abort, { once: true });
+      if (signal?.aborted) { signal.removeEventListener("abort", abort); reject(cancelled()); return; }
+      Promise.resolve().then(() => approve(this, preview, send, signal)).then(resolve, reject)
+        .finally(() => signal?.removeEventListener("abort", abort));
+    });
   }
 
   private async send(state: PreparedState, credential: string, callerSignal?: AbortSignal): Promise<ProviderRequestResult> {
@@ -349,7 +393,7 @@ function normalizeProvider(candidate: ProviderConfiguration): NormalizedProvider
       !Array.isArray(candidate.models) || candidate.models.length < 1 || candidate.models.length > 128) return undefined;
     const models = new Map<string, ProviderModelConfiguration>();
     for (const model of candidate.models) {
-      if (!model || !ID.test(model.model_id) || !boundedLabel(model.label, 128) ||
+      if (!model || !MODEL_ID.test(model.model_id) || !boundedLabel(model.label, 128) ||
         (model.estimated_cost !== undefined && !boundedLabel(model.estimated_cost, 256)) || models.has(model.model_id)) return undefined;
       models.set(model.model_id, Object.freeze({ ...model }));
     }
@@ -370,7 +414,7 @@ function normalizeRequest(input: ProviderRequestInput): ProviderRequestInput {
   const value = cloneJson(input) as Record<string, unknown>;
   if (typeof value.request_id !== "string" || !REQUEST_ID.test(value.request_id) ||
       typeof value.provider_id !== "string" || !ID.test(value.provider_id) ||
-      typeof value.model_id !== "string" || !ID.test(value.model_id) ||
+      typeof value.model_id !== "string" || !MODEL_ID.test(value.model_id) ||
       typeof value.purpose !== "string" || value.purpose.trim().length === 0 || value.purpose.length > 512 ||
       !isJsonContainer(value.payload) || !isPlainObject(value.source_manifest) ||
       !Number.isSafeInteger(value.max_output_bytes) || (value.max_output_bytes as number) < 1 || (value.max_output_bytes as number) > PROVIDER_OUTPUT_LIMIT) {
@@ -401,6 +445,7 @@ function normalizeContext(context: ProviderRequestContext): ProviderRequestConte
 }
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
+const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,511}$/u;
 const REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 const TOKEN_HANDLE = /^[A-Za-z0-9._:-]{1,256}$/u;
 const CREDENTIAL_FIELD = /^(?:authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|credentials?|password|bearer)$/iu;

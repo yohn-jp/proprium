@@ -64,7 +64,7 @@ interface ReadResult { data: Uint8Array | null; oid: string | null; }
 /** Host-only browser Git client. It never exposes the Worker filesystem or Git API. */
 export class BrowserLocalGit {
   private worker: Worker;
-  private readonly pending = new Map<string, { workspaceId: string; resolve(value: unknown): void; reject(error: Error): void }>();
+  private readonly pending = new Map<string, { workspaceId: string; operation: LocalGitCommand["operation"]; resolve(value: unknown): void; reject(error: Error): void }>();
   private closed = false;
   private uncertain: boolean;
   private readonly uncertaintyKey: string;
@@ -103,6 +103,7 @@ export class BrowserLocalGit {
     if (!pending) return;
     this.pending.delete(response.id);
     if (pending.workspaceId !== response.workspaceId) {
+      if (isWorkspaceMutation(pending.operation)) this.markUncertain();
       pending.reject(new BrowserLocalGitError("identity_mismatch", "Git worker response did not match the requested workspace."));
     } else if (response.error) {
       if (response.error.code === "storage_unknown") this.markUncertain();
@@ -112,8 +113,9 @@ export class BrowserLocalGit {
 
   private readonly onError = (event: ErrorEvent): void => {
     const message = event.message || "Browser Git worker stopped unexpectedly.";
-    if (this.pending.size) this.markUncertain();
-    for (const entry of this.pending.values()) entry.reject(new BrowserLocalGitError("storage_unknown", message));
+    const mutation = [...this.pending.values()].some(entry => isWorkspaceMutation(entry.operation));
+    if (mutation) this.markUncertain();
+    for (const entry of this.pending.values()) entry.reject(new BrowserLocalGitError(mutation ? "storage_unknown" : "git_error", message));
     this.pending.clear();
   };
 
@@ -136,6 +138,7 @@ export class BrowserLocalGit {
     return new Promise<T>((resolve, reject) => {
       this.pending.set(id, {
         workspaceId: this.workspace.localWorkspaceId,
+        operation: command.operation,
         resolve: (value) => resolve(value as T),
         reject,
       });
@@ -225,19 +228,19 @@ export class BrowserLocalGit {
     return this.call({ operation: "authoring-snapshot-list", snapshotId, prefix, cursor, limit });
   }
 
-  statAuthoringSnapshot(snapshotId: string, path: string): Promise<AuthoringSnapshotFile | null> {
+  statAuthoringSnapshot(snapshotId: string, path: string, originalBytes = false): Promise<AuthoringSnapshotFile | null> {
     validateSnapshotId(snapshotId);
     validateGitPath(path);
-    return this.call({ operation: "authoring-snapshot-stat", snapshotId, path });
+    return this.call({ operation: "authoring-snapshot-stat", snapshotId, path, ...(originalBytes ? { originalBytes: true as const } : {}) });
   }
 
-  readAuthoringSnapshotRange(snapshotId: string, path: string, offset: number, length: number): Promise<AuthoringSnapshotRange> {
+  readAuthoringSnapshotRange(snapshotId: string, path: string, offset: number, length: number, originalBytes = false): Promise<AuthoringSnapshotRange> {
     validateSnapshotId(snapshotId);
     validateGitPath(path);
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 0 || length > 256 * 1024) {
       return Promise.reject(new BrowserLocalGitError("invalid_input", "Snapshot read range is invalid."));
     }
-    return this.call({ operation: "authoring-snapshot-read-range", snapshotId, path, offset, length });
+    return this.call({ operation: "authoring-snapshot-read-range", snapshotId, path, offset, length, ...(originalBytes ? { originalBytes: true as const } : {}) });
   }
 
   releaseAuthoringSnapshot(snapshotId: string): Promise<void> {
@@ -350,8 +353,9 @@ export class BrowserLocalGit {
     this.worker.removeEventListener("message", this.onMessage);
     this.worker.removeEventListener("error", this.onError);
     this.worker.terminate();
-    if (this.pending.size) this.markUncertain();
-    for (const entry of this.pending.values()) entry.reject(new BrowserLocalGitError("storage_unknown", "The Git worker was closed before the operation was confirmed."));
+    const mutation = [...this.pending.values()].some(entry => isWorkspaceMutation(entry.operation));
+    if (mutation) this.markUncertain();
+    for (const entry of this.pending.values()) entry.reject(new BrowserLocalGitError(mutation ? "storage_unknown" : "git_error", "The Git worker was closed before the operation was confirmed."));
     this.pending.clear();
   }
 }

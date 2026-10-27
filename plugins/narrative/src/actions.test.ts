@@ -65,6 +65,8 @@ test("manifest action inventory and closed output schemas match the guest contra
         for (const [key, value] of Object.entries(row)) checkClosedObjects(value, `${path}.${key}`);
       }
     };
+    assert.equal(action.input_schema.type, "object");
+    assert.equal(action.input_schema.additionalProperties, false);
     checkClosedObjects(action.input_schema, `${action.action_id}.input`);
     checkClosedObjects(action.output_schema, `${action.action_id}.output`);
   }
@@ -77,6 +79,19 @@ test("manifest action inventory and closed output schemas match the guest contra
   assert.deepEqual(Object.keys((preview.units.items as Record<string, any>).properties), ["id", "label", "depends_on", "operation_paths"]);
   const marks = byId.get("proprium.narrative.reading-marks.list")!.output_schema.properties as Record<string, any>;
   assert.deepEqual(Object.keys((marks.marks.items as Record<string, any>).properties), ["id", "offset", "length", "snippet", "comment", "createdAt", "position_status"]);
+});
+
+test("structural commands expose guarded creation and reorder forms", () => {
+  const surfaces = manifest.ui as Array<any>;
+  for (const id of ["create-volume", "create-chapter", "create-scene", "reorder-chapters", "reorder-scenes"]) {
+    const surface = surfaces.find(row => row.id === `proprium.narrative.${id}`);
+    assert.ok(surface, `missing ${id}`);
+    assert.equal(surface.kind, "command");
+    assert.equal(surface.body.type, "form");
+    assert.equal(surface.body.load_action.action_id, "proprium.narrative.work.detect");
+    assert.deepEqual(surface.body.submit.input_template.expected_tree_revision, { data_key: "last_action_result.tree_revision" });
+    assert.deepEqual(surface.body.submit_when, { data_key: "last_action_result.tree_revision" });
+  }
 });
 
 test("adopted Host validator accepts every Narrative descriptor and canonical surface", { skip: !adoptedSchema }, () => {
@@ -236,9 +251,19 @@ class MemoryHost {
     if (operation === "workspace.change.propose") {
       const change = payload.changeset as ChangeSet;
       this.changeset = change;
-      return { proposal_id: "proposal-1", preview: { title: change.title, read_paths: [], units: [] } };
+      return { proposal_id: "proposal-1", status: "proposed", preview: {
+        title: change.title, reason: change.reason, scope: change.scope, snapshot: change.snapshot,
+        read_set: change.read_set, units: change.units.map(unit => ({ ...unit, operations: unit.operations.map(op => ({
+          id: op.id, kind: op.kind, path: op.path, expected_revision: op.expected_revision,
+          before_hash: op.expected_revision, after_hash: "a".repeat(64), content_ref: `content:${unit.id}:${op.id}`,
+        })) })), evidence: [], source_payload_digest: "b".repeat(64),
+      } };
     }
-    if (operation === "workspace.identity.read") return this.identity;
+    if (operation === "workspace.identity.read") {
+      assert.deepEqual(Object.keys(payload).sort(), payload.paths === undefined ? [] : ["paths"]);
+      if (payload.paths !== undefined) assert.deepEqual(payload.paths, ["meta/proprium/plugins/proprium.narrative/resume.v1.yaml"]);
+      return this.identity;
+    }
     if (operation === "workspace.change.timestamp") return { timestamp: this.timestamp };
     throw new Error(`Unexpected Host operation: ${operation}`);
   }
@@ -327,6 +352,69 @@ test("tree pages more than 256 hierarchy files and opens the explicit manuscript
   assert.equal(opened.manuscript_path, "manuscript/custom/scene-1.md");
   assert.equal(opened.navigation.target.path, opened.manuscript_path);
   assert.deepEqual(host.reads.filter((path) => path.startsWith("manuscript/")), ["manuscript/custom/scene-1.md"]);
+});
+
+test("outline pages offer scoped hierarchy actions and scene opening", () => {
+  const host = new MemoryHost();
+  addWork(host, 2);
+  const id = "proprium.narrative.hierarchy.outline";
+  const root = run(host, request(id, { limit: 1 })) as any;
+  assert.equal(root.items[0].action.action_id, id);
+  const chapters = run(host, request(id, root.items[0].action.input_template)) as any;
+  const scenes = run(host, request(id, { ...chapters.items.find((row: any) => row.id === "work-chapter").action.input_template, limit: 1 })) as any;
+  const scene = scenes.items.find((row: any) => row.id === "scene-1");
+  assert.equal(scene.action.action_id, "proprium.narrative.scene.open");
+  const opened = run(host, request(scene.action.action_id, scene.action.input_template)) as any;
+  assert.equal(opened.navigation.target.path, "manuscript/custom/scene-1.md");
+  assert.ok(scenes.next_cursor);
+  const next = run(host, request(id, { parent_id: scenes.parent_id, cursor: scenes.next_cursor, limit: 1, expected_tree_revision: scenes.tree_revision })) as any;
+  assert.ok(next.items.some((row: any) => row.id === "scene-2"));
+  const previous = run(host, request(id, { parent_id: next.parent_id, cursor: next.previous_cursor, limit: 1, expected_tree_revision: next.tree_revision })) as any;
+  assert.ok(previous.items.some((row: any) => row.id === "scene-1"));
+  assertDeclaredOutput(id, root);
+  assertDeclaredOutput(id, next);
+});
+
+test("outline selects a scene for revision-guarded rename and relink", () => {
+  const host = new MemoryHost(); addWork(host, 2);
+  const action = "proprium.narrative.hierarchy.outline";
+  const page = run(host, request(action, { parent_id: "work-chapter", limit: 1 })) as any;
+  const scene = page.items.find((row: any) => row.id === "scene-1");
+  const selected = run(host, request(action, page.items.find((row: any) => row.action.input_template.selected_id === "scene-1").action.input_template)) as any;
+  assert.equal(selected.selected.id, "scene-1");
+  assert.equal(selected.selected.metadata_revision, host.files.get("plot/volumes/folder-not-id/chapters/directory-not-id/scenes/file-scene-1.yaml")!.revision);
+  assert.equal(selected.selected.manuscript_path, "manuscript/custom/scene-1.md");
+  assertDeclaredOutput(action, selected);
+  host.add("manuscript/custom/new.md", "new body");
+  const result = run(host, request("proprium.narrative.structure.update", { kind: selected.selected.kind, id: selected.selected.id, patch: { manuscript: "manuscript/custom/new.md" }, expected_metadata_revision: selected.selected.metadata_revision }, "selected-relink"));
+  assertDeclaredOutput("proprium.narrative.structure.update", result);
+  assert.deepEqual(host.changeset!.units[0]!.operations.map(op => op.path), ["plot/volumes/folder-not-id/chapters/directory-not-id/scenes/file-scene-1.yaml"]);
+});
+
+test("proposal output projects the durable Host preview to the declared compact schema", () => {
+  const host = new MemoryHost();
+  const tree = run(host, request("proprium.narrative.work.detect", {})) as { tree_revision: string };
+  const result = run(host, request("proprium.narrative.structure.create", {
+    kind: "volume", title: "First volume", expected_tree_revision: tree.tree_revision,
+  }, "real-preview")) as any;
+  assertDeclaredOutput("proprium.narrative.structure.create", result);
+  assert.deepEqual(result.preview.read_paths, host.changeset!.read_set.map(item => item.path));
+  assert.deepEqual(result.preview.units[0].operation_paths, host.changeset!.units[0]!.operations.map(item => item.path));
+});
+
+test("selected outline rows expose the correct parent for structure creation", () => {
+  const host = new MemoryHost(); addWork(host, 1);
+  const id = "proprium.narrative.hierarchy.outline";
+  const chapters = run(host, request(id, { parent_id: "work-volume", selected_id: "work-chapter" })) as any;
+  assert.equal(chapters.can_create_scene, true);
+  assert.equal(chapters.can_create_chapter, false);
+  assert.equal(chapters.selected.parent_id, "work-volume");
+  assert.deepEqual(chapters.selected_children_ids, ["scene-1"]);
+  const volume = run(host, request(id, { selected_id: "work-volume" })) as any;
+  assert.equal(volume.can_create_chapter, true);
+  assert.equal(volume.can_create_scene, false);
+  assert.deepEqual(volume.selected_children_ids, ["work-chapter"]);
+  assertDeclaredOutput(id, chapters);
 });
 
 test("scene creation proposes body, metadata and reordered siblings in one unit", () => {
@@ -421,6 +509,34 @@ test("reading marks preserve malformed rows, YAML comments and unknown fields wi
   for (const retained of ["# scene comment", "# retain this annotation", "futureField: retain", "offset: nope", "id: japanese-passage"]) {
     assert.ok(changed.includes(retained), `preserves ${retained}`);
   }
+});
+
+test("reading mark navigation validates saved UTF-16 range and rejects stale marks", () => {
+  const host = new MemoryHost(); addWork(host, 1);
+  const path = "plot/volumes/folder-not-id/chapters/directory-not-id/scenes/file-scene-1.yaml";
+  host.add(path, "id: scene-1\ntype: scene\ntitle: Scene 1\nvolume: work-volume\nchapter: work-chapter\norder: 1\nmanuscript: manuscript/custom/scene-1.md\nreadingMarks:\n  - id: selected\n    offset: 2\n    length: 2\n    snippet: 🙂\n    createdAt: '2026-10-26T00:00:00Z'\n");
+  const bodyPath = "manuscript/custom/scene-1.md";
+  const revision = host.add(bodyPath, "\ufeff漢🙂\n");
+  const result = run(host, request("proprium.narrative.reading-marks.open-ui", { scene_id: "scene-1", mark_id: "selected" })) as { navigation: { target: { path: string; span: unknown } } };
+  assert.deepEqual(result.navigation.target, { path: bodyPath, span: { path: bodyPath, revision, start: 2, end: 4, quote: "🙂" } });
+  host.add(bodyPath, "\ufeff漢違う\n");
+  assert.throws(() => run(host, request("proprium.narrative.reading-marks.open-ui", { scene_id: "scene-1", mark_id: "selected" })), { code: "snapshot_stale" });
+});
+
+test("reading mark UI proposal uses Host timestamp and stable idempotency-derived ID", () => {
+  const host = new MemoryHost();
+  addWork(host, 1);
+  const path = "plot/volumes/folder-not-id/chapters/directory-not-id/scenes/file-scene-1.yaml";
+  const metadata = host.files.get(path)!.revision;
+  const body = host.add("manuscript/custom/scene-1.md", "A漢🙂\n");
+  const input = { scene_id: "scene-1", offset: 1, length: 3, snippet: "漢🙂", comment: "note", expected_metadata_revision: metadata, expected_manuscript_revision: body };
+  run(host, request("proprium.narrative.reading-marks.create-ui", input, "stable-mark"));
+  const changed = new TextDecoder().decode(new Uint8Array(host.changeset!.units[0]!.operations[0]!.content!));
+  assert.ok(changed.includes(`mark-${sha256Hex("stable-mark")}`));
+  assert.ok(changed.includes(host.timestamp));
+  assert.ok(changed.includes("漢🙂"));
+  assert.equal(host.calls.get("workspace.change.timestamp"), 1);
+  assert.throws(() => run(host, request("proprium.narrative.reading-marks.create-ui", { ...input, snippet: "違う" }, "another")), { code: "invalid_input" });
 });
 
 test("changes.compile emits a source-mapped scene metadata/body unit and complete sibling insert", () => {
@@ -551,7 +667,7 @@ test("resume.marks.list pages scoped markers, checks linked body revisions and r
     "    branch: main",
     "    sceneId: scene-1",
     "    manuscriptPath: manuscript/custom/scene-1.md",
-    `    manuscriptRevision: stale-${bodyRevision}`,
+    `    manuscriptRevision: ${"a".repeat(64)}`,
     "    sentenceIndex: null",
     "    scrollTop: 0",
     "    updatedAt: '2026-10-26T01:30:00Z'",
@@ -588,6 +704,25 @@ test("resume.marks.list pages scoped markers, checks linked body revisions and r
   };
   assert.deepEqual(second.items.map((item) => [item.device_id, item.availability, item.publication]), [["device-b", "stale", "remote_confirmed"]]);
   assert.equal(second.next_cursor, null);
+});
+
+test("resume markers reject malformed manuscript revisions", () => {
+  const host = new MemoryHost();
+  host.add("meta/proprium/plugins/proprium.narrative/resume.v1.yaml", [
+    "schemaVersion: 1", "positions:", "  - deviceId: device-a", "    repositoryId: 42",
+    "    branch: main", "    sceneId: scene-1", "    manuscriptPath: manuscript/a.md",
+    "    manuscriptRevision: invalid", "    sentenceIndex: null", "    scrollTop: 0",
+    "    updatedAt: '2026-10-26T01:00:00Z'", "",
+  ].join("\n"));
+  assert.throws(() => run(host, request("proprium.narrative.resume.marks.list", {})), { code: "unsupported_format" });
+});
+
+test("resume marker non-mapping rows report malformed storage", () => {
+  for (const row of ["null", "42", "[a, b]"]) {
+    const host = new MemoryHost();
+    host.add("meta/proprium/plugins/proprium.narrative/resume.v1.yaml", `schemaVersion: 1\npositions:\n  - ${row}\n`);
+    assert.throws(() => run(host, request("proprium.narrative.resume.marks.list", {})), { code: "unsupported_format" });
+  }
 });
 
 test("resume.mark.propose updates only this device marker and preserves unknown YAML with exact preconditions", () => {

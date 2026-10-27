@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use std::io::Cursor;
 use std::sync::Arc;
 use tokenizers::Tokenizer;
+use unicode_segmentation::UnicodeSegmentation;
 use tract_onnx::prelude::*;
 
 const GROUP_ID: &str = "proprium.semantic.embedding.e5-small";
@@ -284,6 +285,14 @@ impl Guest for Component {
 
     fn embed_passages(texts: Vec<String>) -> Result<Vec<Vec<f32>>, String> {
         STATE.with(|state| encode_and_embed(&mut state.borrow_mut(), texts))
+    }
+
+    fn split_sentence_ends(text: String) -> Vec<u32> {
+        let mut offset = 0u32;
+        text.split_sentence_bounds().map(|sentence| {
+            offset += sentence.encode_utf16().count() as u32;
+            offset
+        }).collect()
     }
 
     fn release() {

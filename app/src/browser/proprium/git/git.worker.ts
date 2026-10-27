@@ -1,4 +1,6 @@
 /// <reference lib="webworker" />
+import { createIgnoreReadCache } from "./ignore-read-cache.js";
+import { WorkspaceOperationQueue } from "./operation-queue.js";
 import { Buffer } from "buffer";
 import LightningFS from "@isomorphic-git/lightning-fs";
 import * as git from "isomorphic-git";
@@ -23,11 +25,13 @@ const fs = storage.promises;
 const flush = (): Promise<void> => (fs as unknown as { flush(): Promise<void> }).flush();
 const dataRoot = "/proprium";
 const uncertainWorkspaces = new Set<string>();
+const operationQueue = new WorkspaceOperationQueue();
 const knownHeads = new Map<string, string | null>();
 const authoringMutationGenerations = new Map<string, number>();
 const authoringSnapshots = new Map<string, PinnedAuthoringSnapshot>();
 const AUTHORING_SNAPSHOT_TTL_MS = 5 * 60 * 1000;
 const AUTHORING_SNAPSHOT_LIMIT = 8;
+const AUTHORING_ORIGINAL_BYTES_LIMIT = 4 * 1024 * 1024;
 const AUTHORING_CURSOR_LIMIT = 4096;
 const AUTHORING_READ_CHUNK_LIMIT = 256 * 1024;
 const failure = (code: LocalGitErrorCode, message: string): never => { throw Object.assign(new Error(message), { propriumCode: code }); };
@@ -52,6 +56,7 @@ interface PinnedAuthoringSnapshot {
   readonly files: readonly PinnedFileMetadata[];
   readonly file_map: ReadonlyMap<string, PinnedFileMetadata>;
   readonly revisions: Map<string, string>;
+  readonly original_bytes: { used: number; files: Map<string, Uint8Array> };
   readonly cursors: Map<string, { readonly prefix: string; readonly index: number; readonly expires_at: number }>;
   readonly expires_at: number;
 }
@@ -656,6 +661,7 @@ function mediaType(path: string): string {
 
 async function captureAuthoringFiles(dir: string): Promise<PinnedFileMetadata[]> {
   const files: PinnedFileMetadata[] = [];
+  const ignoreFs = createIgnoreReadCache(fs);
   const pending = [""];
   while (pending.length) {
     const parent = pending.pop()!;
@@ -671,7 +677,7 @@ async function captureAuthoringFiles(dir: string): Promise<PinnedFileMetadata[]>
       const absolute = `${dir}/${path}`;
       const stats = await fs.lstat(absolute);
       if (stats.isSymbolicLink()) failure("invalid_path", "Symbolic links are not followed by the Browser Git adapter.");
-      const ignored = await git.isIgnored({ fs, dir, filepath: path });
+      const ignored = await git.isIgnored({ fs: ignoreFs, dir, filepath: path });
       if (ignored) continue;
       if (stats.isDirectory()) { pending.push(path); continue; }
       if (!stats.isFile()) continue;
@@ -744,6 +750,7 @@ async function pinAuthoringSnapshot(workspace: WorkspaceIdentity, paths: { dir: 
     files,
     file_map: new Map(files.map(file => [file.path, file])),
     revisions: new Map(),
+    original_bytes: { used: 0, files: new Map() },
     cursors: new Map(),
     expires_at: Date.now() + AUTHORING_SNAPSHOT_TTL_MS,
   });
@@ -773,6 +780,12 @@ async function authoringSnapshotFile(snapshot: PinnedAuthoringSnapshot, file: Pi
       failure("snapshot_stale", `File ${file.path} changed while its authoring revision was being read.`);
     }
     snapshot.revisions.set(file.path, revision);
+    // These bytes were already read to hash a requested listing page. Retain
+    // only a bounded lazy subset; never preload the repository or change source.
+    if (!snapshot.original_bytes.files.has(file.path) && bytes.byteLength <= AUTHORING_ORIGINAL_BYTES_LIMIT - snapshot.original_bytes.used) {
+      snapshot.original_bytes.files.set(file.path, Uint8Array.from(bytes));
+      snapshot.original_bytes.used += bytes.byteLength;
+    }
   }
   return { path: file.path, revision, byte_length: file.byte_length, media_type: mediaType(file.path) };
 }
@@ -1417,6 +1430,10 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
   if (request.operation === "authoring-snapshot-stat") {
     const snapshot = requirePinnedAuthoringSnapshot(request.snapshotId, paths, request.workspace);
     validateGitPath(request.path);
+    if (request.originalBytes === true && snapshot.original_bytes.files.has(request.path)) {
+      const file = snapshot.file_map.get(request.path)!;
+      return { path: file.path, revision: snapshot.revisions.get(file.path)!, byte_length: file.byte_length, media_type: mediaType(file.path) } satisfies AuthoringSnapshotFile;
+    }
     await assertPinnedAuthoringSnapshot(snapshot);
     const file = snapshot.file_map.get(request.path);
     const result = file ? await authoringSnapshotFile(snapshot, file) : null;
@@ -1428,6 +1445,12 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     validateGitPath(request.path);
     if (!Number.isSafeInteger(request.offset) || request.offset < 0 || !Number.isSafeInteger(request.length) ||
         request.length < 0 || request.length > AUTHORING_READ_CHUNK_LIMIT) failure("invalid_input", "Authoring snapshot byte range is invalid.");
+    const original = request.originalBytes === true ? snapshot.original_bytes.files.get(request.path) : undefined;
+    if (original) {
+      if (request.offset > original.byteLength) failure("invalid_input", "Authoring snapshot byte offset is beyond the end of the file.");
+      return { offset: request.offset, total_bytes: original.byteLength, revision: snapshot.revisions.get(request.path)!,
+        bytes: original.slice(request.offset, Math.min(original.byteLength, request.offset + request.length)) } satisfies AuthoringSnapshotRange;
+    }
     await assertPinnedAuthoringSnapshot(snapshot);
     const metadata = snapshot.file_map.get(request.path);
     if (!metadata) return failure("file_not_found", `File ${request.path} is absent from this authoring snapshot.`);
@@ -1612,7 +1635,7 @@ scope.addEventListener("message", async (event: MessageEvent<LocalGitRequest>) =
     if (!scope.navigator.locks) failure("lock_unavailable", "This browser does not provide Web Locks; local Git workspace access is disabled.");
     const write = ["init", "write", "delete", "apply-changes", "add", "commit", "commit-reviewed", "create-branch", "verify", "remote-fetch", "remote-pull", "remote-publish"].includes(request.operation);
     const paths = await workspacePaths(request.workspace);
-    const result = await scope.navigator.locks.request(paths.lock, { mode: write ? "exclusive" : "shared", ifAvailable: true }, async (lock) => {
+    const result = await operationQueue.run(paths.lock, () => scope.navigator.locks.request(paths.lock, { mode: write ? "exclusive" : "shared", ifAvailable: true }, async (lock) => {
       if (!lock) failure("workspace_busy", "Another tab is using this local workspace. Retry when its operation finishes.");
       if (uncertainWorkspaces.has(paths.lock) && request.operation !== "verify") {
         failure("storage_unknown", "A previous local Git operation had an uncertain result; reopen and verify this workspace before continuing.");
@@ -1622,7 +1645,7 @@ scope.addEventListener("message", async (event: MessageEvent<LocalGitRequest>) =
         authoringMutationGenerations.set(paths.lock, (authoringMutationGenerations.get(paths.lock) ?? 0) + 1);
       }
       return result;
-    });
+    }));
     scope.postMessage({ id: request.id, workspaceId, result } satisfies LocalGitResponse);
   } catch (error) {
     const known = error && typeof error === "object" && "propriumCode" in error ? String(error.propriumCode) as LocalGitErrorCode : null;

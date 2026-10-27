@@ -7258,21 +7258,250 @@
                 }
               },
               "semanticHypotheses": {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "status",
-                  "reason"
-                ],
-                "properties": {
-                  "status": {
-                    "const": "unavailable"
+                "oneOf": [
+                  {
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "status",
+                      "reason"
+                    ],
+                    "properties": {
+                      "status": {
+                        "const": "unavailable"
+                      },
+                      "reason": {
+                        "const": "provider_unavailable"
+                      }
+                    }
                   },
-                  "reason": {
-                    "const": "provider_unavailable"
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "status",
+                      "candidates",
+                      "model",
+                      "complete"
+                    ],
+                    "properties": {
+                      "status": {
+                        "const": "ready"
+                      },
+                      "candidates": {
+                        "type": "array",
+                        "maxItems": 100,
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "kind",
+                            "entityId",
+                            "score",
+                            "suspicion",
+                            "evidenceA",
+                            "evidenceB"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1024
+                            },
+                            "kind": {
+                              "enum": [
+                                "embedding_midband"
+                              ]
+                            },
+                            "entityId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "score": {
+                              "type": "number",
+                              "minimum": 0.29,
+                              "exclusiveMaximum": 0.84
+                            },
+                            "suspicion": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2048
+                            },
+                            "evidenceA": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "sceneId",
+                                "sentenceIndex",
+                                "quote",
+                                "path",
+                                "revision",
+                                "start",
+                                "end"
+                              ],
+                              "properties": {
+                                "sceneId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "sentenceIndex": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 2147483647
+                                },
+                                "quote": {
+                                  "type": "string",
+                                  "minLength": 0,
+                                  "maxLength": 32768
+                                },
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 4096
+                                },
+                                "revision": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "start": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 2147483647
+                                },
+                                "end": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 2147483647
+                                }
+                              }
+                            },
+                            "evidenceB": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "sceneId",
+                                "sentenceIndex",
+                                "quote",
+                                "path",
+                                "revision",
+                                "start",
+                                "end"
+                              ],
+                              "properties": {
+                                "sceneId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "sentenceIndex": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 2147483647
+                                },
+                                "quote": {
+                                  "type": "string",
+                                  "minLength": 0,
+                                  "maxLength": 32768
+                                },
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 4096
+                                },
+                                "revision": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "start": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 2147483647
+                                },
+                                "end": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 2147483647
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "model": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "revision",
+                          "role",
+                          "digest",
+                          "byte_length",
+                          "license",
+                          "status"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "revision": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "role": {
+                            "enum": [
+                              "embedding",
+                              "reranker"
+                            ]
+                          },
+                          "digest": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "pattern": "^[a-f0-9]{64}$",
+                            "maxLength": 64
+                          },
+                          "byte_length": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 0,
+                            "maximum": 4294967295
+                          },
+                          "dimensions": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 4096
+                          },
+                          "license": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "status": {
+                            "enum": [
+                              "unavailable",
+                              "ready"
+                            ]
+                          }
+                        }
+                      },
+                      "complete": {
+                        "type": "boolean"
+                      }
+                    }
                   }
-                }
+                ]
               }
             }
           },
@@ -9049,7 +9278,7 @@
                     "description": "Scene IDを入力して保存済み原稿を読みます。編集中のDraftは自動では読み込みません。",
                     "fields": [
                       {
-                        "id": "sceneId",
+                        "id": "scene_id",
                         "label": "Scene ID",
                         "type": "string",
                         "required": true,
@@ -9060,7 +9289,7 @@
                       "action_id": "proprium.diagnostics.scene.run.v1",
                       "input_template": {
                         "sceneId": {
-                          "data_key": "form.sceneId"
+                          "data_key": "form.scene_id"
                         },
                         "sections": [
                           "prose",
@@ -9160,6 +9389,51 @@
                       "data_key": "last_action_result.providerStatus"
                     }
                   }
+                },
+                {
+                  "id": "semantic-run",
+                  "title": "関連文の候補",
+                  "body": {
+                    "id": "semantic-run-form",
+                    "type": "form",
+                    "title": "保存済み場面の関連文を確認",
+                    "description": "Semantic の保存済みインデックスから候補を読みます。候補は矛盾の確定ではありません。",
+                    "fields": [
+                      {
+                        "id": "scene_id",
+                        "label": "Scene ID",
+                        "type": "string",
+                        "required": true,
+                        "max_length": 128
+                      }
+                    ],
+                    "submit": {
+                      "action_id": "proprium.diagnostics.scene.run.v1",
+                      "input_template": {
+                        "sceneId": {
+                          "data_key": "form.scene_id"
+                        },
+                        "sections": [
+                          "semanticHypotheses"
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "semantic-evidence",
+                  "title": "引用を比較",
+                  "body": {
+                    "id": "semantic-evidence-list",
+                    "type": "list",
+                    "title": "関連文の引用",
+                    "description": "二つの引用を比較します。提供元タブで利用状態を確認できます。",
+                    "items": {
+                      "data_key": "last_action_result.sections.semanticHypotheses.candidates"
+                    },
+                    "primary": "evidenceA.quote",
+                    "secondary": "evidenceB.quote"
+                  }
                 }
               ]
             }
@@ -9172,7 +9446,7 @@
               "type": "tabs",
               "tabs": [
                 {
-                  "id": "run",
+                  "id": "lint-run",
                   "title": "実行",
                   "body": {
                     "id": "lint-run-form",
@@ -9185,7 +9459,7 @@
                         "label": "文章",
                         "type": "string",
                         "required": true,
-                        "max_length": 500000
+                        "max_length": 100000
                       }
                     ],
                     "submit": {
@@ -9199,7 +9473,7 @@
                   }
                 },
                 {
-                  "id": "findings",
+                  "id": "lint-findings-tab",
                   "title": "所見",
                   "body": {
                     "id": "lint-findings",
@@ -9252,7 +9526,7 @@
               "description": "Speakerが有効な場合、帰属・宣言済みの声・統計的所見を表示します。DiagnosticsはSpeakerの状態を変更しません。",
               "fields": [
                 {
-                  "id": "sceneId",
+                  "id": "scene_id",
                   "label": "Scene ID",
                   "type": "string",
                   "required": true,
@@ -9263,7 +9537,7 @@
                 "action_id": "proprium.diagnostics.scene.run.v1",
                 "input_template": {
                   "sceneId": {
-                    "data_key": "form.sceneId"
+                    "data_key": "form.scene_id"
                   },
                   "sections": [
                     "declaredVoice",

@@ -30,8 +30,9 @@ export interface InferenceBindings {
   appendAsset(groupId: string, filePath: string, offset: number, bytes: Uint8Array): void;
   finishAsset(groupId: string, filePath: string): void;
   loadEmbedding(): void;
-  embedPassages(texts: string[]): number[][];
+  embedPassages(texts: string[]): Array<number[] | Float32Array>;
   release(): void;
+  splitSentenceEnds(text: string): number[] | Uint32Array;
 }
 
 const ASSET_READ = "workspace.asset.read";
@@ -147,17 +148,24 @@ export function* ensureEmbedding(host: GuestHost): Generator<import("../shared/g
   }
 }
 
+/** Validate native component vectors, including typed arrays from another realm. */
+export function validateEmbeddingBatch(batch: unknown, expected: number): number[][] {
+  if (!Array.isArray(batch) || batch.length !== expected) throw failure("model_unavailable", "The E5 component returned invalid embedding vectors");
+  return batch.map(raw => {
+    if (!Array.isArray(raw) && !(ArrayBuffer.isView(raw) && Object.prototype.toString.call(raw) === "[object Float32Array]")) throw failure("model_unavailable", "The E5 component returned invalid embedding vectors");
+    const vector = Array.from(raw as ArrayLike<number>);
+    if (vector.length !== E5_MODEL.dimensions || vector.some(value => typeof value !== "number" || !Number.isFinite(value))) throw failure("model_unavailable", "The E5 component returned invalid embedding vectors");
+    return vector;
+  });
+}
+
 export function embedPassages(texts: readonly string[]): number[][] {
   if (!ready) throw failure("provider_unavailable", "The signed E5 model is not loaded");
   const engine = expectBindings();
   const output: number[][] = [];
   for (let offset = 0; offset < texts.length; offset += MAX_EMBEDDING_BATCH) {
     const batch = engine.embedPassages(texts.slice(offset, offset + MAX_EMBEDDING_BATCH));
-    if (!Array.isArray(batch) || batch.length !== Math.min(MAX_EMBEDDING_BATCH, texts.length - offset) ||
-        batch.some((vector) => !Array.isArray(vector) || vector.length !== E5_MODEL.dimensions || vector.some((value) => !Number.isFinite(value)))) {
-      throw failure("model_unavailable", "The E5 component returned invalid embedding vectors");
-    }
-    output.push(...batch);
+    output.push(...validateEmbeddingBatch(batch, Math.min(MAX_EMBEDDING_BATCH, texts.length - offset)));
   }
   return output;
 }
@@ -168,4 +176,16 @@ export function releaseEmbedding(): void {
   if (bindings) bindings.release();
   ready = false;
   loading = false;
+}
+
+/** UAX #29 sentence breaks from the component's pinned Unicode implementation. */
+export function componentSentenceEnds(text: string): number[] {
+  if (!bindings) throw failure("dependency_unavailable", "This runtime does not provide the pinned Japanese sentence segmenter");
+  const raw = bindings.splitSentenceEnds(text);
+  if (!Array.isArray(raw) && !(ArrayBuffer.isView(raw) && Object.prototype.toString.call(raw) === "[object Uint32Array]")) throw failure("dependency_unavailable", "The component returned invalid sentence boundaries");
+  const ends = Array.from(raw);
+  if (ends.length > text.length || ends.some((end, index) => !Number.isSafeInteger(end) || end <= (index ? ends[index - 1]! : 0) || end > text.length) || (text.length > 0 && ends[ends.length - 1] !== text.length)) {
+    throw failure("dependency_unavailable", "The component returned invalid sentence boundaries");
+  }
+  return ends;
 }

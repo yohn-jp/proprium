@@ -32,12 +32,12 @@ test("large Paired output streams exact bytes and digest through Host artifact o
     calls.push(operation);
     if (operation === "artifact.create") {
       assert.deepEqual(payload, { media_type: "text/markdown", filename: "s1.md", scope, snapshot });
-      return "artifact-1";
+      return { artifact_id: "artifact-1", max_bytes: 1_000_000, max_chunk_bytes: 256 * 1024 };
     }
     if (operation === "artifact.append") {
       assert.equal(payload.artifact_id, "artifact-1");
       assert.equal(payload.sequence, chunks.length);
-      assert.ok((payload.bytes as number[]).length <= 256 * 1024);
+      assert.ok((payload.bytes as number[]).length <= 64 * 1024);
       chunks.push(payload.bytes as number[]);
       return null;
     }
@@ -47,7 +47,9 @@ test("large Paired output streams exact bytes and digest through Host artifact o
     }
     throw new Error(`Unexpected Host operation ${operation}`);
   });
-  assert.deepEqual(calls, ["artifact.create", "artifact.append", "artifact.append", "artifact.seal"]);
+  assert.equal(calls[0], "artifact.create");
+  assert.equal(calls.at(-1), "artifact.seal");
+  assert.equal(chunks.length, Math.ceil(bytes.byteLength / (64 * 1024)));
   assert.equal("content" in result, false);
   assert.deepEqual(result, { content_artifact: "artifact-1", artifact_id: "artifact-1" });
   const flattened = Uint8Array.from(chunks.flat());
@@ -60,4 +62,40 @@ test("small Paired output remains inline and needs no artifact capability", () =
     throw new Error("Small contents must stay inline");
   });
   assert.deepEqual(result, { content: Array.from(new TextEncoder().encode(text)) });
+});
+
+
+test("negotiated artifact limit rejects oversized content before append and discards the reservation", () => {
+  const calls: string[] = [];
+  assert.throws(() => drive(createContentReference({ request: requestHost } as GuestHost, request, "manuscript/a.md", "日本語".repeat(20_000)), (operation) => {
+    calls.push(operation);
+    if (operation === "artifact.create") return { artifact_id: "small", max_bytes: 150_000, max_chunk_bytes: 65_536 };
+    if (operation === "artifact.discard") return {};
+    throw new Error(`unexpected ${operation}`);
+  }), (error: unknown) => Boolean(error && typeof error === "object" && "code" in error && error.code === "artifact_too_large"));
+  assert.deepEqual(calls, ["artifact.create", "artifact.discard"]);
+});
+
+test("honors a smaller Host chunk limit and accepts the legacy scalar receipt", () => {
+  for (const receipt of [{ artifact_id: "artifact-1", max_bytes: 500_000, max_chunk_bytes: 16_384 }, "artifact-1"]) {
+    const chunks: number[][] = [];
+    drive(createContentReference({ request: requestHost } as GuestHost, request, "manuscript/a.md", "日本語".repeat(20_000)), (operation, payload) => {
+      if (operation === "artifact.create") return receipt;
+      if (operation === "artifact.append") { chunks.push(payload.bytes as number[]); return {}; }
+      if (operation === "artifact.seal") return {};
+      throw new Error(`unexpected ${operation}`);
+    });
+    assert.ok(chunks.every(chunk => chunk.length <= (typeof receipt === "string" ? 65_536 : receipt.max_chunk_bytes)));
+  }
+});
+
+test("invalid negotiated limits discard the created artifact", () => {
+  const calls: string[] = [];
+  assert.throws(() => drive(createContentReference({ request: requestHost } as GuestHost, request, "manuscript/a.md", "日本語".repeat(20_000)), operation => {
+    calls.push(operation);
+    if (operation === "artifact.create") return { artifact_id: "bad", max_bytes: 0, max_chunk_bytes: 65_536 };
+    if (operation === "artifact.discard") return {};
+    throw new Error(`unexpected ${operation}`);
+  }), (error: unknown) => Boolean(error && typeof error === "object" && "code" in error && error.code === "storage_unknown"));
+  assert.deepEqual(calls, ["artifact.create", "artifact.discard"]);
 });

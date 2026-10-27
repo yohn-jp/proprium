@@ -1,0 +1,19 @@
+[WebServer] (node:224793) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 6 tests using 1 worker
+
+(node:224813) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] [BABEL] Note: The code generator has deoptimised the styling of /workspace/browser-temp/proprium-navigation-cache-224779/deps/react-dom_client.js?v=718108cb as it exceeds the max of 500KB.
+  ✓  1 [desktop-chromium] › tests/browser/authoring-navigation.acceptance.ts:63:5 › next scene opens the pinned next scene and reports the end (24.2s)
+  ✓  2 [desktop-chromium] › tests/browser/authoring-navigation.acceptance.ts:73:5 › dirty draft prevents navigation without losing editor text (22.7s)
+  ✓  3 [desktop-chromium] › tests/browser/authoring-navigation.acceptance.ts:83:5 › portable marker validates its saved body and opens the scene (19.7s)
+(node:225235) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Skipping host requirements validation logic because `PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS` env variable is set.
+  ✓  4 [mobile-webkit] › tests/browser/authoring-navigation.acceptance.ts:63:5 › next scene opens the pinned next scene and reports the end (33.8s)
+  ✓  5 [mobile-webkit] › tests/browser/authoring-navigation.acceptance.ts:73:5 › dirty draft prevents navigation without losing editor text (21.6s)
+  ✓  6 [mobile-webkit] › tests/browser/authoring-navigation.acceptance.ts:83:5 › portable marker validates its saved body and opens the scene (25.3s)
+
+  6 passed (2.5m)

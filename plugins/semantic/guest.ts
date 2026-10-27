@@ -3,6 +3,8 @@ import { HOST_OPERATIONS, type FileChunk, type FilePage } from "../shared/operat
 import type { ActionRequest } from "../../app/src/browser/proprium/authoring/types.js";
 import { clusterTerms, EMBEDDING_MODEL, RERANKER_MODEL, type CandidateTerm } from "./core.ts";
 import { E5_MODEL, embedPassages, embeddingLoaded, ensureEmbedding, releaseEmbedding } from "./inference.ts";
+import { loadIndex, rebuildIndex, queryIndex, contradictionPage } from "./index-operations.ts";
+import { cancelSemanticTask, endSemanticTask, semanticTasks } from "./tasks.ts";
 
 function fail(code: string, message: string): Error {
   return Object.assign(new Error(message), { code, retryable: false });
@@ -42,26 +44,20 @@ function unavailableModel(role: "embedding" | "reranker") {
   };
 }
 
-const indexStatus: Handler = (raw, context) => {
+const semanticEngine = { ensure: ensureEmbedding, embed: embedPassages, model: () => unavailableModel("embedding") };
+const indexStatus: Handler = function* (raw, context, host) {
   parseEmpty(raw);
-  return {
-    snapshot: context.snapshot,
-    model: { ...unavailableModel("embedding"), digest: null },
-    index: {
-      state: "missing",
-      passageCount: 0,
-      sourceGeneration: context.snapshot.worktree_generation,
-      indexedAt: null,
-    },
-    resources: { modelLoaded: embeddingLoaded(), rerankerLoaded: false, locality: "local", downloadRequired: !embeddingLoaded() },
-    activeTasks: [],
-  };
+  let index;
+  try { index = yield* loadIndex(context as ActionRequest, host); }
+  catch (error) {
+    if ((error as { code?: string })?.code !== "cache_corrupt" && (error as { code?: string })?.code !== "index_stale") throw error;
+    return { snapshot: context.snapshot, model: unavailableModel("embedding"), index: { state: "stale", passageCount: 0, sourceGeneration: context.snapshot.worktree_generation, indexedAt: null }, resources: { modelLoaded: embeddingLoaded(), rerankerLoaded: false, locality: "local", downloadRequired: !embeddingLoaded() }, activeTasks: semanticTasks() };
+  }
+  return { snapshot: context.snapshot, model: unavailableModel("embedding"), index: { state: index ? "ready" : "missing", passageCount: index?.passages.length ?? 0, sourceGeneration: context.snapshot.worktree_generation, indexedAt: null }, resources: { modelLoaded: embeddingLoaded(), rerankerLoaded: false, locality: "local", downloadRequired: !embeddingLoaded() }, activeTasks: semanticTasks() };
 };
-
-const indexRebuild: Handler = (raw) => {
+const indexRebuild: Handler = function* (raw, context, host) {
   const input = exactObject(raw, ["taskId"], "input");
-  safeTaskId(input.taskId);
-  throw fail("provider_unavailable", "The signed embedding asset is not admitted for this plugin version");
+  return yield* rebuildIndex({ taskId: safeTaskId(input.taskId) }, context as ActionRequest, host, semanticEngine);
 };
 
 function queryInput(raw: unknown): { query: string; granularity: "scene" | "sentence"; limit: number; excludeSceneIds?: string[] } {
@@ -80,10 +76,8 @@ function queryInput(raw: unknown): { query: string; granularity: "scene" | "sent
   };
 }
 
-const passageQuery: Handler = (raw, context) => {
-  const input = queryInput(raw);
-  if (!input.query.trim()) return { snapshot: context.snapshot, model: unavailableModel("embedding"), results: [] };
-  throw fail("index_missing", "No verified Semantic index exists for this snapshot; the embedding asset is unavailable");
+const passageQuery: Handler = function* (raw, context, host) {
+  return yield* queryIndex(queryInput(raw), context as ActionRequest, host, semanticEngine);
 };
 
 const rerank: Handler = (raw) => {
@@ -138,13 +132,13 @@ const clusterTermsAction: Handler = function* (raw, context, host) {
   return { snapshot: context.snapshot, results };
 };
 
-const contradictionCandidates: Handler = (raw, context) => {
+const contradictionCandidates: Handler = function* (raw, context, host) {
   const input = exactObject(raw, ["cursor", "limit"], "input");
   if (input.cursor !== undefined && (typeof input.cursor !== "string" || input.cursor.length > 4096) ||
       input.limit !== undefined && (!Number.isInteger(input.limit) || (input.limit as number) < 1 || (input.limit as number) > 100)) {
     throw fail("invalid_input", "Contradiction page request is invalid");
   }
-  return { snapshot: context.snapshot, model: unavailableModel("embedding"), indexAvailable: false, candidates: [], nextCursor: null, complete: true };
+  return yield* contradictionPage(input as { cursor?: string; limit?: number }, context as ActionRequest, host, semanticEngine);
 };
 
 function parsePreference(value: unknown): { rerankerEnabled: boolean } {
@@ -206,12 +200,13 @@ const settingsUpdate: Handler = (raw, context) => {
 
 const taskStatus: Handler = (raw, context) => {
   parseEmpty(raw);
-  return { snapshot: context.snapshot, activeTasks: [] };
+  return { snapshot: context.snapshot, activeTasks: semanticTasks() };
 };
 
 const taskCancel: Handler = (raw, context) => {
   const input = exactObject(raw, ["taskId"], "input");
-  return { snapshot: context.snapshot, taskId: safeTaskId(input.taskId), cancelled: false };
+  const taskId = safeTaskId(input.taskId);
+  return { snapshot: context.snapshot, taskId, cancelled: cancelSemanticTask(taskId) };
 };
 
 const implementation = createGuest("proprium.semantic", {
@@ -231,6 +226,7 @@ export const guest = {
   initialize: implementation.initialize,
   invoke: implementation.invoke,
   dispose(): void {
+    endSemanticTask();
     releaseEmbedding();
     implementation.dispose();
   },

@@ -8,7 +8,7 @@ import { crc32, safeRelativePath } from "./domain.js";
 export const ARTIFACT_CHUNK_BYTES = 64 * 1024;
 export const DEFAULT_ARTIFACT_LIMIT = 128 * 1024 * 1024;
 
-export interface CreatedArtifact { artifact_id: string; max_bytes?: number }
+export interface CreatedArtifact { artifact_id: string; max_bytes?: number; max_chunk_bytes?: number }
 export interface SealedArtifact {
   artifact_id: string;
   media_type: string;
@@ -106,6 +106,7 @@ export class Sha256 {
 export class ArtifactSink {
   private id: string | undefined;
   private maxBytes = DEFAULT_ARTIFACT_LIMIT;
+  private chunkBytes = ARTIFACT_CHUNK_BYTES;
   private sequence = 0;
   private totalBytes = 0;
   private readonly digestState = new Sha256();
@@ -129,12 +130,14 @@ export class ArtifactSink {
     if (!value || typeof value.artifact_id !== "string" || !value.artifact_id) {
       throw Object.assign(new Error("Host did not create the export artifact"), { code: "storage_unknown" });
     }
-    if (value.max_bytes !== undefined && (!Number.isSafeInteger(value.max_bytes) || value.max_bytes < 1)) {
+    if ((value.max_bytes !== undefined && (!Number.isSafeInteger(value.max_bytes) || value.max_bytes < 1)) ||
+        (value.max_chunk_bytes !== undefined && (!Number.isSafeInteger(value.max_chunk_bytes) || value.max_chunk_bytes < 1 || value.max_chunk_bytes > 256 * 1024))) {
       yield* this.host.request("artifact.discard", { artifact_id: value.artifact_id });
       throw Object.assign(new Error("Host returned an invalid artifact limit"), { code: "invalid_input" });
     }
     this.id = value.artifact_id;
     this.maxBytes = value.max_bytes ?? DEFAULT_ARTIFACT_LIMIT;
+    this.chunkBytes = Math.min(ARTIFACT_CHUNK_BYTES, value.max_chunk_bytes ?? ARTIFACT_CHUNK_BYTES);
     return this.id;
   }
 
@@ -143,8 +146,8 @@ export class ArtifactSink {
     if (this.totalBytes + bytes.byteLength > this.maxBytes) {
       throw Object.assign(new Error("Export exceeds the negotiated Host artifact limit"), { code: "artifact_too_large", retryable: false });
     }
-    for (let offset = 0; offset < bytes.byteLength; offset += ARTIFACT_CHUNK_BYTES) {
-      const chunk = bytes.subarray(offset, Math.min(bytes.byteLength, offset + ARTIFACT_CHUNK_BYTES));
+    for (let offset = 0; offset < bytes.byteLength; offset += this.chunkBytes) {
+      const chunk = bytes.subarray(offset, Math.min(bytes.byteLength, offset + this.chunkBytes));
       yield* this.host.request("artifact.append", {
         artifact_id: this.id,
         sequence: this.sequence++,

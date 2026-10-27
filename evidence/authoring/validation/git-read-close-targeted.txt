@@ -1,0 +1,25 @@
+[WebServer] (node:157087) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 6 tests using 1 worker
+
+(node:157105) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Skipping host requirements validation logic because `PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS` env variable is set.
+  ✓  1 [mobile-webkit] › tests/browser/cached-workspace-auth.acceptance.spec.ts:105:5 › cancel and repository verification failure leave the cached editor and Workspace intact (11.7s)
+GIT_CLOSE_PENDING ["list-files","log"]
+  ✓  2 [mobile-webkit] › tests/browser/cached-workspace-auth.acceptance.spec.ts:168:5 › repository list failure does not attach sync or show an empty signed-in picker (7.4s)
+(node:157491) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Skipping host requirements validation logic because `PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS` env variable is set.
+  ✓  3 [mobile-webkit] › tests/browser/cached-workspace-auth.acceptance.spec.ts:105:5 › cancel and repository verification failure leave the cached editor and Workspace intact (8.1s)
+GIT_CLOSE_PENDING ["verify"]
+GIT_CLOSE_PENDING ["list-files","log"]
+  ✓  4 [mobile-webkit] › tests/browser/cached-workspace-auth.acceptance.spec.ts:168:5 › repository list failure does not attach sync or show an empty signed-in picker (9.0s)
+(node:157662) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Skipping host requirements validation logic because `PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS` env variable is set.
+  ✓  5 [mobile-webkit] › tests/browser/cached-workspace-auth.acceptance.spec.ts:105:5 › cancel and repository verification failure leave the cached editor and Workspace intact (9.4s)
+  ✓  6 [mobile-webkit] › tests/browser/cached-workspace-auth.acceptance.spec.ts:168:5 › repository list failure does not attach sync or show an empty signed-in picker (8.3s)
+
+  6 passed (59.5s)

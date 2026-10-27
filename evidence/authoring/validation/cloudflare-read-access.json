@@ -1,0 +1,43 @@
+{
+  "schema": "proprium.authoring.remote-observation/v1",
+  "source_sha": "42c53475135a7449be803ef5707c01f1a4135f96",
+  "mutation_performed": false,
+  "management_reads": {
+    "R2_bucket_exists": true,
+    "custom_domains_SSL_and_ownership": "active",
+    "host_origin_cors": {
+      "allowed_origin": "https://proprium.yohn.jp",
+      "allowed_methods": [
+        "GET",
+        "HEAD"
+      ]
+    }
+  },
+  "public_reads": [
+    {
+      "url": "https://proprium-assets.yohn.jp/plugins/registry.json",
+      "status": 200,
+      "registry_version": "0.1.1",
+      "plugins": [
+        {
+          "id": "proprium.compute-sum",
+          "version": "0.1.0"
+        }
+      ],
+      "cors_origin": "https://proprium.yohn.jp"
+    },
+    {
+      "url": "https://plugins.proprium.yohn.jp/plugins/registry.json",
+      "status": 403
+    },
+    {
+      "url": "https://proprium-plugins.yohn.jp/plugins/registry.json",
+      "status": 403
+    },
+    {
+      "url": "https://proprium.yohn.jp/",
+      "status": 200
+    }
+  ],
+  "publication": "BLOCKED: production signer unavailable to integration; approved workflow restricted to main. Read access does not establish object-write or signing authority."
+}

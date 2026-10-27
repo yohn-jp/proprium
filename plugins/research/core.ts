@@ -1,3 +1,4 @@
+import { normalizeUnicode } from "../shared/unicode.js";
 /** Pure, deterministic Research algorithms used by the signed guest. */
 
 export const RESEARCH_PLUGIN_ID = "proprium.research";
@@ -62,7 +63,7 @@ const CODE_POINT_ORDER = (a: string, b: string): number => a < b ? -1 : a > b ? 
 
 export function compareCodePoints(a: string, b: string): number { return CODE_POINT_ORDER(a, b); }
 
-export function normalizeSearchText(value: string): string { return value.normalize("NFKC").toLowerCase(); }
+export function normalizeSearchText(value: string): string { return normalizeUnicode(value, "NFKC").toLowerCase(); }
 
 /** Japanese runs contribute adjacent character pairs; other words remain whole. */
 export function lexicalTokens(value: string): string[] {

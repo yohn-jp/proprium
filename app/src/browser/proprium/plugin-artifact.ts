@@ -1,3 +1,4 @@
+import { verifyEd25519 } from "./ed25519.js";
 import { assertDescriptor, assertSurface } from "./authoring/schema.js";
 import type { ActionDescriptor, SurfaceDeclaration } from "./authoring/types.js";
 
@@ -205,8 +206,7 @@ export async function admitPluginManifest(raw: Uint8Array, policy: ManifestAdmis
   if (await digest(raw) !== policy.expectedSha256) fail("digest_mismatch", "Manifest digest differs from pinned value");
   let valid = false;
   try {
-    const key = await crypto.subtle.importKey("raw", bytes(policy.trustedPublisherKey), { name: "Ed25519" }, false, ["verify"]);
-    valid = await crypto.subtle.verify({ name: "Ed25519" }, key, bytes(policy.signature), bytes(raw));
+    valid = verifyEd25519(raw, policy.signature, policy.trustedPublisherKey);
   } catch {
     return fail("invalid_signature", "Ed25519 verification is unavailable or failed");
   }

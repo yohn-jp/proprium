@@ -1,6 +1,7 @@
 import type { ActionDescriptor, ActionError, ActionRequest, ActionResult, Caller, JsonSchema, Scope, Snapshot } from "./types.js";
 import { assertActionRequest, assertDescriptor, assertResult, assertValue, scopeSchema, snapshotSchema } from "./schema.js";
 import { capabilityForHostOperation } from "./capabilities.js";
+import { isCanonOptionalEnrichment } from "./optional-enrichments.js";
 
 export type ActionAvailability = "ready" | "disabled" | "dependency_unavailable" | "capability_denied" | "incompatible";
 export interface VerifiedActionSet {
@@ -22,7 +23,7 @@ export interface InvocationAuthority {
   issue(principal: TrustedActionPrincipal, plugin_id: string, action_id: string): Promise<InvocationContext>;
   issueChild(parent: InvocationContext, caller_plugin_id: string, target_plugin_id: string, action_id: string,
     staging_snapshot?: string): Promise<InvocationContext>;
-  assertCurrent(context: InvocationContext): Promise<void>;
+  assertCurrent(context: InvocationContext, pinnedRead?: boolean): Promise<void>;
   isSnapshotCurrent(context: InvocationContext): boolean;
 }
 export interface RuntimeHostCall { call_id: string; operation: string; payload: Record<string, unknown> }
@@ -36,6 +37,7 @@ export interface ActionRuntime { invoke(options: RuntimeInvokeOptions): Promise<
 export interface HostOperationContext extends InvocationContext { invocation_id: string; plugin_id: string; descriptor: ActionDescriptor; request: ActionRequest }
 export interface StageLeaseInvocation { scope: Scope; invocation_id: string; caller_chain: readonly string[] }
 export interface HostCapabilityPorts {
+  providerRequest?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   identityRead?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   repositorySnapshotRead?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   fileList?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
@@ -77,6 +79,8 @@ export interface ActionDispatcherOptions {
   installed(plugin_id: string): Promise<VerifiedActionSet | undefined>; authority: InvocationAuthority; runtime: ActionRuntime;
   capabilities: HostCapabilityPorts; idempotency: ActionIdempotencyStore; schemas?: ActionSchemaValidator;
   randomId?: () => string; now?: () => number;
+  /** Host-owned controls do not enter the guest's exclusive execution slot. */
+  hostControlAction?: (pluginId: string, actionId: string) => boolean;
 }
 export interface ActionCall { plugin_id: string; action_id: string; input: Record<string, unknown>; idempotency_key?: string }
 export interface ActionListRequest { plugin_id: string; cursor?: string; limit?: number }
@@ -234,7 +238,8 @@ export class AuthoringActionDispatcher {
       throw new ActionDispatchError("capability_denied", "Required capability is not granted", false, { capability: name });
     }
     await this.options.authority.assertCurrent(current);
-    this.acquire(call.plugin_id, context.scope.workspace_id);
+    const executionId = this.options.hostControlAction?.(call.plugin_id, call.action_id) ? `${call.plugin_id}:${call.action_id}` : call.plugin_id;
+    this.acquire(executionId, context.scope.workspace_id);
     let idKey: IdempotencyKey | undefined; let bodyDigest: string | undefined; let reserved = false; let submitted = false;
     try {
       if (descriptor.effect === "propose") {
@@ -284,7 +289,7 @@ export class AuthoringActionDispatcher {
         retryable: error instanceof ActionDispatchError && error.retryable });
       throw error;
     } finally {
-      this.release(call.plugin_id, context.scope.workspace_id);
+      this.release(executionId, context.scope.workspace_id);
       if (ancestors.length === 0 && this.options.capabilities.releaseInvocation) {
         try {
           await this.options.capabilities.releaseInvocation({ scope: current.scope, invocation_id: current.invocation_id,
@@ -310,12 +315,12 @@ export class AuthoringActionDispatcher {
       throw new ActionDispatchError("capability_denied", "Navigation requires a Host UI gesture");
     }
     this.validateHostPayload(call.operation, call.payload);
-    if (call.operation === "workspace.plugin.invoke") return this.invokeDependency(call.payload, source, context, stack);
+    if (call.operation === "workspace.plugin.invoke") return this.invokeDependency(call.payload, source, context, stack, request, descriptor, markProposalSubmitted);
     if (call.operation === "actions.list") return this.listDependency(call.payload, source);
     const foreignLease = call.operation === "workspace.file.list" || call.operation === "workspace.file.read"
       ? this.findForeignLease(context.invocation_id ?? context.request_id, call.payload.snapshot, source.plugin_id, descriptor.action_id) : undefined;
     this.assertBoundPayload(call.operation, call.payload, request, foreignLease);
-    await this.options.authority.assertCurrent(context);
+    await this.options.authority.assertCurrent(context, call.operation === "workspace.file.read");
     const hostContext: HostOperationContext = { ...context, invocation_id: context.invocation_id ?? context.request_id,
       plugin_id: source.plugin_id, descriptor, request };
     const payload = this.bindIdentity(call.operation, call.payload, request, context, foreignLease);
@@ -330,6 +335,7 @@ export class AuthoringActionDispatcher {
       if (stagingToken !== undefined) await this.options.capabilities.validateStage!(stagingToken, hostContext);
     }
     switch (call.operation) {
+      case "provider.request": return this.port("providerRequest", payload, hostContext);
       case "workspace.identity.read": return this.port("identityRead", payload, hostContext);
       case "workspace.repository.snapshot.read": return this.repositorySnapshotRead(payload, hostContext);
       case "workspace.file.list": return this.port("fileList", payload, hostContext);
@@ -362,17 +368,26 @@ export class AuthoringActionDispatcher {
   }
 
   private async invokeDependency(payload: Record<string, unknown>, source: VerifiedActionSet,
-    context: InvocationContext, ancestors: readonly string[]): Promise<unknown> {
+    context: InvocationContext, ancestors: readonly string[], parentRequest: ActionRequest,
+    parentDescriptor: ActionDescriptor, markProposalSubmitted: () => void): Promise<unknown> {
     exactKeys(payload, ["plugin_id", "action_id", "input"], "Nested action");
     if (typeof payload.plugin_id !== "string" || typeof payload.action_id !== "string" || !isRecord(payload.input)) {
       throw new ActionDispatchError("invalid_input", "Nested action is malformed");
     }
-    if (!source.dependencies.includes(payload.plugin_id)) throw new ActionDispatchError("dependency_unavailable", "Target is not a declared dependency");
+    if (!source.dependencies.includes(payload.plugin_id) && !isCanonOptionalEnrichment(source.plugin_id, payload.plugin_id)) {
+      throw new ActionDispatchError("dependency_unavailable", "Target is outside the declared dependencies and Canon optional enrichments");
+    }
     const target = await this.options.installed(payload.plugin_id);
     if (!target || !target.enabled) throw new ActionDispatchError("dependency_unavailable", "Dependency is unavailable");
     this.assertInstalled(target, target.plugin_id);
     const descriptor = target.descriptors.find(item => item.action_id === payload.action_id);
     if (!descriptor) throw new ActionDispatchError("dependency_unavailable", "Dependency action is undeclared");
+    if (descriptor.effect === "propose" && parentDescriptor.effect !== "propose") {
+      throw new ActionDispatchError("capability_denied", "Read actions cannot delegate proposal effects");
+    }
+    if (descriptor.effect === "propose" && !parentRequest.idempotency_key) {
+      throw new ActionDispatchError("invalid_input", "A dependent proposal requires the parent's stable Host idempotency key");
+    }
     if (!descriptor.callers.includes("plugin") || (descriptor.caller_plugins && !descriptor.caller_plugins.includes(source.plugin_id))) {
       throw new ActionDispatchError("capability_denied", "Dependency action does not admit this caller");
     }
@@ -389,14 +404,22 @@ export class AuthoringActionDispatcher {
         !sameJson(child.snapshot, context.snapshot) || child.staging_snapshot !== staged) {
       throw new ActionDispatchError("capability_denied", "Dependency call changed the Host-issued scope, revision or staging lease");
     }
-    const result = await this.dispatchAuthorized({ plugin_id: target.plugin_id, action_id: descriptor.action_id, input: payload.input },
+    const childKey = descriptor.effect === "propose" ? await digest({ source: source.plugin_id, action: parentDescriptor.action_id,
+      key: parentRequest.idempotency_key, target: target.plugin_id, target_action: descriptor.action_id, input: payload.input,
+      workspace: context.scope.workspace_id, repository: context.scope.repository_id, branch: context.scope.branch }) : undefined;
+    const result = await this.dispatchAuthorized({ plugin_id: target.plugin_id, action_id: descriptor.action_id, input: payload.input,
+      ...(childKey ? { idempotency_key: childKey } : {}) },
       descriptor, target, child, ancestors);
     if (!result.ok) throw result.error;
-    return result.value;
+    if (descriptor.effect === "propose") markProposalSubmitted();
+    // Official guest adapters validate the child scope/snapshot and unwrap value.
+    // Stripping the envelope here turns every dependency result into a guest trap.
+    return result;
   }
   private async listDependency(payload: Record<string, unknown>, source: VerifiedActionSet): Promise<ActionListResult> {
     exactKeys(payload, ["plugin_id", "cursor", "limit"], "Action metadata");
-    if (typeof payload.plugin_id !== "string" || !source.dependencies.includes(payload.plugin_id)) throw new ActionDispatchError("dependency_unavailable", "Metadata is limited to dependencies");
+    if (typeof payload.plugin_id !== "string" || (!source.dependencies.includes(payload.plugin_id) &&
+        !isCanonOptionalEnrichment(source.plugin_id, payload.plugin_id))) throw new ActionDispatchError("dependency_unavailable", "Metadata is limited to dependencies and Canon optional enrichments");
     const target = await this.options.installed(payload.plugin_id);
     if (!target) throw new ActionDispatchError("dependency_unavailable", "Dependency is not installed");
     this.assertInstalled(target, target.plugin_id);
@@ -408,6 +431,11 @@ export class AuthoringActionDispatcher {
   }
   private assertBoundPayload(operation: string, payload: Record<string, unknown>, request: ActionRequest,
     foreignLease?: ForeignSnapshotLease): void {
+    if (operation.startsWith("artifact.") &&
+        ((payload.scope !== undefined && !sameJson(payload.scope, request.scope)) ||
+         (payload.snapshot !== undefined && !sameJson(payload.snapshot, request.snapshot)))) {
+      throw new ActionDispatchError("snapshot_stale", "Artifact context differs from the Host request");
+    }
     if (operation === "workspace.file.list" || operation === "workspace.file.read") {
       if (!foreignLease || !sameJson(payload.snapshot, foreignLease.snapshot)) this.stagingReadToken(payload, request);
     }
@@ -480,6 +508,7 @@ export class AuthoringActionDispatcher {
   }
   private validateHostPayload(operation: string, payload: Record<string, unknown>): void {
     const shapes: Readonly<Record<string, readonly string[]>> = {
+      "provider.request": ["request_id", "provider_id", "model_id", "purpose", "payload", "source_manifest", "max_output_bytes"],
       "workspace.identity.read": ["paths"], "workspace.file.list": ["snapshot", "prefix", "cursor", "limit"],
       "workspace.file.read": ["snapshot", "path", "offset", "length"], "workspace.navigation": ["target", "expected_context", "intent"],
       "workspace.repository.snapshot.read": ["workspace_id", "repository_id", "branch", "snapshot_id"],
@@ -487,7 +516,7 @@ export class AuthoringActionDispatcher {
       "workspace.change.timestamp": [], "workspace.asset.read": ["group_id", "file_path", "offset", "length"],
       "workspace.derived.cache.get": ["key"], "workspace.derived.cache.put": ["key", "value"],
       "workspace.derived.cache.evict": ["key"], "plugin.preferences.read": ["key", "schema_version"],
-      "artifact.create": ["media_type", "filename"], "artifact.append": ["artifact_id", "sequence", "bytes"],
+      "artifact.create": ["media_type", "filename", "scope", "snapshot"], "artifact.append": ["artifact_id", "sequence", "bytes"],
       "artifact.seal": ["artifact_id", "sha256", "total_bytes"], "artifact.discard": ["artifact_id"],
       "workspace.change.list": ["cursor", "limit", "status"], "workspace.change.status": ["proposal_id"],
       "workspace.change.observations": ["proposal_id", "cursor", "limit"],
@@ -499,7 +528,7 @@ export class AuthoringActionDispatcher {
     const allowed = shapes[operation];
     if (!allowed) throw new ActionDispatchError("capability_denied", "Host operation is outside v2 registry");
     exactKeys(payload, allowed, "Host operation " + operation);
-    const str = (key: string, max = 1024) => { const value = payload[key]; if (value !== undefined && (typeof value !== "string" || value.length > max)) throw new ActionDispatchError("invalid_input", operation + " " + key + " is invalid"); };
+    const str = (key: string, max = 1024) => { const value = payload[key]; if (value !== undefined && !(key === "cursor" && value === null) && (typeof value !== "string" || value.length > max)) throw new ActionDispatchError("invalid_input", operation + " " + key + " is invalid"); };
     const num = (key: string, min: number, max: number) => { const value = payload[key]; if (value !== undefined && (!Number.isSafeInteger(value) || (value as number) < min || (value as number) > max)) throw new ActionDispatchError("invalid_input", operation + " " + key + " is out of range"); };
     if (operation === "workspace.identity.read" && payload.paths !== undefined &&
         (!Array.isArray(payload.paths) || payload.paths.length > 100 ||
@@ -516,18 +545,18 @@ export class AuthoringActionDispatcher {
       }
     }
     if (operation === "workspace.file.list") { if (!isRecord(payload.snapshot)) throw new ActionDispatchError("invalid_input", "Host snapshot required"); str("prefix"); str("cursor", 512); num("limit", 1, 256); }
-    if (operation === "workspace.file.read") { if (!isRecord(payload.snapshot) || typeof payload.path !== "string" || !this.safePath(payload.path)) throw new ActionDispatchError("invalid_path", "File read path or snapshot invalid"); num("offset", 0, Number.MAX_SAFE_INTEGER); num("length", 1, 256 * 1024); }
+    if (operation === "workspace.file.read") { if (!isRecord(payload.snapshot) || typeof payload.path !== "string" || !this.safePath(payload.path)) throw new ActionDispatchError("invalid_path", "File read path or snapshot invalid"); num("offset", 0, Number.MAX_SAFE_INTEGER); num("length", 0, 256 * 1024); }
     if (operation === "workspace.change.propose" && !isRecord(payload.changeset)) throw new ActionDispatchError("invalid_input", "ChangeSet required");
     if (operation === "workspace.change.stage") { if (!isRecord(payload.base_snapshot)) throw new ActionDispatchError("invalid_input", "Original Host snapshot required"); str("previous_stage", 256); if (!Array.isArray(payload.units)) throw new ActionDispatchError("invalid_input", "Stage units required"); }
     if (operation === "workspace.change.timestamp" && Object.keys(payload).length !== 0) throw new ActionDispatchError("invalid_input", "Timestamp request is empty");
     if (operation === "workspace.asset.read") {
       str("group_id", 128);
       if (typeof payload.file_path !== "string" || !this.safePath(payload.file_path)) throw new ActionDispatchError("invalid_path", "Asset path is invalid");
-      num("offset", 0, Number.MAX_SAFE_INTEGER); num("length", 1, 65_536);
+      num("offset", 0, Number.MAX_SAFE_INTEGER); num("length", 1, 256 * 1024);
     }
     if (operation.startsWith("workspace.derived.cache.") && !isRecord(payload.key)) throw new ActionDispatchError("invalid_input", "Cache key required");
     if (operation === "artifact.create") { str("media_type", 256); str("filename", 256); }
-    if (operation === "artifact.append") { str("artifact_id", 256); num("sequence", 0, Number.MAX_SAFE_INTEGER); if (!Array.isArray(payload.bytes) || payload.bytes.length > 65_536 || payload.bytes.some(value => !Number.isInteger(value) || (value as number) < 0 || (value as number) > 255)) throw new ActionDispatchError("invalid_input", "Artifact chunk exceeds RPC budget"); }
+    if (operation === "artifact.append") { str("artifact_id", 256); num("sequence", 0, Number.MAX_SAFE_INTEGER); if (!Array.isArray(payload.bytes) || payload.bytes.length > 256 * 1024 || payload.bytes.some(value => !Number.isInteger(value) || (value as number) < 0 || (value as number) > 255)) throw new ActionDispatchError("invalid_input", "Artifact chunk exceeds RPC budget"); }
     if (operation === "artifact.seal") { str("artifact_id", 256); num("total_bytes", 0, 128 * 1024 * 1024); if (typeof payload.sha256 !== "string" || !/^[a-f0-9]{64}$/u.test(payload.sha256)) throw new ActionDispatchError("invalid_input", "Artifact digest is invalid"); }
     if (operation.startsWith("artifact.") && operation !== "artifact.create" && operation !== "artifact.append" && operation !== "artifact.seal") str("artifact_id", 256);
     if (operation.startsWith("workspace.change.")) { str("proposal_id", 256); str("cursor", 512); str("ref", 512); num("limit", 1, operation === "workspace.change.inspect" ? 50 : 100); num("offset", 0, Number.MAX_SAFE_INTEGER); num("length", 1, 256 * 1024); if (payload.include_source !== undefined && typeof payload.include_source !== "boolean") throw new ActionDispatchError("invalid_input", "include_source must be boolean"); }

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AuthoringSurface, formValuesToJson, mergeInitialFormValues, optionsForRecordField, resolveAuthoringNavigation, resolveAuthoringTemplate } from "./AuthoringSurface.js";
+import { AuthoringSurface, formValuesToJson, initialFormValues, mergeInitialFormValues, omitAbsentOptionalFormInputs, optionsForRecordField, resolveAuthoringNavigation, resolveAuthoringTemplate } from "./AuthoringSurface.js";
 import type { AuthoringSurfaceDeclaration } from "./types.js";
 import { validateAuthoringSurfaceDeclaration } from "./validate.js";
 
@@ -19,6 +20,60 @@ const outlineSurface: AuthoringSurfaceDeclaration = {
     activate: { action_id: "proprium.narrative.scene.open", input_template: { scene_id: { data_key: "item.id" } } },
   },
 };
+
+test("every official signed surface fits the Host renderer while pathological JSON remains bounded", () => {
+  for (const name of ["narrative", "knowledge", "research", "paired-writing", "diagnostics", "speaker", "semantic", "publishing"]) {
+    const manifest = JSON.parse(readFileSync(new URL(`../../../../../../plugins/${name}/plugin.json`, import.meta.url), "utf8"));
+    for (const surface of manifest.ui) assert.doesNotThrow(() => validateAuthoringSurfaceDeclaration(surface), `${name}:${surface.id}`);
+  }
+  assert.throws(() => validateAuthoringSurfaceDeclaration({ ...outlineSurface, context: { values: Array(1024).fill(0) } }), /nesting or item limit/u);
+  let deep: unknown = "leaf";
+  for (let i = 0; i < 20; i++) deep = { value: deep };
+  assert.throws(() => validateAuthoringSurfaceDeclaration({ ...outlineSurface, context: deep }), /nesting or item limit/u);
+});
+
+test("unchecked required boolean fields submit false while optional fields stay absent", () => {
+  const fields = [
+    { id: "appendix", type: "boolean" as const, label: "Include appendix", required: true },
+    { id: "optional", type: "boolean" as const, label: "Optional flag" },
+  ];
+  const values = initialFormValues(fields, {});
+  assert.deepEqual(formValuesToJson(fields, values), { appendix: false });
+});
+
+test("optional absent form values are omitted from inputs without hiding missing required or unknown keys", () => {
+  const fields = [{ id: "title", type: "string" as const, label: "Title" },
+    { id: "appendix", type: "boolean" as const, label: "Appendix", required: true }];
+  const binding = { action_id: "publishing.export", input_template: { title: { data_key: "form.title" }, appendix: { data_key: "form.appendix" } } };
+  const form = { appendix: false };
+  const pruned = omitAbsentOptionalFormInputs(binding, fields, form);
+  assert.deepEqual(resolveAuthoringTemplate(pruned.input_template, { form }), { appendix: false });
+  const filled = { title: "A book", appendix: false };
+  assert.deepEqual(resolveAuthoringTemplate(omitAbsentOptionalFormInputs(binding, fields, filled).input_template, { form: filled }), filled);
+  assert.throws(() => resolveAuthoringTemplate(omitAbsentOptionalFormInputs(binding, fields, {}).input_template, { form: {} }), /missing declared data key/u);
+  const typo = { action_id: "publishing.export", input_template: { title: { data_key: "form.typo" } } };
+  assert.throws(() => resolveAuthoringTemplate(omitAbsentOptionalFormInputs(typo, fields, {}).input_template, { form: {} }), /missing declared data key/u);
+});
+
+test("active nested tab exposes its signed read and separate detail/source controls", () => {
+  const surface: AuthoringSurfaceDeclaration = {
+    id: "bible", kind: "panel", title: "Bible", context: {},
+    body: { id: "tabs", type: "tabs", tabs: [{ id: "characters", title: "Characters", body: {
+      id: "characters-list", type: "list", title: "Character records",
+      load_action: { action_id: "knowledge.entities.list", input_template: { type: "character" } },
+      items: { data_key: "records" }, primary: "name",
+      item_action: { action_id: "knowledge.entities.get", input_template: { id: { data_key: "item.id" } } },
+      item_navigation: { intent: "open", target: { path: { data_key: "item.path" } } },
+    } }] },
+  };
+  const html = renderToStaticMarkup(createElement(AuthoringSurface, { surface,
+    data: { records: [{ id: "alice", name: "Alice", path: "characters/alice.yaml" }] },
+    onInvoke: async () => ({}), onRead: async () => ({ ok: true }),
+  }));
+  assert.match(html, /Character recordsを読み込む/u);
+  assert.match(html, /<strong>Alice<\/strong>/u);
+  assert.match(html, /Aliceの原文を開く/u);
+});
 
 test("authoring surface renders a navigable outline and context as escaped Host UI", () => {
   const html = renderToStaticMarkup(createElement(AuthoringSurface, {

@@ -10,7 +10,7 @@ const browserAcceptanceFiles = [
   "browser-git-sync.acceptance.spec.ts",
   "plugin-runtime.acceptance.spec.ts",
 ];
-const webKitFiles = ["authoring-snapshot.acceptance.spec.ts", "browser-git-sync.acceptance.spec.ts", "plugin-runtime.acceptance.spec.ts"];
+const webKitFiles = ["authoring-snapshot.acceptance.spec.ts", "authoring-writer-git-guard.acceptance.spec.ts", "browser-git-sync.acceptance.spec.ts", "plugin-runtime.acceptance.spec.ts"];
 const hasLiveGitHubToken = Boolean(process.env.PROPRIUM_E2E_GITHUB_TOKEN || process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN);
 const selectedPattern = selectedTestFile ? `**/${selectedTestFile}` : undefined;
 

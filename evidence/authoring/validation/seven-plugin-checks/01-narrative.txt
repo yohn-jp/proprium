@@ -1,0 +1,36 @@
+✔ manifest action inventory and closed output schemas match the guest contract (9.040036ms)
+✔ structural commands expose guarded creation and reorder forms (0.53117ms)
+✔ adopted Host validator accepts every Narrative descriptor and canonical surface (35.582675ms)
+✔ real values from all 14 Narrative actions match their declared output schemas (93.391102ms)
+✔ compiler schema preserves the pinned bounded dynamic JSON shape and rejects unsafe keys/depth (2.203253ms)
+✔ SHA-256 guest identity uses the standard digest (0.135811ms)
+✔ tree pages more than 256 hierarchy files and opens the explicit manuscript link (260.786991ms)
+✔ outline pages offer scoped hierarchy actions and scene opening (6.60332ms)
+✔ outline selects a scene for revision-guarded rename and relink (3.891347ms)
+✔ proposal output projects the durable Host preview to the declared compact schema (2.427592ms)
+✔ selected outline rows expose the correct parent for structure creation (2.36113ms)
+✔ scene creation proposes body, metadata and reordered siblings in one unit (8.623427ms)
+✔ new volume order follows the highest finite order and titles retain accepted surrounding whitespace (5.262341ms)
+✔ known but unusable hierarchy paths diagnose malformed work and do not return an empty root tree (2.178224ms)
+✔ hierarchy keeps tied and missing order rows accessible with diagnostics (4.151044ms)
+✔ reading marks preserve malformed rows, YAML comments and unknown fields with UTF-16 spans (5.783896ms)
+✔ reading mark UI proposal uses Host timestamp and stable idempotency-derived ID (3.187215ms)
+✔ changes.compile emits a source-mapped scene metadata/body unit and complete sibling insert (17.564017ms)
+✔ changes.compile splits Narrative scene fields from semantic fields and verifies UTF-16 mark evidence (11.782175ms)
+✔ changes.compile rejects unsupported owners and stale source revisions (4.823374ms)
+✔ changes.compile reads staged YAML but keeps source preconditions and read_set on the original snapshot (15.073948ms)
+✔ resume.marks.list pages scoped markers, checks linked body revisions and reports file-level publication (20.862468ms)
+✔ resume markers reject malformed manuscript revisions (3.461242ms)
+✔ resume marker non-mapping rows report malformed storage (15.855698ms)
+✔ resume.mark.propose updates only this device marker and preserves unknown YAML with exact preconditions (14.770215ms)
+✔ resume.mark.propose creates the portable marker with an absent-path precondition (1.651974ms)
+✔ YAML edits preserve unrelated source and the component guest resumes Host calls (5.042116ms)
+✔ component guest routes changes.compile through cooperative Host continuations (2.811477ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 28
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1105.309461

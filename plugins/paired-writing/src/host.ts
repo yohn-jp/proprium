@@ -36,6 +36,21 @@ export function* invokeAction<T>(
   return result.value;
 }
 
+/** Resolve the canonical context and its metadata path, supplied by scene.open. */
+export function* readNarrativeScene<T extends { scene_id: string; metadata_revision: string; manuscript_path: string; manuscript_revision: string }>(
+  host: GuestHost, request: ActionRequest, sceneId: string,
+): Generator<HostCall, T & { metadata_path: string }, unknown> {
+  const context = yield* invokeAction<T>(host, request, "proprium.narrative", "proprium.narrative.scene.context", { scene_id: sceneId });
+  if (!context || context.scene_id !== sceneId) throw new PairedError("scene_not_found", `Scene not found: ${sceneId}`);
+  const opened = yield* invokeAction<{ scene: { id: string; metadata_path: string; metadata_revision: string }; manuscript_path: string; manuscript_revision: string }>(
+    host, request, "proprium.narrative", "proprium.narrative.scene.open", { scene_id: sceneId });
+  if (!opened || !opened.scene || opened.scene.id !== sceneId || typeof opened.scene.metadata_path !== "string" || !opened.scene.metadata_path ||
+      opened.scene.metadata_revision !== context.metadata_revision || opened.manuscript_path !== context.manuscript_path || opened.manuscript_revision !== context.manuscript_revision) {
+    throw new PairedError("snapshot_stale", "Narrative scene context and open results disagree");
+  }
+  return { ...context, metadata_path: opened.scene.metadata_path };
+}
+
 /** Confirm a legacy Story project ID against Host-registered workspace bindings. */
 export function* verifyLegacyProjectBinding(
   host: GuestHost,
@@ -134,9 +149,14 @@ function cacheAddress(request: ActionRequest, key: string): Record<string, unkno
 }
 
 export function* cacheGet<T>(host: GuestHost, request: ActionRequest, key: string): Generator<HostCall, T | undefined, unknown> {
-  return yield* host.request<T | undefined>(HOST_OPERATIONS.cacheGet, cacheAddress(request, key));
+  const receipt = yield* host.request<unknown>(HOST_OPERATIONS.cacheGet, { key: cacheAddress(request, key) });
+  if (!receipt || typeof receipt !== "object" || !("found" in receipt) || typeof receipt.found !== "boolean" ||
+      (receipt.found && !("value" in receipt)) || (!receipt.found && "value" in receipt)) {
+    throw new PairedError("invalid_input", "Host returned a malformed derived cache receipt");
+  }
+  return receipt.found ? (receipt as unknown as { value: T }).value : undefined;
 }
 
 export function* cachePut(host: GuestHost, request: ActionRequest, key: string, value: unknown): Generator<HostCall, void, unknown> {
-  yield* host.request(HOST_OPERATIONS.cachePut, { ...cacheAddress(request, key), value });
+  yield* host.request(HOST_OPERATIONS.cachePut, { key: cacheAddress(request, key), value });
 }

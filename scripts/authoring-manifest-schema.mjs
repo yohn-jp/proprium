@@ -12,6 +12,7 @@ async function canonicalSchema() {
 
 export async function assertAuthoringDeclarations(pluginId, capabilities, actions, surfaces) {
   const { assertDescriptor, assertSurface } = await canonicalSchema();
+  const { validateAuthoringSurfaceDeclaration } = await import("../app/src/browser/proprium/host/authoring/validate.ts");
   const actionIds = new Set();
   for (const action of actions) {
     assertDescriptor(action);
@@ -34,6 +35,7 @@ export async function assertAuthoringDeclarations(pluginId, capabilities, action
   const surfaceIds = new Set();
   for (const surface of surfaces) {
     assertSurface(surface);
+    validateAuthoringSurfaceDeclaration(surface);
     if (surfaceIds.has(surface.id)) throw new Error(`${pluginId} repeats UI surface ${surface.id}`);
     surfaceIds.add(surface.id);
     const validateBindings = value => {

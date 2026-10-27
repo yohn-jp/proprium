@@ -1,0 +1,12 @@
+[WebServer] (node:227248) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:227274) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Skipping host requirements validation logic because `PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS` env variable is set.
+[WebServer] [BABEL] Note: The code generator has deoptimised the styling of /tmp/proprium-navigation-cache-227187/deps/react-dom_client.js?v=a6e4d41c as it exceeds the max of 500KB.
+  ✓  1 [mobile-webkit] › tests/browser/authoring-readingmarks.acceptance.ts:63:5 › saved selection becomes a reviewed reading mark without changing manuscript text (31.7s)
+
+  1 passed (34.4s)

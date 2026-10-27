@@ -33,8 +33,12 @@ class HostHarness {
     this.calls.push({ operation, payload });
     if (operation === "workspace.plugin.invoke") {
       assert.equal(payload.plugin_id, "proprium.narrative");
-      assert.equal(payload.action_id, "proprium.narrative.scene.context");
-      const result: ActionResult<typeof scene> = { ok: true, request_id: "nested-request", scope, snapshot: this.activeSnapshot, value: scene, warnings: [] };
+      assert.ok(["proprium.narrative.scene.context", "proprium.narrative.scene.open"].includes(String(payload.action_id)));
+      const { metadata_path, ...context } = scene;
+      const value = payload.action_id === "proprium.narrative.scene.open"
+        ? { scene: { id: scene.scene_id, metadata_path, metadata_revision: scene.metadata_revision }, manuscript_path: scene.manuscript_path, manuscript_revision: scene.manuscript_revision }
+        : context;
+      const result: ActionResult<typeof value> = { ok: true, request_id: "nested-request", scope, snapshot: this.activeSnapshot, value, warnings: [] };
       return result;
     }
     if (operation === "workspace.file.read") {
@@ -53,10 +57,21 @@ class HostHarness {
       };
     }
     if (operation === "workspace.derived.cache.put") {
-      this.cache.set(String(payload.key), payload.value);
-      return null;
+      assert.deepEqual(Object.keys(payload).sort(), ["key", "value"]);
+      const key = payload.key as Record<string, unknown>;
+      assert.equal(key.plugin_id, "proprium.paired-writing");
+      assert.ok([snapshot.id, "draft-snapshot-1"].includes((key.snapshot as typeof snapshot).id));
+      this.cache.set(String(key.key), payload.value);
+      return { stored: true };
     }
-    if (operation === "workspace.derived.cache.get") return this.cache.get(String(payload.key));
+    if (operation === "workspace.derived.cache.get") {
+      assert.deepEqual(Object.keys(payload), ["key"]);
+      const key = payload.key as Record<string, unknown>;
+      assert.equal(key.plugin_id, "proprium.paired-writing");
+      assert.ok([snapshot.id, "draft-snapshot-1"].includes((key.snapshot as typeof snapshot).id));
+      const value = this.cache.get(String(key.key));
+      return value === undefined ? { found: false } : { found: true, value };
+    }
     if (operation === "workspace.change.propose") {
       this.proposal = payload.changeset as ChangeSet;
       return { proposal_id: "proposal-1", preview: { title: this.proposal.title, read_paths: this.proposal.read_set.map((item) => item.path) } };
@@ -158,7 +173,7 @@ test("explicit draft capture reads the Host-issued saved and draft snapshots wit
   assert.equal(saved?.included, false);
   assert.equal(saved?.content, "");
   assert.equal(sharedDraft?.content, draftText);
-  assert.deepEqual(harness.calls.filter((call) => call.operation === "workspace.file.read").map((call) => (call.payload.snapshot as Snapshot).id), [snapshot.id, draftSnapshot.id]);
+  assert.deepEqual(harness.calls.filter((call) => call.operation === "workspace.file.read").map((call) => (call.payload.snapshot as Snapshot).id), [snapshot.id, "draft-snapshot-1"]);
   assert.equal(harness.calls.some((call) => call.operation === "workspace.draft.read"), false);
 });
 
@@ -242,4 +257,13 @@ test("proposal receipt actions are scoped read-only Host calls", async () => {
   ]);
   assert.deepEqual(harness.calls.at(-1)?.payload, { proposal_id: "proposal-1", ref: "source-1", offset: 0, length: 65_536 });
   assert.equal(harness.calls.some((call) => ["workspace.change.approve", "workspace.change.apply", "workspace.change.reject"].includes(call.operation)), false);
+});
+
+test("rewrite panel binds its proposal to the exact manuscript citation", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const manifest = JSON.parse(await readFile(new URL("../plugin.json", import.meta.url), "utf8"));
+  const panel = manifest.ui.find((entry: { id: string }) => entry.id === "paired-writing");
+  const candidates = panel.body.tabs.find((tab: { id: string }) => tab.id === "rewrite-candidates-tab").body;
+  assert.equal(candidates.item_action.input_template.manuscriptPath.data_key, "last_action_result.citations.0.path");
+  assert.equal(candidates.item_action.input_template.manuscriptRevision.data_key, "last_action_result.citations.0.revision");
 });

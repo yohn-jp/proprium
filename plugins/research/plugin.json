@@ -252,7 +252,6 @@
           "nextCursor",
           "indexSnapshot",
           "coverage",
-          "warnings",
           "query",
           "mode"
         ],
@@ -2428,6 +2427,68 @@
                 "data_key": "last_action_result.nextCursor"
               }
             }
+          },
+          {
+            "id": "search-index-status",
+            "title": "索引状態",
+            "body": {
+              "id": "research-index-status-detail",
+              "type": "detail",
+              "title": "索引状態",
+              "load_action": {
+                "action_id": "research.index.status",
+                "input_template": {}
+              },
+              "value": {
+                "data_key": "last_action_result"
+              },
+              "fields": [
+                {
+                  "key": "state",
+                  "label": "状態"
+                },
+                {
+                  "key": "indexSnapshot",
+                  "label": "索引 snapshot"
+                },
+                {
+                  "key": "coverage.documents",
+                  "label": "文書数"
+                },
+                {
+                  "key": "coverage.bytes",
+                  "label": "バイト数"
+                },
+                {
+                  "key": "lastError.message",
+                  "label": "エラー"
+                }
+              ]
+            }
+          },
+          {
+            "id": "search-index-rebuild",
+            "title": "索引を再構築",
+            "body": {
+              "id": "research-index-rebuild-form",
+              "type": "form",
+              "title": "索引を再構築",
+              "fields": [
+                {
+                  "id": "force",
+                  "label": "保存済み索引を破棄して再構築",
+                  "type": "boolean"
+                }
+              ],
+              "submit": {
+                "action_id": "research.index.rebuild",
+                "input_template": {
+                  "force": {
+                    "data_key": "form.force"
+                  }
+                }
+              }
+            }
           }
         ]
       }
@@ -2948,13 +3009,150 @@
         "label": "文章分析には、利用者が明示的に有効化した署名済み日本語トークナイザーが必要です。"
       },
       "body": {
-        "id": "research-analyzer-unavailable",
-        "type": "status",
-        "title": "ローカル解析器",
-        "state": "unavailable",
-        "messages": {
-          "unavailable": "この Research 配布物には形態素解析器が含まれていません。解析データを取得したり、外部へ送信したりしません。"
-        }
+        "id": "research-analyzer-tabs",
+        "type": "tabs",
+        "title": "ローカル形態素解析",
+        "tabs": [
+          {
+            "id": "analysis-input",
+            "title": "入力",
+            "body": {
+              "id": "research-analysis-form",
+              "type": "form",
+              "title": "入力した文章を解析",
+              "description": "解析にはローカル辞書が必要です。辞書が利用できない場合は理由が表示されます。入力は原稿として保存されません。",
+              "fields": [
+                {
+                  "id": "text",
+                  "label": "解析する文章",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 1024
+                }
+              ],
+              "submit": {
+                "action_id": "research.nlp.analyze",
+                "input_template": {
+                  "text": {
+                    "data_key": "form.text"
+                  },
+                  "source": {
+                    "kind": "literal"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "analysis-tokens",
+            "title": "解析結果",
+            "body": {
+              "id": "research-analysis-tokens",
+              "type": "table",
+              "title": "形態素",
+              "rows": {
+                "data_key": "last_action_result.tokens"
+              },
+              "columns": [
+                {
+                  "key": "surface",
+                  "label": "表記"
+                },
+                {
+                  "key": "pos",
+                  "label": "品詞"
+                },
+                {
+                  "key": "reading",
+                  "label": "読み"
+                },
+                {
+                  "key": "base",
+                  "label": "基本形"
+                },
+                {
+                  "key": "start",
+                  "label": "開始"
+                },
+                {
+                  "key": "end",
+                  "label": "終了"
+                },
+                {
+                  "key": "sentenceIndex",
+                  "label": "文番号（0から）"
+                }
+              ]
+            }
+          },
+          {
+            "id": "token-count-input",
+            "title": "トークン数",
+            "body": {
+              "id": "research-token-count-form",
+              "type": "form",
+              "title": "入力した文章のトークン数",
+              "description": "入力した文章だけをローカル辞書で数えます。辞書が利用できない場合は理由が表示されます。原稿は自動取得されず、入力は保存されません。",
+              "fields": [
+                {
+                  "id": "text",
+                  "label": "数える文章",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 1024
+                }
+              ],
+              "submit": {
+                "action_id": "research.nlp.countTokens",
+                "input_template": {
+                  "texts": [
+                    {
+                      "data_key": "form.text"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "token-count-result",
+            "title": "トークン数の結果",
+            "body": {
+              "id": "research-token-count-detail",
+              "type": "detail",
+              "title": "トークン数の結果",
+              "value": {
+                "data_key": "last_action_result"
+              },
+              "fields": [
+                {
+                  "key": "counts",
+                  "label": "トークン数"
+                },
+                {
+                  "key": "identity.modelId",
+                  "label": "解析器"
+                },
+                {
+                  "key": "identity.method",
+                  "label": "方法"
+                },
+                {
+                  "key": "identity.version",
+                  "label": "バージョン"
+                },
+                {
+                  "key": "identity.digest",
+                  "label": "辞書 digest"
+                },
+                {
+                  "key": "fallbackReason",
+                  "label": "代替方法の理由"
+                }
+              ]
+            }
+          }
+        ]
       }
     },
     {

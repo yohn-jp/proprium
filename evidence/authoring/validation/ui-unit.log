@@ -1,0 +1,51 @@
+$ pnpm --filter @scriptorium/contracts build && pnpm --dir app exec node --import tsx --test 'src/workspace/*.test.ts' 'src/editor/cm/*.test.ts' 'src/theme.test.ts' 'src/editor.test.ts' 'src/editor/terms.test.ts' 'src/journal.test.ts' 'src/continueCandidates.test.ts'
+$ tsc -p tsconfig.json
+✔ continue candidates keep distinct device scenes and prefer the local cursor for the same scene (4.063545ms)
+✔ handoff hints identify the other device without displaying prose (0.486253ms)
+✔ local reading positions are isolated by author, repository, and scene (0.364083ms)
+✔ cursor mapping uses source sentence numbering around Japanese punctuation and dialogue (19.449314ms)
+✔ reusable cursor positions preserve dialogue, UTF-16, and newline offsets (1.317759ms)
+✔ sentence position indexing constructs one Segmenter for a multiline document (6.06871ms)
+✔ selection-only cursor updates reuse the primed CodeMirror document and document index (7.515861ms)
+✔ writing input retains Japanese bracket pairing and skips an existing closer (6.902716ms)
+✔ single ellipses normalize to the source's two-character form (0.405523ms)
+✔ ruby parsing keeps the source's explicit Aozora syntax and frontmatter bytes (7.3813ms)
+✔ mobile writing symbols wrap selected text and preserve the cursor inside quotes (0.349711ms)
+✔ typography preferences retain source ranges and reject invalid values (0.459537ms)
+✔ mobile reading pagination clamps pages, measures columns, and follows writing direction (0.31221ms)
+✔ visible reader lines are resolved once per visit and can be queued again after leaving (1.558512ms)
+✔ editor keyboard navigation selects the term under the caret or one exact marked selection (0.281292ms)
+✔ visible term slices are sorted, clipped, and bounded (0.337323ms)
+✔ resolver spans use UTF-16 positions and malformed or overlapping results are discarded (8.171991ms)
+✔ Host navigation ranges are bounded UTF-16 selections (0.263033ms)
+✔ reading terms render as accessible links over Ruby text without changing the source (18.129438ms)
+✔ journal keys isolate author scopes and retain each operation generation (1.395286ms)
+✔ publication receipt keys are stable within a scope and distinct across batches/scopes (2.188387ms)
+✔ theme mode accepts only the three supported appearance choices (0.889755ms)
+✔ an explicit saved appearance wins over the system preference (0.400108ms)
+✔ a missing or invalid saved mode follows the system preference once at startup (0.180033ms)
+✔ floating layout validates identity, visibility, geometry and duplicates (1.33331ms)
+✔ floating layout is scoped and invalid saved data falls back without deletion (1.170625ms)
+✔ presets are valid editable trees with the expected panel selections (2.159628ms)
+✔ validation rejects malformed, duplicate, oversized, deep, and executable-looking state (0.699666ms)
+✔ dock operations create tab stacks and horizontal or vertical splits (0.802364ms)
+✔ panels can be hidden and restored, while the final visible panel is retained (0.520962ms)
+✔ newly available panels can be added without replacing an unsaved layout (0.32337ms)
+✔ resizing updates only the addressed split and keeps percentages normalized (0.328274ms)
+✔ layout persistence is separate by author scope and device class (1.488288ms)
+✔ a workspace save commits dock layout and floating geometry in one record (3.502059ms)
+✔ existing split-key layouts restore together and remain intact until an explicit atomic save (1.238945ms)
+✔ a failed workspace record write leaves the previous complete snapshot available after reload (0.735345ms)
+✔ malformed workspace records fall back without deleting their original bytes (0.654726ms)
+✔ unavailable module layouts and floating panels survive Core-only restoration (0.436316ms)
+✔ loading malformed state preserves its stored bytes until an explicit valid save (1.771756ms)
+✔ oversized or non-declarative payloads are rejected without storage writes (0.513684ms)
+✔ storage errors fall back without pretending that persistence succeeded (0.686218ms)
+ℹ tests 41
+ℹ suites 0
+ℹ pass 41
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1402.692624

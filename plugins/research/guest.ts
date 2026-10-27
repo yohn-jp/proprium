@@ -1,3 +1,4 @@
+import { normalizeUnicode } from "../shared/unicode.js";
 import { createGuest, withWarnings } from "../shared/guest.js";
 import { HOST_OPERATIONS, readAsset, type CacheKey, type FileChunk, type FileEntry, type FilePage } from "../shared/operations.js";
 import type { ActionRequest, ChangeSet, FileOperation } from "../../app/src/browser/proprium/authoring/types.js";
@@ -673,7 +674,7 @@ export function createResearchHandlers(): Record<string, Handler> {
       }
       const ownersByAlias = new Map<string, Set<string>>();
       for (const term of loaded.registry.terms) for (const alias of [term.canonical, ...term.aliases]) {
-        const normalized = alias.normalize("NFKC").toLowerCase();
+        const normalized = normalizeUnicode(alias, "NFKC").toLowerCase();
         const owners = ownersByAlias.get(normalized) ?? new Set<string>();
         owners.add(term.id); ownersByAlias.set(normalized, owners);
       }
@@ -681,7 +682,7 @@ export function createResearchHandlers(): Record<string, Handler> {
         .filter((term) => !input.prefix || term.canonical.startsWith(input.prefix as string) || term.aliases.some((alias) => alias.startsWith(input.prefix as string)))
         .map((term) => {
           const ambiguous = new Set([term.canonical, ...term.aliases]
-            .map((alias) => alias.normalize("NFKC").toLowerCase())
+            .map((alias) => normalizeUnicode(alias, "NFKC").toLowerCase())
             .filter((alias) => (ownersByAlias.get(alias)?.size ?? 0) > 1));
           return { ...publicTerm(term), id: term.id, targetPath: term.targetPath, ambiguityCount: ambiguous.size };
         })
@@ -741,7 +742,7 @@ export function createResearchHandlers(): Record<string, Handler> {
       const target = yield* readPathMeta(host, context, input.targetPath);
       if (!target) throw fail("file_not_found", "Term target is unavailable in this snapshot");
       if (target.revision !== input.expectedTargetRevision) throw fail("snapshot_stale", "Term target revision changed", true);
-      const existing = loaded.registry.terms.find((term) => input.termId ? term.id === input.termId : term.canonical.normalize("NFKC").toLowerCase() === (input.canonical as string).trim().normalize("NFKC").toLowerCase());
+      const existing = loaded.registry.terms.find((term) => input.termId ? term.id === input.termId : normalizeUnicode(term.canonical, "NFKC").toLowerCase() === normalizeUnicode((input.canonical as string).trim(), "NFKC").toLowerCase());
       const generatedId = `term-${idHash(`${requireIdempotency(context)}\0${input.canonical}\0${input.targetPath}`)}`;
       const termId = (input.termId as string | undefined) ?? existing?.id ?? generatedId;
       if (loaded.registry.terms.some((term) => term.id === termId && term.id !== existing?.id)) throw fail("conflict", "Generated term ID collides with an existing registry entry");

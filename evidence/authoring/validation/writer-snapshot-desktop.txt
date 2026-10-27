@@ -1,0 +1,14 @@
+[WebServer] (node:117962) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 5 tests using 1 worker
+
+(node:118027) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › ../proprium/tests/e2e/authoring-snapshot.acceptance.spec.ts:18:1 › Browser Git authoring snapshots page large works, preserve UTF-8 bytes, and reject stale generations (14.6s)
+  ✓  2 [chromium] › ../proprium/tests/e2e/authoring-snapshot.acceptance.spec.ts:97:1 › pinned action bytes remain exact while strict reads reject stale and uncached views (1.2s)
+  ✓  3 [chromium] › ../proprium/tests/e2e/authoring-writer-git-guard.acceptance.spec.ts:14:1 › Browser Git reasserts the authoring generation inside its sole writer lock (849ms)
+  ✓  4 [chromium] › ../proprium/tests/e2e/authoring-writer-git-guard.acceptance.spec.ts:49:1 › Host proposal receipt survives page reload and applies through Browser Git (1.3s)
+  ✓  5 [chromium] › ../proprium/tests/e2e/authoring-writer-git-guard.acceptance.spec.ts:109:1 › partial multi-file unit is restored from its persisted WAL after reload before retry (1.3s)
+
+  5 passed (23.6s)

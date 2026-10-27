@@ -774,15 +774,19 @@ const projectContinuity: Handler = function* (raw, context, host) {
   const start = continuityCursor(input.cursor, context.snapshot.id, scope);
   const entries: Array<{ path: string; revision: string; byte_length: number }> = [];
   let cursor: string | null = null;
+  const seenCursors = new Set<string>(), seenPaths = new Set<string>();
   do {
     const page: FilePage = yield* host.request<FilePage>(HOST_OPERATIONS.list, { snapshot: context.snapshot, limit: 256, ...(cursor ? { cursor } : {}) });
     if (!page || !Array.isArray(page.entries) || !(page.next_cursor === null || typeof page.next_cursor === "string")) throw new DiagnosticActionError("invalid_input", "Host returned an invalid file page");
     for (const entry of page.entries) {
       if (!entry || typeof entry.path !== "string" || typeof entry.revision !== "string" || !/^[a-f0-9]{64}$/u.test(entry.revision) || !Number.isSafeInteger(entry.byte_length) || entry.byte_length < 0) throw new DiagnosticActionError("snapshot_stale", "Host returned an invalid pinned file identity", true);
+      if (seenPaths.has(entry.path)) throw new DiagnosticActionError("snapshot_stale", "Host repeated a file identity", true);
+      seenPaths.add(entry.path);
       entries.push({ path: entry.path, revision: entry.revision, byte_length: entry.byte_length });
       if (entries.length > 100_000) throw new DiagnosticActionError("capacity", "Workspace contains too many files for a continuity scan", true);
     }
     cursor = page.next_cursor;
+    if (cursor !== null) { if (!cursor || seenCursors.has(cursor)) throw new DiagnosticActionError("snapshot_stale", "Host file cursor did not advance", true); seenCursors.add(cursor); if (seenCursors.size > 100_000) throw new DiagnosticActionError("capacity", "Too many file pages for a continuity scan", true); }
   } while (cursor !== null);
   const byPath = new Map(entries.map((entry) => [entry.path, entry]));
   const yamlFiles: ProjectFile[] = [];
@@ -809,7 +813,8 @@ const projectContinuity: Handler = function* (raw, context, host) {
   }
   const report = checkProjectContinuity(graph.entities, graph.links, manuscriptText, scope);
   const findings = report.findings.map((finding) => continuityFinding(finding, context, scope));
-  const from = Math.min(start, findings.length);
+  if (start > findings.length) throw new DiagnosticActionError("snapshot_stale", "Project cursor is outside this snapshot", true);
+  const from = start;
   const end = Math.min(findings.length, from + (pageSize as number));
   const identity = sha256(JSON.stringify(["continuity", context.snapshot.id, scope ?? null]));
   const nextCursor = end < findings.length ? `dcn1.${identity}.${end}` : null;
@@ -835,6 +840,7 @@ const projectConsistency: Handler = function* (raw, context, host) {
 
   const entries: Array<{ path: string; revision: string }> = [];
   let listCursor: string | null = null;
+  const seenCursors = new Set<string>(), seenPaths = new Set<string>();
   do {
     const page: FilePage = yield* host.request<FilePage>(HOST_OPERATIONS.list, {
       snapshot: context.snapshot,
@@ -844,9 +850,13 @@ const projectConsistency: Handler = function* (raw, context, host) {
     if (!page || !Array.isArray(page.entries) || !(page.next_cursor === null || typeof page.next_cursor === "string")) throw new DiagnosticActionError("invalid_input", "Host returned an invalid file page");
     for (const entry of page.entries) {
       if (!entry || typeof entry.path !== "string" || typeof entry.revision !== "string" || !/^[a-f0-9]{64}$/u.test(entry.revision)) throw new DiagnosticActionError("snapshot_stale", "Host returned an invalid pinned file identity", true);
+      if (seenPaths.has(entry.path)) throw new DiagnosticActionError("snapshot_stale", "Host repeated a file identity", true);
+      seenPaths.add(entry.path);
       entries.push({ path: entry.path, revision: entry.revision });
+      if (entries.length > 100_000) throw new DiagnosticActionError("capacity", "Workspace contains too many files for a consistency scan", true);
     }
     listCursor = page.next_cursor;
+    if (listCursor !== null) { if (!listCursor || seenCursors.has(listCursor)) throw new DiagnosticActionError("snapshot_stale", "Host file cursor did not advance", true); seenCursors.add(listCursor); if (seenCursors.size > 100_000) throw new DiagnosticActionError("capacity", "Too many file pages for a consistency scan", true); }
   } while (listCursor !== null);
 
   const projectFiles: ProjectFile[] = entries.map(({ path, revision }) => ({ path, revision, text: "" }));
@@ -863,7 +873,8 @@ const projectConsistency: Handler = function* (raw, context, host) {
   validateScopeEntities(readProjectGraph(projectFiles).entities, scope);
   const report = checkProjectConsistency(projectFiles, scope);
   const findings = report.findings.map((finding) => projectFinding(finding, context, scope));
-  const from = Math.min(start, findings.length);
+  if (start > findings.length) throw new DiagnosticActionError("snapshot_stale", "Project cursor is outside this snapshot", true);
+  const from = start;
   const end = Math.min(findings.length, from + (pageSize as number));
   const nextCursor = end < findings.length ? `dcp1.${sha256(JSON.stringify([context.snapshot.id, scope ?? null]))}.${end}` : null;
   return {
@@ -1121,7 +1132,9 @@ const lintRun: Handler = function* (raw, context, host) {
       draftGeneration: source.draftGeneration ?? context.snapshot.draft_generation,
       analyzerId: "proprium.diagnostics.cpu",
       analyzerVersion: "1.0.0",
+      configRevisions: { lint: config.revision },
       complete: true,
+      providerStatus: { lexical: "disabled" },
     },
   };
 };
@@ -1260,7 +1273,30 @@ const sceneRun: Handler = function* (raw, context, host) {
       if (requested.includes("speaker")) sections.speaker = { status: "unavailable", reason: "provider_unavailable" };
     }
   }
-  if (requested.includes("semanticHypotheses")) sections.semanticHypotheses = { status: "unavailable", reason: "provider_unavailable" };
+  let semanticStatus: "ready" | "unavailable" = "unavailable";
+  if (requested.includes("semanticHypotheses")) {
+    sections.semanticHypotheses = { status: "unavailable", reason: "provider_unavailable" };
+    // Semantic's index represents saved source, not an unsaved editor draft.
+    if (!draftGeneration) {
+      try {
+        const result = yield* invokeAction<Record<string, unknown>>(host, "proprium.semantic", "proprium.semantic.contradictions.candidates", { limit: 100 });
+        if (canonicalJson(result.snapshot) !== canonicalJson(context.snapshot)) throw new DiagnosticActionError("snapshot_stale", "Semantic returned a different snapshot", true);
+        if (result.indexAvailable === true) {
+          const candidates = boundedProviderRows(result.candidates, "Semantic hypotheses") as Array<Record<string, unknown>>;
+          if (typeof result.complete !== "boolean" || !(result.nextCursor === null || typeof result.nextCursor === "string")) throw new DiagnosticActionError("dependency_unavailable", "Semantic returned an invalid candidate page", true);
+          const selected = candidates.filter(candidate => {
+            const a = object(candidate.evidenceA, "Semantic evidence A");
+            const b = object(candidate.evidenceB, "Semantic evidence B");
+            return a.sceneId === input.sceneId || b.sceneId === input.sceneId;
+          });
+          semanticStatus = "ready";
+          sections.semanticHypotheses = { status: "ready", candidates: selected, model: result.model, complete: result.complete && result.nextCursor === null };
+        } else if (result.indexAvailable !== false) throw new DiagnosticActionError("dependency_unavailable", "Semantic returned an invalid index state", true);
+      } catch (error) {
+        if (!optionalProviderError(error)) throw error;
+      }
+    }
+  }
   findings.sort((left, right) => String(left.class ?? "").localeCompare(String(right.class ?? "")) ||
     Number((left.range as Record<string, unknown> | undefined)?.start ?? 0) - Number((right.range as Record<string, unknown> | undefined)?.start ?? 0) || String(left.fingerprint ?? "").localeCompare(String(right.fingerprint ?? "")));
   const classCounts: Record<string, number> = {};
@@ -1281,7 +1317,7 @@ const sceneRun: Handler = function* (raw, context, host) {
     ...(requested.includes("plotGoal") ? { plotGoal: plotGoalStatus } : {}),
     ...(requested.includes("declaredVoice") ? { declaredVoice: speakerStatus } : {}),
     ...(requested.includes("speaker") ? { speaker: speakerStatus } : {}),
-    ...(requested.includes("semanticHypotheses") ? { semanticHypotheses: "unavailable" } : {}),
+    ...(requested.includes("semanticHypotheses") ? { semanticHypotheses: semanticStatus } : {}),
   };
   return {
     identity: {

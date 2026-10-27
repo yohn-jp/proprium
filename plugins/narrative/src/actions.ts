@@ -1,3 +1,4 @@
+import { normalizeUnicode } from "../../shared/unicode.js";
 import { stringify } from "yaml";
 import type {
   ActionRequest,
@@ -28,6 +29,7 @@ import { listPortableResumeMarks, proposePortableResumeMark } from "./resume.js"
 export const NARRATIVE_ACTIONS = [
   "proprium.narrative.work.detect",
   "proprium.narrative.hierarchy.tree",
+  "proprium.narrative.hierarchy.outline",
   "proprium.narrative.scene.open",
   "proprium.narrative.scene.continue",
   "proprium.narrative.scene.context",
@@ -35,7 +37,9 @@ export const NARRATIVE_ACTIONS = [
   "proprium.narrative.structure.update",
   "proprium.narrative.structure.reorder",
   "proprium.narrative.reading-marks.list",
+  "proprium.narrative.reading-marks.open-ui",
   "proprium.narrative.reading-marks.create",
+  "proprium.narrative.reading-marks.create-ui",
   "proprium.narrative.reading-marks.delete",
   "proprium.narrative.changes.compile",
   "proprium.narrative.resume.marks.list",
@@ -339,7 +343,12 @@ export function* propose(
   if (!isRecord(result) || typeof result.proposal_id !== "string" || !result.proposal_id || !isRecord(result.preview)) {
     fail("invalid_input", "Host returned an invalid proposal review reference");
   }
-  return { proposal_id: result.proposal_id, preview: result.preview as ProposalValue["preview"] };
+  return { proposal_id: result.proposal_id, preview: {
+    title: change.title,
+    read_paths: change.read_set.map(item => item.path),
+    units: change.units.map(unit => ({ id: unit.id, label: unit.label, depends_on: [...unit.depends_on],
+      operation_paths: unit.operations.map(operation => operation.path) })),
+  } };
 }
 
 function snapshotReads(snapshot: ReadSnapshot): Array<{ path: string; revision: string | null }> {
@@ -364,7 +373,7 @@ function idPrefix(kind: StructureKind): string {
 
 export function narrativeIdForTitle(kind: StructureKind, title: string, existingIds: Iterable<string>): string {
   const ids = new Set(existingIds);
-  const slug = title.normalize("NFKC").toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "").slice(0, 48).replace(/-+$/gu, "");
+  const slug = normalizeUnicode(title, "NFKC").toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "").slice(0, 48).replace(/-+$/gu, "");
   const prefix = idPrefix(kind);
   const base = slug ? `${prefix}${slug}` : prefix;
   let candidate = base;
@@ -523,6 +532,50 @@ function* executeAction(host: NarrativeHost, request: ActionRequest): Generator<
         diagnostics: diagnosticValues(work),
       };
     }
+    case "proprium.narrative.hierarchy.outline": {
+      strictObject(input, [], ["parent_id", "cursor", "limit", "expected_tree_revision", "selected_id"]);
+      const parentId = input.parent_id === undefined || input.parent_id === null ? null : nonEmptyString(input.parent_id, "parent_id");
+      const limit = input.limit === undefined ? TREE_LIMIT : positiveInteger(input.limit, "limit", 200);
+      const work = yield* readWorkSnapshot(host, request);
+      assertTreeRevision(input, work);
+      const rows = treeRows(work, parentId);
+      const offset = input.cursor === undefined ? 0 : parseTreeCursor(nonEmptyString(input.cursor, "cursor"), request.snapshot, parentId, work.treeRevision);
+      if (offset > rows.length) fail("snapshot_stale", "Hierarchy cursor is beyond this sibling list");
+      const selectedId = input.selected_id === undefined ? null : nonEmptyString(input.selected_id, "selected_id");
+      const pageRows = rows.slice(offset, offset + limit);
+      const selectedRow = selectedId === null ? null : pageRows.find(row => row.id === selectedId);
+      if (selectedId !== null && !selectedRow) fail("scene_not_found", "Selected hierarchy row is not on this page");
+      const items: Array<Record<string, unknown>> = [];
+      const usedIds = new Set(pageRows.map(row => row.id));
+      const syntheticId = (candidate: string) => {
+        while (usedIds.has(candidate)) candidate = `@${candidate}`;
+        usedIds.add(candidate);
+        return candidate;
+      };
+      if (parentId !== null) {
+        const parent = work.byId.get(parentId)!;
+        items.push({ id: syntheticId("__parent__"), title: `← ${parent.title}`, action: {
+          action_id: "proprium.narrative.hierarchy.outline",
+          input_template: { parent_id: parent.parent_id, expected_tree_revision: work.treeRevision },
+        } });
+      }
+      for (const row of pageRows) {
+        items.push({ id: row.id, title: row.title, action: row.kind === "scene"
+          ? { action_id: "proprium.narrative.scene.open", input_template: { scene_id: row.id, expected_tree_revision: work.treeRevision } }
+          : { action_id: "proprium.narrative.hierarchy.outline", input_template: { parent_id: row.id, expected_tree_revision: work.treeRevision } },
+        });
+        items.push({ id: syntheticId(`edit:${sha256Hex(row.metadata_path)}`), title: `${row.title.slice(0, 512)} を編集対象に選択`, action: { action_id: "proprium.narrative.hierarchy.outline", input_template: {
+          parent_id: parentId, ...(input.cursor === undefined ? {} : { cursor: input.cursor }), limit,
+          selected_id: row.id, expected_tree_revision: work.treeRevision,
+        } } });
+      }
+      const nextOffset = offset + Math.min(limit, rows.length - offset);
+      return { parent_id: parentId, items, selected: selectedRow ? treeItem(selectedRow) : null,
+        can_create_chapter: selectedRow?.kind === "volume", can_create_scene: selectedRow?.kind === "chapter",
+        selected_children_ids: selectedRow && selectedRow.kind !== "scene" ? treeRows(work, selectedRow.id).map(row => row.id) : [], next_cursor: nextOffset < rows.length ? treeCursor(request.snapshot, parentId, work.treeRevision, nextOffset) : null,
+        previous_cursor: offset > 0 ? treeCursor(request.snapshot, parentId, work.treeRevision, Math.max(0, offset - limit)) : null,
+        tree_revision: work.treeRevision, diagnostics: diagnosticValues(work) };
+    }
     case "proprium.narrative.scene.open":
     case "proprium.narrative.scene.context": {
       strictObject(input, ["scene_id"], ["expected_tree_revision"]);
@@ -624,8 +677,33 @@ function* executeAction(host: NarrativeHost, request: ActionRequest): Generator<
       return yield* updateStructure(host, request, input);
     case "proprium.narrative.structure.reorder":
       return yield* reorderStructure(host, request, input);
+    case "proprium.narrative.reading-marks.open-ui": {
+      const row = strictObject(input, ["scene_id", "mark_id"]);
+      const sceneId = nonEmptyString(row.scene_id, "scene_id");
+      const markId = nonEmptyString(row.mark_id, "mark_id");
+      const work = yield* readWorkSnapshot(host, request);
+      const { scene, metadata } = sceneFor(work, sceneId);
+      const path = validateManuscriptPath(scene.manuscript_path);
+      const body = yield* readMarkBody(host, request, path);
+      const { rows } = getMarks(metadata.raw, metadata.path);
+      const matches = rows.filter(value => (value as Record<string, unknown>).id === markId) as Array<Record<string, unknown>>;
+      if (!matches.length) fail("file_not_found", "Reading mark was not found");
+      if (matches.length > 1) fail("ambiguous_identity", "Reading mark ID is duplicated");
+      const mark = matches[0]!;
+      const start = mark.offset as number, length = mark.length as number, quote = mark.snippet as string;
+      if (body.text.slice(start, start + length) !== quote) fail("snapshot_stale", "Reading mark no longer matches the saved manuscript");
+      if (length > 4096) fail("capacity", "Reading mark exceeds the supported navigation span");
+      return { navigation: { target: { path, span: { path, revision: body.revision, start, end: start + length, quote } }, expected_context: { scope: request.scope, snapshot: request.snapshot, draft_generation: request.snapshot.draft_generation }, intent: "open" } };
+    }
     case "proprium.narrative.reading-marks.list":
       return yield* listReadingMarks(host, request, input);
+    case "proprium.narrative.reading-marks.create-ui": {
+      const row = strictObject(input, ["scene_id", "offset", "length", "snippet", "expected_metadata_revision", "expected_manuscript_revision"], ["comment"]);
+      const key = nonEmptyString(request.idempotency_key, "idempotency_key");
+      const time = yield* host.request<unknown>("workspace.change.timestamp", {});
+      if (!isRecord(time) || typeof time.timestamp !== "string" || !isRfc3339Utc(time.timestamp)) fail("invalid_input", "Host returned an invalid timestamp");
+      return yield* createReadingMark(host, request, { scene_id: row.scene_id, mark: { id: `mark-${sha256Hex(key)}`, offset: row.offset, length: row.length, snippet: row.snippet, ...(row.comment === undefined ? {} : { comment: row.comment }), createdAt: time.timestamp }, expected_metadata_revision: row.expected_metadata_revision, expected_manuscript_revision: row.expected_manuscript_revision });
+    }
     case "proprium.narrative.reading-marks.create":
       return yield* createReadingMark(host, request, input);
     case "proprium.narrative.reading-marks.delete":

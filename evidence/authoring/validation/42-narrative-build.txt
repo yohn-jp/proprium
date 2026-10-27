@@ -1,0 +1,6 @@
+OK Successfully written /workspace/proprium-build-output/42-narrative-registry/.authoring-build/narrative-26SANq/plugin.component.wasm.
+Built signed proprium.narrative@0.1.0: proprium/narrative/0.1.0/9b3c743370c672ed2e2ad8daa9dd9e4357733365669322066030a64cb4dc4287/plugin.component.wasm
+Built signed plugin registry in /workspace/proprium-build-output/42-narrative-registry
+Registry URL: https://authoring-build.invalid/plugins/registry.json
+Registry public key (base64): AB42SfWEYL8495V8yUmxs3RN05IwM+7NkEwdeLtwSRQ=
+Preserved 0 prior version(s); registry contains 1 immutable entry/entries

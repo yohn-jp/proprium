@@ -98,7 +98,7 @@ async function verifyPublicObject(path, expected, immutable) {
   if (actualType !== contentType(path)) throw new Error(`Public artifact ${path} has Content-Type ${actualType ?? "(missing)"}`);
   const cache = response.headers.get("cache-control") ?? "";
   const age = cacheMaxAge(cache);
-  if (immutable && (!/\bimmutable\b/iu.test(cache) || age < 31_536_000)) throw new Error(`Immutable artifact ${path} has unsafe Cache-Control: ${cache}`);
+  if (immutable && (!/\bimmutable\b/iu.test(cache) || !Number.isFinite(age) || age < 31_536_000)) throw new Error(`Immutable artifact ${path} has unsafe Cache-Control: ${cache}`);
   if (!immutable && (!Number.isFinite(age) || age > 60)) throw new Error(`Mutable registry metadata ${path} must use Cache-Control max-age of 60 seconds or less`);
 }
 

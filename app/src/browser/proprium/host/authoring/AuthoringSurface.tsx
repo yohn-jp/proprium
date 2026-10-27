@@ -302,10 +302,14 @@ function initialScalarValue(field: AuthoringScalarField, value: unknown): unknow
   return typeof value === "string" ? value : undefined;
 }
 
-function initialFormValues(fields: readonly AuthoringField[], data: AuthoringJson): FormValues {
+export function initialFormValues(fields: readonly AuthoringField[], data: AuthoringJson): FormValues {
   const values: FormValues = {};
   for (const field of fields) {
-    if (field.initial_value === undefined) continue;
+    if (field.initial_value === undefined) {
+      // An unchecked required boolean is a valid false value, not a missing field.
+      if (field.type === "boolean" && field.required) values[field.id] = false;
+      continue;
+    }
     try {
       const value = resolveAuthoringTemplate(field.initial_value, data);
       if (field.type === "record-list") {
@@ -445,9 +449,10 @@ function FormWidget({ node, data, invoke, busy }: {
     if (validation) return;
     setError("");
     try {
-      const context: AuthoringJson = { ...asRecord(data), form: formValuesToJson(node.fields, values) };
+      const form = formValuesToJson(node.fields, values);
+      const context: AuthoringJson = { ...asRecord(data), form };
       if (node.confirmation) setPendingContext(context);
-      else invoke(node.submit, event.nativeEvent, context);
+      else invoke(omitAbsentOptionalFormInputs(node.submit, node.fields, form), event.nativeEvent, context);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "入力内容を確認してください。");
     }
@@ -458,7 +463,8 @@ function FormWidget({ node, data, invoke, busy }: {
     if (pendingContext === null || busy) return;
     const context = pendingContext;
     setPendingContext(null);
-    invoke(node.submit, event.nativeEvent, context);
+    try { invoke(omitAbsentOptionalFormInputs(node.submit, node.fields, asRecord(context).form ?? {}), event.nativeEvent, context); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "入力内容を確認してください。"); }
   };
   const labelId = `authoring-form-${node.id}`;
   return <form className="authoring-form" aria-labelledby={labelId} onSubmit={submit}>
@@ -532,6 +538,39 @@ function asRecord(value: unknown): Record<string, AuthoringJson> {
   return isRecord(value) ? value as Record<string, AuthoringJson> : {};
 }
 
+/** Optional form fields absent from submitted JSON must stay absent in Action input.
+ * Unknown data keys and required fields retain the normal fail-closed resolver.
+ */
+export function omitAbsentOptionalFormInputs(binding: AuthoringActionBinding, fields: readonly AuthoringField[], form: AuthoringJson): AuthoringActionBinding {
+  const values = asRecord(form);
+  const absent = fields.filter(field => !field.required && !Object.hasOwn(values, field.id)).map(field => `form.${field.id}`);
+  const omitted = Symbol("absent optional form input");
+  const visit = (value: AuthoringTemplate, depth = 0): AuthoringTemplate | typeof omitted => {
+    if (depth > MAX_TEMPLATE_DEPTH) throw new Error("The UI input template is too deeply nested.");
+    if (isDataKey(value)) return absent.some(path => value.data_key === path || value.data_key.startsWith(`${path}.`)) ? omitted : value;
+    if (Array.isArray(value)) return value.map(item => {
+      const next = visit(item, depth + 1);
+      if (next === omitted) throw new Error("An absent optional form value cannot occupy an array position.");
+      return next;
+    }) as AuthoringTemplate;
+    if (isRecord(value)) {
+      const entries: Array<[string, AuthoringTemplate]> = [];
+      for (const [key, item] of Object.entries(value)) {
+        const next = visit(item as AuthoringTemplate, depth + 1);
+        if (next !== omitted) entries.push([key, next]);
+      }
+      return Object.fromEntries(entries) as AuthoringTemplate;
+    }
+    return value;
+  };
+  const input: Record<string, AuthoringTemplate> = {};
+  for (const [key, value] of Object.entries(binding.input_template)) {
+    const next = visit(value);
+    if (next !== omitted) input[key] = next;
+  }
+  return { ...binding, input_template: input };
+}
+
 function composeSurfaceData(surface: AuthoringSurfaceProps["surface"], data: AuthoringJson): Record<string, AuthoringJson> {
   const base = asRecord(data);
   return { ...base, context: { ...asRecord(surface.context), ...asRecord(base.context) } };
@@ -578,27 +617,43 @@ function OutlineWidget({ node, data, invoke, navigate, busy }: {
     else { const action = item.action ?? node.activate; if (action) invoke(action, event, context); }
   };
   const render = (rows: readonly AuthoringOutlineRow[]): ReactElement => <ul role="group">{rows.map(item => <li role="treeitem" aria-expanded={item.children?.length ? expanded.has(item.id) : undefined} aria-selected={selectedId === item.id} key={item.id}>
-    <button type="button" className="authoring-tree-row" data-authoring-tree-id={item.id} tabIndex={activeId === item.id ? 0 : -1} onFocus={() => setActiveId(item.id)} onKeyDown={event => handleKey(event, item)} onClick={event => { setSelectedId(item.id); activate(item, event.nativeEvent); }} disabled={busy}>
+    <button type="button" className="authoring-tree-row" data-authoring-tree-id={item.id} tabIndex={(visible.some(row => row.id === activeId) ? activeId : visible[0]?.id) === item.id ? 0 : -1} onFocus={() => setActiveId(item.id)} onKeyDown={event => handleKey(event, item)} onClick={event => { setSelectedId(item.id); activate(item, event.nativeEvent); }} disabled={busy}>
       {item.children?.length ? <span aria-hidden="true">{expanded.has(item.id) ? "▾" : "▸"}</span> : <span aria-hidden="true">·</span>}<span>{item.title}</span>{item.path && <small>{item.path}</small>}
     </button>{item.children?.length && expanded.has(item.id) ? render(item.children) : null}
   </li>)}</ul>;
   return <section className="authoring-widget" aria-labelledby={`authoring-widget-${node.id}`}><h3 id={`authoring-widget-${node.id}`}>{node.title || "作品構成"}</h3>{node.description && <p>{node.description}</p>}{items.length ? <div className="authoring-outline" role="tree" aria-label={node.title || "構成"}>{render(items)}</div> : <p className="authoring-empty">表示できる項目はありません。</p>}<Pagination previous={node.previous_action} next={node.next_action} previousWhen={node.previous_action_when} nextWhen={node.next_action_when} data={data} invoke={(binding, event) => invoke(binding, event)} disabled={busy} /></section>;
 }
 
-function WidgetRenderer({ node, data, invoke, navigate, busy }: {
+function WidgetRenderer({ node, data, invoke, navigate, busy, load, cancelRead, nested = false }: {
   readonly node: AuthoringWidget;
   readonly data: AuthoringJson;
   invoke(binding: AuthoringActionBinding, event: Event, context?: AuthoringJson): void;
   navigate(binding: AuthoringNavigationTemplate, event: Event, context?: AuthoringJson): void;
   readonly busy: boolean;
+  load(node: AuthoringWidget): void;
+  cancelRead(next?: AuthoringWidget): void;
+  readonly nested?: boolean;
+}): ReactElement {
+  return <>{nested && (node.load_action || node.load_actions?.length) && <button type="button" className="authoring-load-action" disabled={busy} onClick={() => load(node)}>{node.title || "情報"}を読み込む</button>}<WidgetBody node={node} data={data} invoke={invoke} navigate={navigate} busy={busy} load={load} cancelRead={cancelRead} /></>;
+}
+
+function WidgetBody({ node, data, invoke, navigate, busy, load, cancelRead }: {
+  readonly node: AuthoringWidget;
+  readonly data: AuthoringJson;
+  invoke(binding: AuthoringActionBinding, event: Event, context?: AuthoringJson): void;
+  navigate(binding: AuthoringNavigationTemplate, event: Event, context?: AuthoringJson): void;
+  readonly busy: boolean;
+  load(node: AuthoringWidget): void;
+  cancelRead(next?: AuthoringWidget): void;
 }): ReactElement {
   if (node.type === "outline") return <OutlineWidget node={node} data={data} invoke={invoke} navigate={navigate} busy={busy} />;
   if (node.type === "form") return <FormWidget node={node} data={data} invoke={invoke} busy={busy} />;
-  if (node.type === "tabs") return <TabsWidget node={node} data={data} invoke={invoke} navigate={navigate} busy={busy} />;
+  if (node.type === "tabs") return <TabsWidget node={node} data={data} invoke={invoke} navigate={navigate} busy={busy} load={load} cancelRead={cancelRead} />;
   if (node.type === "list") {
     const items = recordRows(isDataKey(node.items) ? dataAtPath(data, node.items.data_key) : node.items);
     return <section className="authoring-widget" aria-labelledby={`authoring-widget-${node.id}`}><h3 id={`authoring-widget-${node.id}`}>{node.title}</h3>{node.description && <p>{node.description}</p>}{items.length ? <ul className="authoring-list">{items.map((item, index) => <li key={plainText(item.id) || `${node.id}-${index}`}>
-      {(node.item_action || node.item_navigation) && <button type="button" onClick={event => { const context = { ...asRecord(data), item: item as unknown as AuthoringJson }; if (node.item_navigation) navigate(node.item_navigation, event.nativeEvent, context); else if (node.item_action) invoke(node.item_action, event.nativeEvent, context); }} disabled={busy}><strong>{plainText(readPath(item, node.primary))}</strong>{node.secondary && <small>{plainText(readPath(item, node.secondary))}</small>}</button>}
+      {(node.item_action || node.item_navigation) && <button type="button" onClick={event => { const context = { ...asRecord(data), item: item as unknown as AuthoringJson }; if (node.item_action) invoke(node.item_action, event.nativeEvent, context); else if (node.item_navigation) navigate(node.item_navigation, event.nativeEvent, context); }} disabled={busy}><strong>{plainText(readPath(item, node.primary))}</strong>{node.secondary && <small>{plainText(readPath(item, node.secondary))}</small>}</button>}
+      {node.item_action && node.item_navigation && <button type="button" disabled={busy} onClick={event => navigate(node.item_navigation!, event.nativeEvent, { ...asRecord(data), item: item as unknown as AuthoringJson })}>{plainText(readPath(item, node.primary))}の原文を開く</button>}
       {!node.item_action && !node.item_navigation && <><strong>{plainText(readPath(item, node.primary))}</strong>{node.secondary && <small>{plainText(readPath(item, node.secondary))}</small>}</>}
     </li>)}</ul> : <p className="authoring-empty">表示できる項目はありません。</p>}<Pagination previous={node.previous_action} next={node.next_action} previousWhen={node.previous_action_when} nextWhen={node.next_action_when} data={data} invoke={(binding, event) => invoke(binding, event)} disabled={busy} /></section>;
   }
@@ -632,22 +687,68 @@ function WidgetRenderer({ node, data, invoke, navigate, busy }: {
   }
   if (node.type === "graph" || node.type === "map" || node.type === "timeline") {
     const entities = recordRows(isDataKey(node.entities) ? dataAtPath(data, node.entities.data_key) : node.entities);
+    const edges = recordRows(node.edges && isDataKey(node.edges) ? dataAtPath(data, node.edges.data_key) : node.edges);
     const columns = node.columns ?? [{ key: "title", label: node.type === "timeline" ? "時点" : "項目" }, { key: "description", label: node.type === "map" ? "場所" : "説明" }];
-    return <section className="authoring-widget" aria-labelledby={`authoring-widget-${node.id}`}><h3 id={`authoring-widget-${node.id}`}>{node.title || node.type}</h3><p>{node.description || "図の内容をアクセシブルな一覧で表示しています。"}</p><Table rows={entities} columns={columns} label={node.title || node.type} /></section>;
+    return <section className="authoring-widget" aria-labelledby={`authoring-widget-${node.id}`}><h3 id={`authoring-widget-${node.id}`}>{node.title || node.type}</h3>{node.description && <p>{node.description}</p>}
+      {node.type === "timeline" ? <ol className="authoring-timeline" aria-label={node.title || "時系列"}>{entities.map((entity, index) => <li key={plainText(entity.id) || index}><strong>{plainText(entity.order)} · {plainText(entity.title || entity.name || entity.id)}</strong><p>{plainText(entity.relation)} {plainText(entity.confidence)}</p></li>)}</ol>
+        : <EntityDiagram entities={entities} edges={edges} kind={node.type} label={node.title || node.type} />}
+      <Table rows={entities} columns={columns} label={node.title || node.type} />
+      {edges.length > 0 && <Table rows={edges} columns={[{ key: "from", label: "起点" }, { key: "to", label: "終点" }, { key: "kind", label: "関係" }]} label={`${node.title || node.type}の関係`} />}
+    </section>;
   }
   return <section className="authoring-widget" aria-labelledby={`authoring-widget-${node.id}`}><h3 id={`authoring-widget-${node.id}`}>{node.title}</h3><p className="authoring-unavailable">この表示形式には対応していません。</p></section>;
 }
 
-function TabsWidget({ node, data, invoke, navigate, busy }: {
+/** Deterministic Host layout; guest data can supply text and finite coordinates only. */
+function EntityDiagram({ entities, edges, kind, label }: {
+  readonly entities: readonly Record<string, unknown>[];
+  readonly edges: readonly Record<string, unknown>[];
+  readonly kind: "graph" | "map";
+  readonly label: string;
+}): ReactElement {
+  const shown = entities.slice(0, 128);
+  const positions = new Map<string, { x: number; y: number }>();
+  const positioned = shown.length > 0 && shown.every(entity => typeof entity.x === "number" && Number.isFinite(entity.x) && typeof entity.y === "number" && Number.isFinite(entity.y));
+  const coordinate = (key: "x" | "y", entity: Record<string, unknown>): number => {
+    const values = shown.map(row => row[key] as number);
+    const low = Math.min(...values), high = Math.max(...values);
+    return 45 + (high === low ? .5 : ((entity[key] as number) - low) / (high - low)) * (key === "x" ? 510 : 310);
+  };
+  shown.forEach((entity, index) => {
+    const angle = 2 * Math.PI * index / Math.max(1, shown.length) - Math.PI / 2;
+    const id = plainText(entity.id);
+    if (id) positions.set(id, positioned ? { x: coordinate("x", entity), y: coordinate("y", entity) }
+      : { x: 300 + Math.cos(angle) * 230, y: 200 + Math.sin(angle) * 145 });
+  });
+  return <figure className="authoring-entity-diagram">
+    {shown.length ? <svg viewBox="0 0 600 400" role="img" aria-label={label} style={{ width: "100%", maxHeight: "28rem" }}>
+      <title>{label}</title>
+      {edges.slice(0, 512).map((edge, index) => {
+        const from = positions.get(plainText(edge.from)), to = positions.get(plainText(edge.to));
+        return from && to ? <g key={`edge-${index}`}><line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="currentColor" opacity=".4" /><title>{plainText(edge.from)} → {plainText(edge.to)}: {plainText(edge.kind)}</title></g> : null;
+      })}
+      {shown.map((entity, index) => {
+        const point = positions.get(plainText(entity.id));
+        return point ? <g key={`node-${index}`}><circle cx={point.x} cy={point.y} r="7" fill="currentColor" /><text x={point.x} y={point.y + 19} textAnchor="middle" fill="currentColor" fontSize="12">{plainText(entity.name || entity.title || entity.id).slice(0, 32)}</text><title>{plainText(entity.name || entity.title || entity.id)}</title></g> : null;
+      })}
+    </svg> : <p className="authoring-empty">表示できる項目はありません。</p>}
+    <figcaption>{kind === "map" && !positioned ? "位置座標は未設定です。場所どうしの関係を表示します。" : "項目と関係を表示しています。"}{entities.length > shown.length && ` 図は先頭${shown.length}件です。全項目は一覧で確認できます。`}</figcaption>
+  </figure>;
+}
+
+function TabsWidget({ node, data, invoke, navigate, busy, load, cancelRead }: {
   readonly node: Extract<AuthoringWidget, { type: "tabs" }>;
   readonly data: AuthoringJson;
   invoke(binding: AuthoringActionBinding, event: Event, context?: AuthoringJson): void;
   navigate(binding: AuthoringNavigationTemplate, event: Event, context?: AuthoringJson): void;
   readonly busy: boolean;
+  load(node: AuthoringWidget): void;
+  cancelRead(next?: AuthoringWidget): void;
+  readonly nested?: boolean;
 }): ReactElement {
   const [activeId, setActiveId] = useState(node.tabs[0]?.id ?? "");
   const active = node.tabs.find(tab => tab.id === activeId) ?? node.tabs[0];
-  return <section className="authoring-widget" aria-label={node.title || "詳細"}><div className="authoring-tabs" role="tablist" aria-label={node.title || "詳細"}>{node.tabs.map(tab => <button type="button" role="tab" id={`authoring-tab-${tab.id}`} aria-selected={active?.id === tab.id} aria-controls={`authoring-tabpanel-${tab.id}`} tabIndex={active?.id === tab.id ? 0 : -1} key={tab.id} onClick={() => setActiveId(tab.id)}>{tab.title}</button>)}</div>{active && <div role="tabpanel" id={`authoring-tabpanel-${active.id}`} aria-labelledby={`authoring-tab-${active.id}`}><WidgetRenderer node={active.body} data={data} invoke={invoke} navigate={navigate} busy={busy} /></div>}</section>;
+  return <section className="authoring-widget" aria-label={node.title || "詳細"}><div className="authoring-tabs" role="tablist" aria-label={node.title || "詳細"}>{node.tabs.map(tab => <button type="button" role="tab" id={`authoring-tab-${tab.id}`} aria-selected={active?.id === tab.id} aria-controls={`authoring-tabpanel-${tab.id}`} tabIndex={active?.id === tab.id ? 0 : -1} key={tab.id} onClick={() => { cancelRead(tab.body); setActiveId(tab.id); }}>{tab.title}</button>)}</div>{active && <div role="tabpanel" id={`authoring-tabpanel-${active.id}`} aria-labelledby={`authoring-tab-${active.id}`}><WidgetRenderer key={active.id} node={active.body} data={data} invoke={invoke} navigate={navigate} busy={busy} load={load} cancelRead={cancelRead} nested /></div>}</section>;
 }
 
 export function AuthoringSurface({ surface, data: initialData = EMPTY_DATA, status = "ready", message, onInvoke, onRead, onNavigate, onClose, className = "" }: AuthoringSurfaceProps): ReactElement {
@@ -678,7 +779,9 @@ export function AuthoringSurface({ surface, data: initialData = EMPTY_DATA, stat
     try {
       const output = await runAction(binding, context, event);
       if (!output.action_result.ok) throw new Error(`${output.action_result.error.code}: ${output.action_result.error.message}`);
-      setLastActionResult(cloneJson(output.action_result.value, 0));
+      // Navigation-only results leave the current outline page and its scroll position mounted.
+      const resultValue = output.action_result.value;
+      if (!(isRecord(resultValue) && isRecord(resultValue.navigation))) setLastActionResult(cloneJson(resultValue, 0));
       setArtifact(output.artifact);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "操作を完了できませんでした。"); }
     finally { setBusy(false); }
@@ -697,8 +800,16 @@ export function AuthoringSurface({ surface, data: initialData = EMPTY_DATA, stat
   const loadActions = surface.body.load_actions?.length
     ? surface.body.load_actions
     : surface.body.load_action ? [{ key: "", ...surface.body.load_action }] : [];
-  const load = useCallback(async () => {
-    if (busy || !loadActions.length) return;
+  const cancelRead = useCallback((next?: AuthoringWidget) => {
+    if (readController.current) { readController.current.abort(); readController.current = null; setBusy(false); }
+    // Independently loaded tabs must not show another tab's records or cursor.
+    // Forms without a read intentionally share the selected action result.
+    if (next && (next.load_action || next.load_actions?.length)) setLastActionResult(undefined);
+  }, []);
+  const load = useCallback(async (node: AuthoringWidget = surface.body) => {
+    const requestedActions = node.load_actions?.length ? node.load_actions
+      : node.load_action ? [{ key: "", ...node.load_action }] : [];
+    if (busy || !requestedActions.length) return;
     readController.current?.abort();
     const controller = new AbortController();
     readController.current = controller;
@@ -706,7 +817,7 @@ export function AuthoringSurface({ surface, data: initialData = EMPTY_DATA, stat
     const nextResults = { ...loadResults };
     let latest: AuthoringJson | undefined = lastActionResult;
     try {
-      for (const declaration of loadActions) {
+      for (const declaration of requestedActions) {
         const base = composeSurfaceData(surface, initialData);
         const context: AuthoringJson = {
           ...base,
@@ -732,14 +843,14 @@ export function AuthoringSurface({ surface, data: initialData = EMPTY_DATA, stat
       if (readController.current === controller) readController.current = null;
       if (!controller.signal.aborted) setBusy(false);
     }
-  }, [busy, initialData, lastActionResult, loadActions, loadResults, onRead, surface]);
+  }, [busy, initialData, lastActionResult, loadResults, onRead, surface]);
   const hasLoadAction = loadActions.length > 0;
   return <section className={`authoring-surface authoring-surface-${surface.kind} ${className}`.trim()} aria-labelledby={`authoring-surface-${surface.id}`}>
     <header className="authoring-surface-header"><div>{contextLabel(surface.context) && <p className="authoring-surface-context">{contextLabel(surface.context)}</p>}<h2 id={`authoring-surface-${surface.id}`}>{surface.title}</h2></div>{onClose && <button type="button" className="authoring-surface-close" onClick={onClose} aria-label={`${surface.title}を閉じる`}>閉じる</button>}</header>
     {initialStatus && <p className={`authoring-state authoring-state-${status}`} role="status" aria-live="polite">{message || statusMessage(status)}</p>}
     {error && <p className="authoring-error" role="alert">{error}</p>}
     {hasLoadAction && <button type="button" className="authoring-load-action" disabled={busy || status === "unavailable" || status === "failure"} onClick={() => void load()}>{lastActionResult === undefined ? "読み込む" : "更新"}</button>}
-    {status !== "unavailable" && status !== "failure" && <div className="authoring-surface-body" aria-busy={busy}>{busy && <p className="authoring-submitting" role="status">処理中…</p>}<WidgetRenderer node={surface.body} data={data} invoke={(binding, event, context) => void invoke(binding, event, context)} navigate={(binding, event, context) => void navigate(binding, event, context)} busy={busy} /></div>}
+    {status !== "unavailable" && status !== "failure" && <div className="authoring-surface-body" aria-busy={busy}>{busy && <p className="authoring-submitting" role="status">処理中…</p>}<WidgetRenderer node={surface.body} data={data} invoke={(binding, event, context) => void invoke(binding, event, context)} navigate={(binding, event, context) => void navigate(binding, event, context)} busy={busy} load={node => void load(node)} cancelRead={cancelRead} /></div>}
     {artifact && <ArtifactResultToolbar artifact={artifact} />}
   </section>;
 }

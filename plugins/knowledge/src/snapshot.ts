@@ -254,6 +254,8 @@ export function* readKnowledgeSnapshot(reader: SnapshotReader): Generator<HostCa
   const candidates: StoryEntity[] = [];
   for (const file of files.values()) {
     if (/^bible\/characters\/[^/]+\/voice\.ya?ml$/u.test(file.path)) continue;
+    // Approved summary documents are auxiliary metadata, not Story entities.
+    if (/^plot\/volumes\/[^/]+\/chapters\/[^/]+\/(?:scene-summaries\/[^/]+|chapter-summary)\.ya?ml$/u.test(file.path)) continue;
     try {
       const entity = parseStoryEntity(file);
       if (entity) candidates.push(entity);

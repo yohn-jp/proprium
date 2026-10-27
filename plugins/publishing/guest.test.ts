@@ -500,3 +500,10 @@ test("share revocation uses the Host's stable operation timestamp and proposes o
     files.delete(path);
   }
 });
+
+test("Publishing manifest passes release registry declaration validation", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { assertAuthoringDeclarations } = await import("../../scripts/authoring-manifest-schema.mjs");
+  const manifest = JSON.parse(await readFile(new URL("./plugin.json", import.meta.url), "utf8"));
+  await assertAuthoringDeclarations(manifest.id, manifest.capabilities, manifest.actions, manifest.ui ?? []);
+});

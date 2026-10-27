@@ -1,0 +1,9 @@
+package proprium:plugin@2.0.0;
+
+interface sentence-segmentation {
+  split-sentence-ends: func(text: string) -> list<u32>;
+}
+
+world speaker-segmenter {
+  export sentence-segmentation;
+}

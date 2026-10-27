@@ -7,7 +7,7 @@
     "workspace.file.read",
     "workspace.derived.cache",
     "workspace.asset.read",
-    "plugin.preferences.read"
+    "plugin.preferences"
   ],
   "actions": [
     {
@@ -1659,7 +1659,7 @@
         }
       },
       "required_capabilities": [
-        "plugin.preferences.read",
+        "plugin.preferences",
         "workspace.file.read"
       ],
       "callers": [
@@ -1977,7 +1977,67 @@
       "requires_user_gesture": true
     }
   ],
-  "ui": [],
+  "ui": [
+    {
+      "id": "semantic.index",
+      "kind": "panel",
+      "title": "Semantic インデックス",
+      "context": {
+        "label": "ローカルモデルとインデックスの状態"
+      },
+      "body": {
+        "id": "semantic-index-tabs",
+        "type": "tabs",
+        "title": "Semantic インデックス",
+        "load_action": {
+          "action_id": "proprium.semantic.index.status",
+          "input_template": {}
+        },
+        "tabs": [
+          {
+            "id": "status",
+            "title": "状態",
+            "body": {
+              "id": "semantic-index-status",
+              "type": "detail",
+              "title": "インデックスとモデル",
+              "description": "利用可能なインデックスがない場合、Research の語句検索を引き続き利用できます。",
+              "value": {
+                "data_key": "last_action_result"
+              }
+            }
+          },
+          {
+            "id": "rebuild",
+            "title": "再構築",
+            "body": {
+              "id": "semantic-index-rebuild",
+              "type": "form",
+              "title": "インデックスの再構築を要求",
+              "description": "保存済み原稿から検索用インデックスを生成します。モデルと文章解析機能が必要です。現在は最大256文まで対応しています。",
+              "fields": [
+                {
+                  "id": "task_id",
+                  "label": "タスク ID",
+                  "type": "string",
+                  "required": true,
+                  "max_length": 128
+                }
+              ],
+              "submit": {
+                "action_id": "proprium.semantic.index.rebuild",
+                "input_template": {
+                  "taskId": {
+                    "data_key": "form.task_id"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
   "asset_groups": [
     {
       "id": "proprium.semantic.embedding.e5-small",

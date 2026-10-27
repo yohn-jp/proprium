@@ -1,0 +1,23 @@
+[WebServer] (node:129242) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 2026/10/27 07:14:47 Proprium Gateway listening on 127.0.0.1:4292
+
+Running 2 tests using 1 worker
+
+(node:129316) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 2026/10/27 07:15:02 Live Workspace stream connected
+[WebServer] 2026/10/27 07:15:19 Live Workspace stream disconnected
+[WebServer] 2026/10/27 07:15:26 Live Workspace stream connected
+  ✓  1 [desktop-chromium] › tests/browser/authoring-mcp-disconnect.acceptance.spec.ts:6:5 › real pending typed action cancels and disconnects without applying changes (46.7s)
+[WebServer] 2026/10/27 07:15:36 Live Workspace stream disconnected
+(node:130196) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Skipping host requirements validation logic because `PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS` env variable is set.
+[WebServer] 2026/10/27 07:15:53 Live Workspace stream connected
+[WebServer] 2026/10/27 07:16:18 Live Workspace stream disconnected
+[WebServer] 2026/10/27 07:16:27 Live Workspace stream connected
+[WebServer] 2026/10/27 07:16:46 Live Workspace stream disconnected
+  ✓  2 [mobile-webkit] › tests/browser/authoring-mcp-disconnect.acceptance.spec.ts:6:5 › real pending typed action cancels and disconnects without applying changes (1.1m)
+
+  2 passed (2.0m)

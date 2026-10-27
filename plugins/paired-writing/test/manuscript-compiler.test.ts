@@ -49,7 +49,11 @@ async function drive<T>(generator: Generator<HostCall, T, unknown>): Promise<T> 
     const call = state.value;
     let value: unknown;
     if (call.operation === "workspace.plugin.invoke") {
-      value = { ok: true, request_id: "nested", scope, snapshot, value: scene, warnings: [] };
+      const { metadata_path, ...context } = scene;
+      const nested = call.payload.action_id === "proprium.narrative.scene.open"
+        ? { scene: { id: scene.scene_id, metadata_path, metadata_revision: scene.metadata_revision }, manuscript_path: scene.manuscript_path, manuscript_revision: scene.manuscript_revision }
+        : context;
+      value = { ok: true, request_id: "nested", scope, snapshot, value: nested, warnings: [] };
     } else if (call.operation === "workspace.file.read") {
       const offset = Number(call.payload.offset);
       const part = Array.from(bytes.slice(offset, offset + Number(call.payload.length)));

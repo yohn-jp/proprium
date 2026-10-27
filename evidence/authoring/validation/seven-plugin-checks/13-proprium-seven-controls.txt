@@ -1,0 +1,24 @@
+✔ UI background reads and MCP use the same typed Host dispatcher and selected snapshot (10.179378ms)
+✔ a synthetic UI event never satisfies a signed action gesture requirement (1.218644ms)
+✔ portable resume proposals cannot invent a position or capture a dirty editor (14.624683ms)
+✔ production action idempotency fails closed when durable IndexedDB is unavailable (0.808271ms)
+✔ navigation continuation rejects a synthetic gesture before guest execution (0.326038ms)
+✔ concurrent first callers share one paging snapshot (0.42953ms)
+✔ UI proposal envelopes get a Host key without changing a closed action input (3.378828ms)
+✔ next scene follows paged volumes and chapters with pinned tree revision (3.531414ms)
+✔ traversal rejects revision changes, repeated cursors and cancellation (1.449211ms)
+✔ portable position uses current metadata and is validated with null draft (2.483066ms)
+✔ stale markers and changed paths cannot become navigation positions (0.681996ms)
+✔ cancellation between context and continuation prevents continuation (5.949997ms)
+✔ task controls validate exact phase and bounded progress (1.847345ms)
+✔ task controls expose manual refresh without starting a read during rendering (6.336963ms)
+✔ partial review includes transitive prerequisites and preserves independent choices (2.778498ms)
+✔ invalid dependency graphs cannot silently authorize a subset (0.344397ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 648.290452

@@ -43,13 +43,12 @@ export async function expectEditorText(page: Page, text: string): Promise<void> 
   // The DOM line projection is not the CodeMirror document: a final empty line
   // can be omitted by WebKit rendering even when the document ends in a newline.
   // Assert real editor-state bytes, including the trailing LF, instead.
-  await expect.poll(async () => page.getByRole("textbox", { name: "原稿 Markdown" }).evaluate(node => {
-    for (let element: Element | null = node; element; element = element.parentElement) {
-      const contentView = (element as Element & { cmView?: { rootView?: { view?: { state?: { doc?: { toString(): string } } } } } }).cmView;
-      const view = contentView?.rootView?.view;
-      if (view?.state?.doc) return view.state.doc.toString();
-    }
-    return null;
+  await expect.poll(async () => page.evaluate(() => {
+    if (window.propriumHostEditorText) return window.propriumHostEditorText();
+    // Production static builds omit test APIs. The pinned CM version stores its
+    // document tile here; inspect its real state rather than rendered line text.
+    const content = document.querySelector(".cm-content") as (HTMLElement & { cmTile?: { root?: { view?: { state: { doc: { toString(): string } } } } } }) | null;
+    return content?.cmTile?.root?.view?.state.doc.toString() ?? null;
   })).toBe(text);
 }
 export async function chooseFile(page: Page, path: string): Promise<void> {

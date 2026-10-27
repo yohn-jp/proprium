@@ -1,0 +1,11 @@
+import { defineConfig } from '@playwright/test';
+import base from './playwright.config.js';
+import { realpathSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+const source = resolve(process.env.PROPRIUM_E2E_SOURCE ?? '.');
+const port = process.env.PROPRIUM_E2E_PORT ?? '4282';
+const config = join(tmpdir(), `proprium-bom-vite-${process.pid}.mjs`);
+const deps = realpathSync(join(source, 'node_modules'));
+writeFileSync(config, `import original from ${JSON.stringify(join(source, 'app/vite.proprium.config.ts'))}; export default env => { const c = original(env); return { ...c, cacheDir: ${JSON.stringify(join(tmpdir(), `proprium-bom-cache-${process.pid}`))}, server: { ...c.server, fs: { ...c.server?.fs, allow: [${JSON.stringify(source)}, ${JSON.stringify(deps)}] } } }; };\n`);
+export default defineConfig({ ...base, globalSetup: undefined, testMatch: 'authoring-bom-core.acceptance.ts', outputDir: join(tmpdir(), `proprium-bom-results-${process.pid}`), timeout: 120_000, use: { ...base.use, baseURL: `http://127.0.0.1:${port}/`, acceptDownloads: true }, webServer: { command: `node ${JSON.stringify(join(source, 'app/node_modules/vite/bin/vite.js'))} ${JSON.stringify(join(source, 'app'))} --config ${JSON.stringify(config)} --host 127.0.0.1 --port ${port} --strictPort`, cwd: source, url: `http://127.0.0.1:${port}/`, reuseExistingServer: false, timeout: 120_000 } });

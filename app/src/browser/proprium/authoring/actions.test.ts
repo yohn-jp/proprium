@@ -48,7 +48,7 @@ function createHarness(overrides: Partial<ActionDispatcherOptions> = {}) {
     async invoke(options) {
       executed.push(options.request);
       const value = await options.resolve_host_call({ call_id: options.request.request_id + ":1",
-        operation: "workspace.file.list", payload: { snapshot: options.request.snapshot, prefix: "manuscript/" } });
+        operation: "workspace.file.list", payload: { snapshot: options.request.snapshot, prefix: "manuscript/", cursor: null } });
       return { request_id: options.request.request_id, scope: options.request.scope, snapshot: options.request.snapshot,
         ok: true, value: { hits: (value as { entries: unknown[] }).entries.length }, warnings: [] };
     },
@@ -81,6 +81,160 @@ function createHarness(overrides: Partial<ActionDispatcherOptions> = {}) {
   };
   return { dispatcher: new AuthoringActionDispatcher({ ...defaults, ...overrides }), entries, executed, hostCalls };
 }
+
+test("a granted provider request reaches the consent broker with Host-issued identity", async () => {
+  const providerCap = "provider.request";
+  let reached = false;
+  const h = createHarness({
+    authority: {
+      issue: async p => context(p, { grants: [providerCap], host_capabilities: [providerCap] }),
+      issueChild: async () => { throw new Error("unused"); },
+      assertCurrent: async () => {}, isSnapshotCurrent: () => true,
+    },
+    capabilities: { providerRequest: async (payload, ctx) => {
+      assert.equal(ctx.plugin_id, plugin_id);
+      assert.deepEqual(ctx.request.snapshot, snapshot);
+      assert.equal(payload.provider_id, "test-provider");
+      reached = true;
+      return { untrusted: true };
+    } },
+    runtime: { invoke: async options => {
+      await options.resolve_host_call({call_id:"provider-call",operation:"provider.request",payload:{
+        request_id:"external-1",provider_id:"test-provider",model_id:"model",purpose:"Previewed QA",
+        payload:{question:"Q"},source_manifest:[],max_output_bytes:4096,
+      }});
+      return {request_id:options.request.request_id,scope,snapshot,ok:true,value:{hits:0},warnings:[]};
+    } },
+  });
+  h.entries.set(plugin_id, installed({grants:[providerCap],host_capabilities:[providerCap],descriptors:[descriptor({required_capabilities:[providerCap]})]}));
+  const result=await h.dispatcher.invoke({plugin_id,action_id,input:{query:"Q"}},principal());
+  assert.equal(result.ok,true);
+  assert.equal(reached,true);
+});
+
+test("dependency calls preserve the full typed result envelope consumed by official guests", async () => {
+  const dependency = "proprium.narrative";
+  const invokeCap = "workspace.plugin.invoke";
+  const h = createHarness({
+    authority: {
+      issue: async p => context(p, { grants: [cap, invokeCap], host_capabilities: [cap, invokeCap] }),
+      issueChild: async (parent, caller_plugin_id) => context(principal("ui", `${parent.request_id}-child`), {
+        caller: "plugin", caller_plugin_id, user_gesture_verified: false, signal: parent.signal,
+      }),
+      assertCurrent: async () => {}, isSnapshotCurrent: () => true,
+    },
+    runtime: { invoke: async options => {
+      if (options.request.plugin_id === dependency) return { request_id: options.request.request_id,
+        scope: options.request.scope, snapshot: options.request.snapshot, ok: true, value: { hits: 2 }, warnings: ["source warning"] };
+      const result = await options.resolve_host_call({ call_id: "nested:1", operation: invokeCap,
+        payload: { plugin_id: dependency, action_id: "narrative.read", input: { query: "x" } } }) as ActionResult<{ hits: number }>;
+      assert.equal(result.ok, true);
+      assert.deepEqual(result.scope, scope);
+      assert.deepEqual(result.snapshot, snapshot);
+      assert.deepEqual(result.ok && result.warnings, ["source warning"]);
+      return { request_id: options.request.request_id, scope: options.request.scope, snapshot: options.request.snapshot,
+        ok: true, value: result.ok ? result.value : {}, warnings: [] };
+    } },
+  });
+  h.entries.set(plugin_id, installed({ descriptors: [descriptor({ required_capabilities: [invokeCap] })],
+    dependencies: [dependency], grants: [cap, invokeCap], host_capabilities: [cap, invokeCap] }));
+  h.entries.set(dependency, installed({ plugin_id: dependency,
+    descriptors: [descriptor({ plugin_id: dependency, action_id: "narrative.read" })] }));
+  const result = await h.dispatcher.invoke({ plugin_id, action_id, input: { query: "x" } }, principal());
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.ok && result.value, { hits: 2 });
+});
+
+test("Canon optional enrichment uses an enabled target without making it an activation dependency", async () => {
+  const paired="proprium.paired-writing", pairedAction="paired.qa.answer", invokeCap="workspace.plugin.invoke";
+  const h=createHarness({
+    authority:{issue:async p=>context(p,{grants:[cap,invokeCap],host_capabilities:[cap,invokeCap]}),
+      issueChild:async(parent,caller_plugin_id)=>context(principal("ui",parent.request_id+"-child"),{caller:"plugin",caller_plugin_id,user_gesture_verified:false,signal:parent.signal}),
+      assertCurrent:async()=>{},isSnapshotCurrent:()=>true},
+    runtime:{invoke:async options=>{
+      const value=options.request.plugin_id===plugin_id ? {hits:3} : (await options.resolve_host_call({call_id:"optional",operation:invokeCap,
+        payload:{plugin_id,action_id,input:{query:"x"}}}) as {ok:true;value:unknown}).value;
+      return{request_id:options.request.request_id,scope,snapshot,ok:true,value,warnings:[]};
+    }},
+  });
+  h.entries.set(paired,installed({plugin_id:paired,descriptors:[descriptor({plugin_id:paired,action_id:pairedAction,required_capabilities:[invokeCap]})],
+    dependencies:[],grants:[cap,invokeCap],host_capabilities:[cap,invokeCap]}));
+  const result=await h.dispatcher.invoke({plugin_id:paired,action_id:pairedAction,input:{query:"x"}},principal());
+  assert.equal(result.ok,true);
+  assert.deepEqual(result.ok&&result.value,{hits:3});
+  h.entries.set(plugin_id,installed({enabled:false}));
+  const unavailable=await h.dispatcher.invoke({plugin_id:paired,action_id:pairedAction,input:{query:"x"}},principal("ui","optional-disabled"));
+  assert.equal(unavailable.ok,false);
+  if(!unavailable.ok)assert.equal(unavailable.error.code,"dependency_unavailable");
+});
+
+test("artifact creation accepts its declared bound context and rejects a foreign one", async () => {
+  let created = 0;
+  const make = (foreign = false) => createHarness({
+    authority: { issue: async p => context(p, { grants: ["artifact.create"], host_capabilities: ["artifact.create"] }),
+      issueChild: async () => { throw new Error("unused"); }, assertCurrent: async () => {}, isSnapshotCurrent: () => true },
+    runtime: { invoke: async options => {
+      await options.resolve_host_call({ call_id: "artifact:1", operation: "artifact.create", payload: {
+        media_type: "text/plain", filename: "book.txt", scope: foreign ? { ...scope, workspace_id: "foreign" } : scope, snapshot,
+      } });
+      return { request_id: options.request.request_id, scope: options.request.scope, snapshot: options.request.snapshot, ok: true, value: { hits: 1 }, warnings: [] };
+    } },
+    capabilities: { artifactCreate: async (payload, context) => {
+      assert.deepEqual(payload.scope, context.scope); assert.deepEqual(payload.snapshot, context.snapshot);
+      created++; return { artifact_id: "artifact-1", max_bytes: 128 * 1024 * 1024, max_chunk_bytes: 256 * 1024 };
+    } },
+  });
+  for (const foreign of [false, true]) {
+    const h = make(foreign);
+    h.entries.set(plugin_id, installed({ descriptors: [descriptor({ required_capabilities: ["artifact.create"] })],
+      grants: ["artifact.create"], host_capabilities: ["artifact.create"] }));
+    const result = await h.dispatcher.invoke({ plugin_id, action_id, input: { query: "x" } }, principal());
+    assert.equal(result.ok, !foreign);
+    if (!result.ok) assert.equal(result.error.code, "snapshot_stale");
+  }
+  assert.equal(created, 1);
+});
+
+test("the declared preference read grant reaches only the Host-bound plugin/user partition", async () => {
+  const preference = "plugin.preferences";
+  const h = createHarness({
+    authority: { issue: async p => context(p, { grants: [preference], host_capabilities: [preference] }),
+      issueChild: async () => { throw new Error("unused"); }, assertCurrent: async () => {}, isSnapshotCurrent: () => true },
+    runtime: { invoke: async options => {
+      const value = await options.resolve_host_call({ call_id: "preferences:1", operation: "plugin.preferences.read",
+        payload: { key: "settings", schema_version: 1 } });
+      return { request_id: options.request.request_id, scope: options.request.scope, snapshot: options.request.snapshot, ok: true, value, warnings: [] };
+    } },
+    capabilities: { preferencesRead: async payload => {
+      assert.equal(payload.plugin_id, plugin_id); assert.equal(payload.user_partition, "author");
+      return { hits: 1 };
+    } },
+  });
+  h.entries.set(plugin_id, installed({ descriptors: [descriptor({ required_capabilities: [preference] })],
+    grants: [preference], host_capabilities: [preference] }));
+  const result = await h.dispatcher.invoke({ plugin_id, action_id, input: { query: "x" } }, principal());
+  assert.equal(result.ok, true);
+});
+
+test("empty-file reads and negotiated Semantic asset ranges reach their Host ports", async () => {
+  const asset = "workspace.asset.read";
+  const h = createHarness({
+    authority: { issue: async p => context(p, { grants: [cap, asset], host_capabilities: [cap, asset] }),
+      issueChild: async () => { throw new Error("unused"); }, assertCurrent: async () => {}, isSnapshotCurrent: () => true },
+    runtime: { invoke: async options => {
+      await options.resolve_host_call({ call_id: "empty:1", operation: "workspace.file.read", payload: { snapshot, path: "empty.md", offset: 0, length: 0 } });
+      await options.resolve_host_call({ call_id: "model:2", operation: asset, payload: { group_id: "model", file_path: "model/data.bin", offset: 0, length: 131072 } });
+      return { request_id: options.request.request_id, scope: options.request.scope, snapshot: options.request.snapshot, ok: true, value: { hits: 0 }, warnings: [] };
+    } },
+    capabilities: {
+      fileRead: async payload => { assert.equal(payload.length, 0); return { bytes: [], total_bytes: 0 }; },
+      assetRead: async payload => { assert.equal(payload.length, 131072); return { bytes: [] }; },
+    },
+  });
+  h.entries.set(plugin_id, installed({ descriptors: [descriptor({ required_capabilities: [cap, asset] })], grants: [cap, asset], host_capabilities: [cap, asset] }));
+  const result = await h.dispatcher.invoke({ plugin_id, action_id, input: { query: "x" } }, principal());
+  assert.equal(result.ok, true);
+});
 
 test("metadata paging returns signed action descriptors without invoking a plugin Worker", async () => {
   const { dispatcher, executed } = createHarness({
@@ -416,4 +570,29 @@ test("stale snapshots prevent all Host capability operations", async () => {
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.error.code, "snapshot_stale");
   assert.equal(fileReads, 0);
+});
+
+test("a pinned file read never exposes a result after its worktree becomes stale", async () => {
+  let changed = false;
+  let pinnedHint = false;
+  const harness = createHarness({
+    authority: {
+      issue: async p => context(p), issueChild: async () => context(),
+      assertCurrent: async (_context, pinnedRead) => {
+        if (pinnedRead) pinnedHint = true;
+        else if (changed) throw new ActionDispatchError("snapshot_stale", "Changed during pinned read");
+      },
+      isSnapshotCurrent: () => true,
+    },
+    runtime: { invoke: async options => {
+      await options.resolve_host_call({ call_id: "pinned-read:1", operation: "workspace.file.read",
+        payload: { snapshot: options.request.snapshot, path: "manuscript/a.md" } });
+      return { ok: true, request_id: options.request.request_id, scope, snapshot, value: { hits: 1 }, warnings: [] };
+    } },
+    capabilities: { fileRead: async () => { changed = true; return { bytes: [65] }; } },
+  });
+  const result = await harness.dispatcher.invoke({ plugin_id, action_id, input: { query: "test" } }, principal());
+  assert.equal(pinnedHint, true);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.code, "snapshot_stale");
 });

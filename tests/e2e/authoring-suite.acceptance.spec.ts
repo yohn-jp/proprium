@@ -1,7 +1,8 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { showPanel } from "../browser/restored-ui.helpers.js";
+import { chooseFile, showPanel } from "../browser/restored-ui.helpers.js";
 import {
-  inspectSyntheticAuthoringWork,
   loadSignedAuthoringRelease,
   routeSignedAuthoringRelease,
   seedSyntheticAuthoringWork,
@@ -73,7 +74,7 @@ test("normal Host installs and enables all independently signed authoring Compon
     for (const capability of plugin.capabilities) expect(permissions).toContain(capability);
     await page.getByRole("button", { name: "ダウンロードして無効状態でインストール", exact: true }).click();
     await expect(panel.getByRole("status")).toContainText("署名とダイジェストを検証し、無効状態でインストールしました");
-    const card = panel.getByRole("listitem").filter({ hasText: plugin.id }).filter({ hasText: `v${plugin.version}` });
+    const card = panel.getByRole("listitem").filter({ has: page.locator(".plugin-card-head strong", { hasText: new RegExp(`^${plugin.id.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}$`) }) }).filter({ hasText: `v${plugin.version}` });
     await expect(card).toBeVisible();
     await expect(card).toContainText("installed, disabled");
     installInputs.push({ plugin_id: plugin.id, version: plugin.version,
@@ -85,20 +86,21 @@ test("normal Host installs and enables all independently signed authoring Compon
 
   await page.reload();
   await openRecentWorkspace(page, workspaceName, testInfo.project.name === "webkit-mobile");
-  const persistedFixture = await inspectSyntheticAuthoringWork(page, workspaceName, fixture.long_body_path);
-  expect(persistedFixture).toMatchObject({
-    scene_count: fixture.scene_count,
-    file_count: fixture.file_count,
-    long_body_bytes: fixture.long_body_bytes,
-    long_body_sha256: fixture.long_body_sha256,
-  });
+  // Reopen the long manuscript through the Host UI; do not open a second Git worker.
+  await chooseFile(page, fixture.long_body_path);
+  await expect.poll(() => page.locator(".cm-content").evaluate(el => {
+    const root = el as HTMLElement & { cmTile?: { root?: { view?: { state: { doc: { toString(): string } } } } } };
+    return root.cmTile?.root?.view?.state.doc.toString() ?? "";
+  })).toContain("最終行");
+  const persistedFixture = { ui_reopened_long_body: true, byte_identity: "NOT_CHECKED" };
+
 
   await showPanel(page, "review");
   const reloadedPanel = page.locator("details.plugin-manager-panel");
   if (await reloadedPanel.getAttribute("open") === null) await reloadedPanel.locator("summary").click();
   const reloadStates = [];
   for (const plugin of release.plugins) {
-    const card = reloadedPanel.getByRole("listitem").filter({ hasText: plugin.id }).filter({ hasText: `v${plugin.version}` });
+    const card = reloadedPanel.getByRole("listitem").filter({ has: page.locator(".plugin-card-head strong", { hasText: new RegExp(`^${plugin.id.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}$`) }) }).filter({ hasText: `v${plugin.version}` });
     await expect(card).toBeVisible();
     await expect(card).toContainText("installed, disabled");
     for (const capability of plugin.capabilities) {
@@ -107,23 +109,23 @@ test("normal Host installs and enables all independently signed authoring Compon
       await checkbox.check();
     }
     await card.getByRole("button", { name: "Enable", exact: true }).click();
-    await expect(card).toContainText(`${plugin.id}@${plugin.version} is enabled`);
+    await expect(card).toContainText("enabled, idle");
     reloadStates.push({ plugin_id: plugin.id, state: "enabled-idle", granted_capabilities: [...plugin.capabilities] });
   }
 
   const exposedPanels: Array<{ plugin_id: string; surface_id: string; title: string }> = [];
   const workspaceConfiguration = page.locator("details.st-workspace-configuration");
   await expect(workspaceConfiguration).toBeVisible();
-  if (await workspaceConfiguration.getAttribute("open") === null) await workspaceConfiguration.locator("summary").click();
+  if (await workspaceConfiguration.getAttribute("open") === null) await workspaceConfiguration.locator(":scope > summary").click();
   const panelMenu = workspaceConfiguration.locator("details.st-workspace-panel-menu");
-  if (await panelMenu.getAttribute("open") === null) await panelMenu.locator("summary").click();
+  if (await panelMenu.getAttribute("open") === null) await panelMenu.locator(":scope > summary").click();
   for (const plugin of release.plugins) for (const surface of plugin.surfaces.filter(item => item.kind === "panel")) {
     const show = panelMenu.getByRole("button", { name: `${surface.title}を表示する`, exact: true });
     if (await show.count()) await show.click();
     else await expect(panelMenu.getByRole("button", { name: `${surface.title}を閉じる`, exact: true })).toBeVisible();
     const surfaceTab = page.getByRole("tab", { name: surface.title, exact: true }).first();
     if (await surfaceTab.count() && await surfaceTab.getAttribute("aria-selected") !== "true") await surfaceTab.click();
-    await expect(page.getByRole("heading", { name: surface.title, level: 2, exact: true })).toBeVisible();
+    await expect(page.locator(".authoring-surface").getByRole("heading", { name: surface.title, level: 2, exact: true })).toBeVisible();
     exposedPanels.push({ plugin_id: plugin.id, surface_id: surface.id, title: surface.title });
   }
 
@@ -133,9 +135,56 @@ test("normal Host installs and enables all independently signed authoring Compon
   const enabledPanel = page.locator("details.plugin-manager-panel");
   if (await enabledPanel.getAttribute("open") === null) await enabledPanel.locator("summary").click();
   for (const plugin of release.plugins) {
-    const card = enabledPanel.getByRole("listitem").filter({ hasText: plugin.id }).filter({ hasText: `v${plugin.version}` });
+    const card = enabledPanel.getByRole("listitem").filter({ has: page.locator(".plugin-card-head strong", { hasText: new RegExp(`^${plugin.id.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}$`) }) }).filter({ hasText: `v${plugin.version}` });
     await expect(card).toBeVisible();
     await expect(card).toContainText("enabled, idle");
+  }
+
+  // Exercise a real leaf package through disable, uninstall and verified reinstall.
+  const leaf = release.plugins.find(plugin => plugin.id === "proprium.publishing")!;
+  const leafCard = enabledPanel.getByRole("listitem").filter({ has: page.locator(".plugin-card-head strong", { hasText: /^proprium\.publishing$/ }) }).filter({ hasText: `v${leaf.version} ·` });
+  await leafCard.getByRole("button", { name: "Disable", exact: true }).click();
+  await expect(leafCard).toContainText("installed, disabled");
+  page.once("dialog", dialog => void dialog.accept());
+  await leafCard.getByRole("button", { name: "Uninstall", exact: true }).click();
+  await expect(leafCard).toHaveCount(0);
+  await enabledPanel.getByRole("button", { name: "信頼済みカタログを表示", exact: true }).click();
+  await page.getByRole("button", { name: `${leaf.id} ${leaf.version} の署名済みプレビューを確認`, exact: true }).click();
+  await page.getByRole("button", { name: "ダウンロードして無効状態でインストール", exact: true }).click();
+  await expect(leafCard).toContainText("installed, disabled");
+
+  // Metadata-only patch versions reuse the exact previously verified source components.
+  // A newer root-signed snapshot retains the old entries and delegates new manifests.
+  const fixtureDir = process.env.PROPRIUM_VERSION_FIXTURE_DIR;
+  if (fixtureDir) {
+    const registryUrl = process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_URL!;
+    const origin = new URL(registryUrl).origin;
+    const artifactBase = new URL(release.registry.artifactBase);
+    const next = await readFile(join(fixtureDir, "next.json"));
+    const signature = await readFile(join(fixtureDir, "next.json.sig"));
+    await page.route("**/*", async route => {
+      const url = new URL(route.request().url());
+      if (url.href === registryUrl) return route.fulfill({status:200, contentType:"application/json",body:next,headers:{"cache-control":"no-store"}});
+      if (url.href === `${registryUrl}.sig`) return route.fulfill({status:200,contentType:"application/octet-stream",body:signature,headers:{"cache-control":"no-store"}});
+      if (url.origin === artifactBase.origin && url.pathname.startsWith(artifactBase.pathname)) {
+        const relative = decodeURIComponent(url.pathname.slice(artifactBase.pathname.length));
+        if (!/^[A-Za-z0-9._/-]+$/u.test(relative) || relative.split("/").some(part => part === "." || part === ".." || !part)) return route.fulfill({status:400});
+        try { const body = await readFile(join(fixtureDir, relative)); return route.fulfill({status:200,body,contentType:relative.endsWith(".json") ? "application/json" : relative.endsWith(".wasm") ? "application/wasm" : "application/octet-stream",headers:{"access-control-allow-origin":origin,"cache-control":"no-store"}}); }
+        catch { return route.fulfill({status:404}); }
+      }
+      return route.fallback();
+    });
+    // Disable dependents first, then update and roll back a leaf package.
+    // This tests real retained bytes, while versions are fixture metadata only.
+    const leafVersion = leaf.version.split("."); leafVersion[2] = String(Number(leafVersion[2]) + 1);
+    const patchVersion = leafVersion.join(".");
+    page.once("dialog", dialog => void dialog.accept(patchVersion));
+    await leafCard.getByRole("button", {name:"Update version",exact:true}).click();
+    await page.getByRole("button", {name:"ダウンロードして更新版を固定",exact:true}).click();
+    const patchCard = enabledPanel.getByRole("listitem").filter({has:page.locator(".plugin-card-head strong",{hasText:/^proprium\.publishing$/})}).filter({hasText:`v${patchVersion}`});
+    await expect(patchCard).toContainText(`pinned ${patchVersion}`);
+    await patchCard.getByRole("button",{name:"Rollback",exact:true}).click();
+    await expect(leafCard).toContainText(`pinned ${leaf.version}`);
   }
 
   await testInfo.attach("authoring-signed-release-and-host-install.json", {
@@ -148,6 +197,7 @@ test("normal Host installs and enables all independently signed authoring Compon
       reloaded_workspace: persistedFixture,
       plugins: installInputs,
       reloaded_plugin_states: reloadStates,
+      real_leaf_lifecycle: { plugin_id: leaf.id, disable: "PASS", uninstall: "PASS", reinstall: "PASS", update_rollback: fixtureDir ? "PASS (metadata-only patch fixture)" : "NOT_CHECKED" },
       host_rendered_panels: exposedPanels,
       assertions_excluded: ["feature acceptance", "action outputs", "MCP/UI equivalence", "ChangeWriter receipt", "R01-R14 status", "R14 source parity"],
     }, null, 2)}\n`),

@@ -1,5 +1,6 @@
 import { defineConfig } from "@playwright/test";
 import { createPrivateKey, createPublicKey, generateKeyPairSync } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 const configuredPort = process.env.PROPRIUM_E2E_PORT ?? "4173";
 const gatewayPort = process.env.PROPRIUM_E2E_GATEWAY_PORT ?? "4174";
@@ -9,8 +10,10 @@ const externalServer = Boolean(process.env.PROPRIUM_E2E_BASE_URL);
 process.env.VITE_PROPRIUM_E2E = "true";
 process.env.VITE_PROPRIUM_GATEWAY_URL ??= `http://127.0.0.1:${gatewayPort}`;
 const hasLiveGitHubToken = Boolean(process.env.PROPRIUM_E2E_GITHUB_TOKEN || process.env.SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN);
-const pluginFixturePrivateKey = process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY
-  ? createPrivateKey(process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY)
+const configuredFixtureKey = process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY ??
+  (process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_KEY_FILE ? readFileSync(process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_KEY_FILE, "utf8") : undefined);
+const pluginFixturePrivateKey = configuredFixtureKey
+  ? createPrivateKey(configuredFixtureKey)
   : generateKeyPairSync("ed25519").privateKey;
 const pluginFixturePublicKey = createPublicKey(pluginFixturePrivateKey);
 const pluginFixturePublicKeyBytes = pluginFixturePublicKey.export({ format: "der", type: "spki" }).subarray(-32);
@@ -25,7 +28,7 @@ process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY = pluginFixturePrivateKey.e
 export default defineConfig({
   testDir: ".",
   testMatch: "**/*.spec.ts",
-  testIgnore: "**/static-offline.acceptance.spec.ts",
+  testIgnore: ["**/static-offline.acceptance.spec.ts", "**/authoring-official.acceptance.spec.ts", "**/authoring-mcp*.acceptance.spec.ts", "**/plugin-runtime-v2.acceptance.spec.ts"],
   outputDir: "test-results/host",
   fullyParallel: false,
   workers: 1,

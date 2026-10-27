@@ -1,0 +1,38 @@
+[WebServer] (node:64302) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] $ pnpm --filter @scriptorium/contracts build && pnpm --dir app exec vite build --config vite.proprium.config.ts && node scripts/verify-proprium-static.mjs
+[WebServer] (node:64322) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] $ tsc -p tsconfig.json
+[WebServer] (node:64490) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:64505) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] ../node_modules/.pnpm/@bytecodealliance+jco-transpile@0.20.0/node_modules/@bytecodealliance/jco-transpile/vendor/js-component-bindgen-component.js (1:0): Module level directives cause errors when bundled, "use components" in "../node_modules/.pnpm/@bytecodealliance+jco-transpile@0.20.0/node_modules/@bytecodealliance/jco-transpile/vendor/js-component-bindgen-component.js" was ignored.
+[WebServer] [plugin vite:resolve] Module "node:fs/promises" has been externalized for browser compatibility, imported by "/workspace/proprium/node_modules/.pnpm/@bytecodealliance+jco-transpile@0.20.0/node_modules/@bytecodealliance/jco-transpile/vendor/js-component-bindgen-component.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[WebServer] ../node_modules/.pnpm/@bytecodealliance+jco-transpile@0.20.0/node_modules/@bytecodealliance/jco-transpile/vendor/js-component-bindgen-component.js (1:0): Module level directives cause errors when bundled, "use components" in "../node_modules/.pnpm/@bytecodealliance+jco-transpile@0.20.0/node_modules/@bytecodealliance/jco-transpile/vendor/js-component-bindgen-component.js" was ignored.
+[WebServer] [plugin vite:resolve] Module "node:fs/promises" has been externalized for browser compatibility, imported by "/workspace/proprium/node_modules/.pnpm/@bytecodealliance+jco-transpile@0.20.0/node_modules/@bytecodealliance/jco-transpile/vendor/js-component-bindgen-component.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[WebServer] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[WebServer] (node:64631) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:64638) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] ▲ [WARNING] Proxy environment variables detected. We'll use your proxy for fetch requests.
+[WebServer] 
+[WebServer] 
+
+Running 2 tests using 1 worker
+
+(node:64714) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [static-desktop-chromium] › tests/browser/static-offline.acceptance.spec.ts:49:5 › static Host imports a GitHub REST commit, reloads offline, and edits with a new cached Git worker (25.2s)
+(node:65065) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Skipping host requirements validation logic because `PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS` env variable is set.
+  ✓  2 [static-mobile-webkit] › tests/browser/static-offline.acceptance.spec.ts:49:5 › static Host imports a GitHub REST commit, reloads offline, and edits with a new cached Git worker (20.7s)
+
+  2 passed (1.7m)

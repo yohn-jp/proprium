@@ -1067,7 +1067,8 @@
           "confirmedEvents": true,
           "readerDisclosures": true,
           "characterBeliefs": true,
-          "sourceFiles": true
+          "sourceFiles": true,
+          "summaryDiagnostics": true
         },
         "required": [],
         "additionalProperties": false
@@ -1925,7 +1926,9 @@
           "knowledgeGaps": true,
           "forgetRisks": true,
           "firstReadReaction": true,
-          "snapshot": true
+          "snapshot": true,
+          "summaryDiagnostics": true,
+          "sourceFiles": true
         },
         "required": [],
         "additionalProperties": false
@@ -2711,7 +2714,10 @@
                   "label": "Scene ID",
                   "type": "string",
                   "required": true,
-                  "max_length": 256
+                  "max_length": 256,
+                  "initial_value": {
+                    "data_key": "host_context.scene_id"
+                  }
                 }
               ],
               "submit": {
@@ -2882,7 +2888,10 @@
                   "label": "Scene ID",
                   "type": "string",
                   "required": true,
-                  "max_length": 256
+                  "max_length": 256,
+                  "initial_value": {
+                    "data_key": "host_context.scene_id"
+                  }
                 }
               ],
               "submit": {
@@ -3162,7 +3171,10 @@
                   "label": "Scene ID",
                   "type": "string",
                   "required": true,
-                  "max_length": 256
+                  "max_length": 256,
+                  "initial_value": {
+                    "data_key": "host_context.scene_id"
+                  }
                 }
               ],
               "submit": {
@@ -3248,7 +3260,10 @@
                   "id": "scene_id",
                   "label": "Scene ID (optional)",
                   "type": "string",
-                  "max_length": 256
+                  "max_length": 256,
+                  "initial_value": {
+                    "data_key": "host_context.scene_id"
+                  }
                 },
                 {
                   "id": "proposal_status",

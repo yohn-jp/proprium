@@ -4,7 +4,8 @@ const ID = /^[a-z][a-z0-9._-]{0,63}$/u;
 const ACTION_ID = /^[A-Za-z][A-Za-z0-9._-]{0,127}$/u;
 const DATA_KEY_PART = /^(?:[A-Za-z_][A-Za-z0-9_]*|0|[1-9][0-9]{0,2})$/u;
 const UNSAFE_KEYS = new Set(["__proto__", "prototype", "constructor"]);
-const MAX_NODES = 256;
+const MAX_NODES = 512;
+const MAX_SURFACE_DEPTH = 16;
 const MAX_TEMPLATE_DEPTH = 12;
 const MAX_SURFACE_BYTES = 96 * 1024;
 
@@ -27,7 +28,7 @@ function text(value: unknown, label: string, max: number, optional = false): ass
 }
 
 function safeJson(value: unknown, depth = 0, budget = { nodes: 0 }): void {
-  if (depth > MAX_TEMPLATE_DEPTH || ++budget.nodes > MAX_NODES) throw new Error("UI JSON exceeds its nesting or item limit.");
+  if (depth > MAX_SURFACE_DEPTH || ++budget.nodes > MAX_NODES) throw new Error("UI JSON exceeds its nesting or item limit.");
   if (value === null || typeof value === "string" || typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value))) return;
   if (Array.isArray(value)) { for (const item of value) safeJson(item, depth + 1, budget); return; }
   if (!record(value)) throw new Error("UI JSON contains a non-JSON value.");

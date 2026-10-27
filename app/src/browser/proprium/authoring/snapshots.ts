@@ -47,6 +47,8 @@ export interface SnapshotRange {
  * In particular, a live worktree read is not a valid implementation of this port.
  */
 export interface SnapshotPort {
+  /** Trusted adapter can serve exact retained original bytes, otherwise rejects stale. */
+  readonly supports_pinned_reads?: true;
   pin(scope: AuthoringScope, options: { readonly include_draft: boolean }): Promise<SnapshotLease>;
   assert_current(lease: SnapshotLease): Promise<void>;
   list(lease: SnapshotLease, query: {
@@ -54,8 +56,8 @@ export interface SnapshotPort {
     readonly cursor: string | null;
     readonly limit: number;
   }): Promise<SnapshotPage>;
-  stat(lease: SnapshotLease, path: string): Promise<SnapshotFile | null>;
-  read_range(lease: SnapshotLease, path: string, offset: number, length: number): Promise<SnapshotRange>;
+  stat(lease: SnapshotLease, path: string, originalBytes?: boolean): Promise<SnapshotFile | null>;
+  read_range(lease: SnapshotLease, path: string, offset: number, length: number, originalBytes?: boolean): Promise<SnapshotRange>;
   release?(lease: SnapshotLease): Promise<void> | void;
 }
 
@@ -176,7 +178,7 @@ export class AuthoringSnapshotReader {
   async read(lease: SnapshotLease, path: string, options: {
     readonly offset?: number;
     readonly length?: number;
-  } = {}): Promise<SnapshotRange & { readonly next_offset: number | null }> {
+  } = {}, originalBytes = false): Promise<SnapshotRange & { readonly next_offset: number | null }> {
     validateLease(lease, lease.scope, lease.snapshot.draft_generation !== null);
     validatePath(path);
     const offset = options.offset ?? 0;
@@ -184,12 +186,12 @@ export class AuthoringSnapshotReader {
     if (!Number.isSafeInteger(offset) || offset < 0) throw invalid("offset must be a non-negative safe integer");
     if (!Number.isSafeInteger(length) || length < 0 || length > MAX_READ_CHUNK) throw invalid(`length must be between 0 and ${MAX_READ_CHUNK}`);
 
-    await this.assertCurrent(lease);
-    const file = validateFile(await this.port.stat(lease, path), "", path);
+    if (!originalBytes) await this.assertCurrent(lease);
+    const file = validateFile(await this.port.stat(lease, path, originalBytes), "", path);
     if (offset > file.byte_length) throw invalid("offset is beyond end of file");
     const read_length = Math.min(length, file.byte_length - offset);
-    const bytes = await this.readAndVerify(lease, file, offset, read_length);
-    await this.assertCurrent(lease);
+    const bytes = await this.readAndVerify(lease, file, offset, read_length, originalBytes);
+    if (!originalBytes) await this.assertCurrent(lease);
     const next = offset + bytes.byteLength;
     return Object.freeze({
       bytes,
@@ -198,6 +200,13 @@ export class AuthoringSnapshotReader {
       revision: file.revision,
       next_offset: next < file.byte_length ? next : null,
     });
+  }
+
+  get supportsPinnedReads(): boolean { return this.port.supports_pinned_reads === true; }
+
+  /** Host action only: exact original bytes; caller revalidates current state at action end. */
+  readPinned(lease: SnapshotLease, path: string, options: { readonly offset?: number; readonly length?: number } = {}) {
+    return this.read(lease, path, options, this.supportsPinnedReads);
   }
 
   async release(lease: SnapshotLease): Promise<void> {
@@ -209,7 +218,7 @@ export class AuthoringSnapshotReader {
     for (const key of this.verified.keys()) if (key.startsWith(keyPrefix)) this.verified.delete(key);
   }
 
-  private async readAndVerify(lease: SnapshotLease, file: SnapshotFile, offset: number, length: number): Promise<Uint8Array> {
+  private async readAndVerify(lease: SnapshotLease, file: SnapshotFile, offset: number, length: number, originalBytes = false): Promise<Uint8Array> {
     const cacheKey = `${scopeKey(lease.scope)}\u0000${lease.snapshot.id}\u0000${file.path}\u0000${file.revision}`;
     if (!this.verified.has(cacheKey)) {
       const hash = new StreamingSha256();
@@ -218,7 +227,7 @@ export class AuthoringSnapshotReader {
       const selectedEnd = offset + length;
       while (consumed < file.byte_length) {
         const chunkLength = Math.min(MAX_READ_CHUNK, file.byte_length - consumed);
-        const chunk = await this.port.read_range(lease, file.path, consumed, chunkLength);
+        const chunk = await this.port.read_range(lease, file.path, consumed, chunkLength, originalBytes);
         if (!chunk || chunk.offset !== consumed || chunk.total_bytes !== file.byte_length || chunk.revision !== file.revision ||
             !(chunk.bytes instanceof Uint8Array) || chunk.bytes.byteLength !== chunkLength) {
           throw new AuthoringSnapshotError("snapshot_stale", `Pinned bytes for ${file.path} no longer match the listed revision.`);
@@ -246,7 +255,7 @@ export class AuthoringSnapshotReader {
       return selected ?? new Uint8Array();
     }
     if (length === 0) return new Uint8Array();
-    const response = await this.port.read_range(lease, file.path, offset, length);
+    const response = await this.port.read_range(lease, file.path, offset, length, originalBytes);
     if (!response || response.offset !== offset || response.total_bytes !== file.byte_length || response.revision !== file.revision ||
         !(response.bytes instanceof Uint8Array) || response.bytes.byteLength !== length) {
       throw new AuthoringSnapshotError("snapshot_stale", `Pinned bytes for ${file.path} no longer match the listed revision.`);
@@ -269,7 +278,8 @@ export class AuthoringSnapshotReader {
     for (const [token, cursor] of this.cursors) if (cursor.expires_at <= current) this.cursors.delete(token);
   }
 
-  private async assertCurrent(lease: SnapshotLease): Promise<void> {
+  /** Validate an existing lease without fetching an unrelated file-list page. */
+  async assertCurrent(lease: SnapshotLease): Promise<void> {
     try { await this.port.assert_current(lease); }
     catch (error) {
       if (error instanceof AuthoringSnapshotError) throw error;
