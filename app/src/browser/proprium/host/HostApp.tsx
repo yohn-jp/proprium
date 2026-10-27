@@ -23,6 +23,9 @@ import { AuthoringReview } from "./authoring/AuthoringReview.js";
 import { AuthoringAssets } from "./authoring/AuthoringAssets.js";
 import { AuthoringCommandMenu } from "./authoring/AuthoringCommandMenu.js";
 import { useProviderConsent } from "./use-provider-consent.js";
+import { ProviderSettingsStore } from "../authoring/provider-settings.js";
+import { ProviderSettingsPanel } from "../authoring/provider-settings-panel.js";
+import { PairedPreferenceSettingsPanel, type PairedPreferenceSnapshot } from "../authoring/preference-settings-panel.js";
 import { HostWritingResumeStore, savedBodySha256, writingResumeScope, type HostWritingResume, type WritingResumeSelection } from "./writing-resume.js";
 
 import { DesktopShell } from "../../../shells/desktop/DesktopShell.js";
@@ -268,6 +271,8 @@ export function HostApp(): ReactElement {
   }, []);
   const [authoring, setAuthoring] = useState<BrowserAuthoringService | null>(null);
   const providerConsent = useProviderConsent();
+  const [providerSettings] = useState(()=>new ProviderSettingsStore());
+  const [providerSettingsEpoch,setProviderSettingsEpoch] = useState(0);
   const [authoringRegistrations, setAuthoringRegistrations] = useState<AuthoringSurfaceRegistration[]>([]);
   const [authoringEpoch, setAuthoringEpoch] = useState(0);
   const refreshAuthoring = useCallback(() => setAuthoringEpoch(value => value + 1), []);
@@ -275,6 +280,7 @@ export function HostApp(): ReactElement {
     if (!git || !workspace) { setAuthoring(null); setAuthoringRegistrations([]); return; }
     const service = createBrowserAuthoringService({ manager: pluginManager, git, workspace: workspace.identity,
       onProviderConsent: providerConsent.request,
+      provider: providerSettings.brokerConfiguration(),
       actorId: () => preferencesRef.current.email || "local",
       generation: workspaceGeneration,
       measureAssetCapacity: async input => {
@@ -314,7 +320,7 @@ export function HostApp(): ReactElement {
     setAuthoring(service);
     void service.recoverProposal().catch(error => setMessage({ tone: "error", text: errorMessage(error) }));
     return () => { void service.dispose(); };
-  }, [git, workspaceGeneration, pluginManager]);
+  }, [git, workspaceGeneration, pluginManager, providerSettingsEpoch]);
   useEffect(() => {
     let cancelled = false;
     if (authoring) void authoring.listSurfaces().then(values => { if (!cancelled) setAuthoringRegistrations(validateAuthoringSurfaceRegistrations(values)); })
@@ -1051,7 +1057,17 @@ export function HostApp(): ReactElement {
               : <p className="sidebar-empty">このWorkspaceはこのブラウザー内だけに保存されます。GitHub同期は設定されていません。</p>}
           </section>
 </div> : mode === "desktop" ? <div className="host-controls">{recentCard}</div> : picker;
-  const tools = <div className="host-controls">{authoring && <><AuthoringReview key={workspaceGeneration} service={authoring} epoch={authoringEpoch} onApplied={refreshAfterPlugin} /><AuthoringAssets key={`assets:${workspaceGeneration}`} manager={pluginManager} service={authoring} epoch={authoringEpoch} /></>}<AuthoringCommandMenu registrations={authoringRegistrations} invoke={invokeAuthoring} read={readAuthoring} navigate={navigateAuthoring} />{git && workspace && <PluginPanel
+  const tools = <div className="host-controls">{authoring && <><details><summary>外部プロバイダーの設定</summary><ProviderSettingsPanel store={providerSettings} onChanged={()=>setProviderSettingsEpoch(value=>value+1)} /></details>
+    {authoringRegistrations.some(row=>row.pluginId==="proprium.paired-writing") && <details><summary>執筆支援の個人設定</summary><PairedPreferenceSettingsPanel key={`${workspaceGeneration}:${providerSettingsEpoch}:${preferences.email}`} scopeKey={authoring.localPreferenceScope()}
+      load={async expectedScope=>{
+        const local=await authoring.readLocalPreference(expectedScope,"proprium.paired-writing","model-settings",1);
+        const result=await authoring.invokeRead("proprium.paired-writing","paired.workspace-settings.read",{});
+        if(authoring.localPreferenceScope()!==expectedScope)throw new Error("snapshot_stale");
+        if(!result.ok)throw new Error(result.error.message);
+        const value=result.value as unknown as PairedPreferenceSnapshot;
+        return {...value,local:local.found?local.value as Record<string,unknown>:{}};
+      }} save={(event,expectedScope,value)=>authoring.writeLocalPreference(event,expectedScope,"proprium.paired-writing","model-settings",1,value)} onChanged={refreshAuthoring} /></details>}
+    <AuthoringReview key={workspaceGeneration} service={authoring} epoch={authoringEpoch} onApplied={refreshAfterPlugin} /><AuthoringAssets key={`assets:${workspaceGeneration}`} manager={pluginManager} service={authoring} epoch={authoringEpoch} /></>}<AuthoringCommandMenu registrations={authoringRegistrations} invoke={invokeAuthoring} read={readAuthoring} navigate={navigateAuthoring} />{git && workspace && <PluginPanel
             manager={pluginManager}
             workspaceId={activeWorkspaceId!}
             activationScope={{ workspace_id: workspace.identity.localWorkspaceId,

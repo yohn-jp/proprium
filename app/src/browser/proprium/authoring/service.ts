@@ -1,4 +1,4 @@
-import type { ActionRequest, ActionResult, Scope, Snapshot, SurfaceDeclaration, ArtifactMetadata,
+import type { ActionRequest, ActionResult, Scope, Snapshot, SurfaceDeclaration, ArtifactMetadata, JsonSchema,
   CacheKey, ChangeSet as WireChangeSet, ChangeUnit as WireChangeUnit } from "./types.js";
 import { AuthoringSnapshotReader, type SnapshotLease, type SnapshotPort, type SnapshotPage, type SnapshotFile,
   type SnapshotRange } from "./snapshots.js";
@@ -23,6 +23,7 @@ import { ChangeStageStore, type ChangeStageContext, type ChangeStageRead } from 
 import { ProviderRequestBroker, type ProviderBrokerOptions, type ProviderConsentRequest, type ProviderRequestInput } from "./providers.js";
 import { ProviderUsageHistory } from "./provider-usage.js";
 import { AuthoringTaskRegistry, SEMANTIC_PROGRESS_KEY } from "./tasks.js";
+import { assertValue } from "./schema.js";
 
 export interface AuthoringWorkspaceSelection {
   readonly git: BrowserLocalGit;
@@ -281,6 +282,30 @@ export class BrowserAuthoringService {
   }
 
   /** Captures the browser's real trusted event before any asynchronous work. */
+  /** Host settings guard; this identity is never chosen by a guest. */
+  localPreferenceScope(): string {
+    const selected=this.options.selectWorkspace();
+    if(this.disposed||!selected)throw staleScope();
+    return canonicalJson({identity:selected.identity,generation:selected.generation,actor:this.options.actorId?.()??"local"});
+  }
+
+  async readLocalPreference(expectedScope:string,pluginId:string,key:string,schemaVersion:number):Promise<{found:boolean;value?:unknown}>{
+    if(this.localPreferenceScope()!==expectedScope)throw staleScope();
+    const value=await this.requireBackend("plugin.preferences.read",this.options.backends.preferenceRead)(pluginId,
+      {key,schema_version:schemaVersion,user_partition:this.options.actorId?.()??"local"});
+    if(this.localPreferenceScope()!==expectedScope)throw staleScope();
+    return value as {found:boolean;value?:unknown};
+  }
+
+  /** Explicit Host UI route. No guest or MCP action can call this method. */
+  async writeLocalPreference(event:Event,expectedScope:string,pluginId:string,key:string,schemaVersion:number,value:unknown):Promise<void>{
+    if(this.localPreferenceScope()!==expectedScope)throw staleScope();
+    const gesture=this.options.gestures.issue(event);
+    const payload={key,schema_version:schemaVersion,value:structuredClone(value),user_partition:this.options.actorId?.()??"local"};
+    await this.requireBackend("Host preference controls",this.options.backends.preferenceWrite)(pluginId,payload,gesture);
+    if(this.localPreferenceScope()!==expectedScope)throw staleScope();
+  }
+
   async invokeUi(event: Event, pluginId: string, actionId: string, input: Record<string, unknown>, followNavigation = false): Promise<ActionResult> {
     const principal = this.makePrincipal("ui", event);
     if (followNavigation) {
@@ -910,8 +935,25 @@ export function createBrowserAuthoringService(options: CreateBrowserAuthoringSer
 
   const artifacts = new ArtifactBroker(brokerStore);
   const cache = new DerivedCacheBroker(brokerStore);
+  const preferenceSchemas = new Map<string,JsonSchema>();
+  const admitPreferenceSchema = async (pluginId:string,key:string,version:number) => {
+    const installed=await options.manager.verifiedActionSet(pluginId);
+    if(!installed?.enabled||!installed.grants.includes("plugin.preferences"))throw Object.assign(new Error("Enable the plugin and grant local preferences first"),{code:"capability_denied"});
+    // This key reuses the signed, closed settings patch declaration. The Host
+    // interprets its schema; it does not execute plugin settings code.
+    if(pluginId==="proprium.paired-writing"&&key==="model-settings"&&version===1){
+      const descriptor=installed.descriptors.find(row=>row.action_id==="paired.workspace-settings.propose");
+      const properties=descriptor&&typeof descriptor.input_schema==="object" ? descriptor.input_schema.properties as Record<string,JsonSchema>|undefined : undefined;
+      if(properties?.patch)preferenceSchemas.set(`${pluginId}:${key}:${version}`,properties.patch);
+    }
+  };
   const preferences = new PluginPreferencesBroker(brokerStore, freshGestures,
-    (pluginId, key, schemaVersion, value) => options.validatePreference?.(pluginId, key, schemaVersion, value) ?? false);
+    (pluginId, key, schemaVersion, value) => {
+      if(options.validatePreference)return options.validatePreference(pluginId,key,schemaVersion,value);
+      const schema=preferenceSchemas.get(`${pluginId}:${key}:${schemaVersion}`);
+      if(!schema)return false;
+      try{assertValue(schema,value,"Local preference");return true;}catch{return false;}
+    });
   const basePort = {
     assert_snapshot: (scope: Scope, snapshot: WriterSnapshot) => writerWorkspace.assert_snapshot(scope, snapshot),
     assert_read_set: (scope: Scope, snapshot: WriterSnapshot, readSet: WriterChangeSet["read_set"]) => writerWorkspace.assert_read_set(scope, snapshot, readSet),
@@ -1032,9 +1074,19 @@ export function createBrowserAuthoringService(options: CreateBrowserAuthoringSer
     cacheGet: async (pluginId, payload) => cache.get(pluginId, payload.key as CacheKey),
     cachePut: async (pluginId, payload) => cache.put(pluginId, payload.key as CacheKey, payload.value),
     cacheEvict: async (pluginId, payload) => cache.evict(pluginId, payload.key as CacheKey | undefined),
-    preferenceRead: async (pluginId, payload) => preferences.read(pluginId,
-      requiredString(payload.user_partition, "user_partition"), requiredString(payload.key, "key"),
-      requiredInteger(payload.schema_version, "schema_version")),
+    preferenceRead: async (pluginId, payload) => {
+      const key=requiredString(payload.key,"key"),version=requiredInteger(payload.schema_version,"schema_version");
+      await admitPreferenceSchema(pluginId,key,version);
+      return preferences.read(pluginId,requiredString(payload.user_partition,"user_partition"),key,version);
+    },
+    preferenceWrite: async (pluginId,payload,gesture) => {
+      const key=requiredString(payload.key,"key"),version=requiredInteger(payload.schema_version,"schema_version");
+      const actor=options.actorId?.()??"local";
+      if(actor!==payload.user_partition)throw staleScope();
+      await admitPreferenceSchema(pluginId,key,version);
+      if((options.actorId?.()??"local")!==actor)throw staleScope();
+      return preferences.write(pluginId,actor,key,version,payload.value,gesture);
+    },
     artifactCreate: async (pluginId, request, payload) => artifacts.create(pluginId, {
       media_type: requiredString(payload.media_type, "media_type"), filename: requiredString(payload.filename, "filename"),
       scope: request.scope, snapshot: request.snapshot,
