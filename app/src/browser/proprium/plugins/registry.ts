@@ -1,3 +1,4 @@
+import { verifyEd25519 } from "../ed25519.js";
 import { PluginArtifactError, admitPluginManifest, type PluginManifest } from "../plugin-artifact.js";
 
 export const PLUGIN_REGISTRY_SCHEMA = "proprium.registry/v1";
@@ -183,8 +184,7 @@ export async function admitRegistry(raw: Uint8Array, signature: Uint8Array, trus
   if (!(signature instanceof Uint8Array) || signature.byteLength !== 64) fail("invalid_signature", "Registry signature must be 64 bytes");
   let valid = false;
   try {
-    const key = await crypto.subtle.importKey("raw", Uint8Array.from(trust.publicKey), { name: "Ed25519" }, false, ["verify"]);
-    valid = await crypto.subtle.verify({ name: "Ed25519" }, key, Uint8Array.from(signature), Uint8Array.from(raw));
+    valid = verifyEd25519(raw, signature, trust.publicKey);
   } catch { fail("invalid_signature", "Ed25519 registry signature verification is unavailable or failed"); }
   if (!valid) fail("invalid_signature", "Registry signature does not match the pinned key");
   const digest = await sha256(raw);
