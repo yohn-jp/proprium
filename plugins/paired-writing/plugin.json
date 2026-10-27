@@ -14513,6 +14513,89 @@
         "ui"
       ],
       "requires_user_gesture": true
+    },
+    {
+      "plugin_id": "proprium.paired-writing",
+      "action_id": "paired.synonyms.preview",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "original": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "sentence": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "original",
+          "sentence"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16384
+          },
+          "promptVersion": {
+            "const": "synonym-suggest@2"
+          },
+          "presetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "model": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 512
+          },
+          "provider_invoked": {
+            "const": false
+          },
+          "settings_revision": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "prompt",
+          "promptVersion",
+          "presetId",
+          "model",
+          "provider_invoked",
+          "settings_revision"
+        ]
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "plugin.preferences.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
     }
   ],
   "ui": [
@@ -14819,6 +14902,55 @@
                     "data_key": "last_action_result.workspace.revision"
                   }
                 }
+              }
+            }
+          },
+          {
+            "id": "synonyms-preview-tab",
+            "title": "Synonym prompt",
+            "body": {
+              "id": "paired-synonyms-preview-form",
+              "type": "form",
+              "title": "Preview synonym prompt",
+              "description": "Preview the prompt locally before requesting suggestions.",
+              "fields": [
+                {
+                  "id": "original",
+                  "type": "string",
+                  "label": "Original term",
+                  "required": true,
+                  "max_length": 256
+                },
+                {
+                  "id": "sentence",
+                  "type": "string",
+                  "label": "Sentence",
+                  "required": true,
+                  "max_length": 8000
+                }
+              ],
+              "submit": {
+                "action_id": "paired.synonyms.preview",
+                "input_template": {
+                  "original": {
+                    "data_key": "form.original"
+                  },
+                  "sentence": {
+                    "data_key": "form.sentence"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "synonyms-preview-result-tab",
+            "title": "Synonym prompt result",
+            "body": {
+              "id": "paired-synonyms-preview-result",
+              "type": "detail",
+              "title": "Local preview",
+              "value": {
+                "data_key": "last_action_result"
               }
             }
           }
