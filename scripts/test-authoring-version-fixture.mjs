@@ -2,14 +2,16 @@
 // current declarations and synthetic patch versions with ephemeral test keys.
 // Usage: node scripts/test-authoring-version-fixture.mjs <verified-registry-dir> <new-output-dir>
 // Set PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY to the independently pinned source key.
-import { createHash, generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, createPublicKey, generateKeyPairSync, sign } from 'node:crypto';
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, relative, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-if (process.argv.length !== 4 || !process.env.PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY) {
+const sourceKey = process.env.PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY ?? (process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_KEY_FILE
+  ? createPublicKey(await readFile(process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_KEY_FILE, 'utf8')).export({format:'der',type:'spki'}).subarray(-32).toString('base64') : undefined);
+if (process.argv.length !== 4 || !sourceKey) {
   throw new Error('Usage: PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY=<source-key> node scripts/test-authoring-version-fixture.mjs <verified-registry-dir> <new-output-dir>');
 }
 const source = resolve(process.argv[2]);
@@ -23,7 +25,7 @@ const verify = (directory, publicKey) => {
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`Registry verification failed for ${directory}`);
 };
-verify(source, process.env.PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY);
+verify(source, sourceKey);
 await mkdir(output, { recursive: false });
 await cp(join(source, 'proprium'), join(output, 'proprium'), { recursive: true, errorOnExist: true, force: false });
 const registryKeys = generateKeyPairSync('ed25519');

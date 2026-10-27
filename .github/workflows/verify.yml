@@ -105,12 +105,22 @@ jobs:
       - name: Exercise Knowledge and Research authoring surfaces
         if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         run: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts
+      - name: Exercise signed update and rollback with retained actual components
+        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
+        env:
+          PROPRIUM_VERSION_FIXTURE_DIR: ${{ runner.temp }}/authoring-version-fixture
+        run: |
+          node scripts/test-authoring-version-fixture.mjs "$PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR" "$PROPRIUM_VERSION_FIXTURE_DIR"
+          PROPRIUM_AUTHORING_REGISTRY_DIR="$PROPRIUM_VERSION_FIXTURE_DIR" PROPRIUM_AUTHORING_REGISTRY_PUBLIC_KEY_FILE="$PROPRIUM_VERSION_FIXTURE_DIR/test-root-public-key.txt" node scripts/authoring-evidence-e2e.mjs
       - name: Exercise signed Publishing downloads and print
         if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         run: pnpm exec playwright test --config tests/browser/authoring-publishing.playwright.config.ts
       - name: Exercise official typed actions through the live Gateway
         if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         run: pnpm exec playwright test --config tests/browser/authoring-mcp.playwright.config.ts
+      - name: Exercise signed Diagnostics, Paired Writing and Speaker workflows
+        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
+        run: pnpm exec playwright test --config tests/browser/authoring-tools.playwright.config.ts
       - name: Exercise the production static shell offline
         if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         env:
