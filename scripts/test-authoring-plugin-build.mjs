@@ -15,7 +15,8 @@ const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const rawPublicKey = pair => Buffer.from(pair.publicKey.export({ format: 'der', type: 'spki' })).subarray(-32).toString('base64');
 const sourceRevision = process.env.GITHUB_SHA ?? execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
 const temporary = await mkdtemp(join(tmpdir(), 'proprium-authoring-build-'));
-const output = join(temporary, 'registry');
+const retainedOutput = process.env.PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR;
+const output = retainedOutput ? resolve(retainedOutput) : join(temporary, 'registry');
 const registryKeys = generateKeyPairSync('ed25519');
 const publisherKeys = generateKeyPairSync('ed25519');
 const env = {
@@ -23,7 +24,7 @@ const env = {
   PROPRIUM_PLUGIN_OUTPUT_DIR: output,
   PROPRIUM_PLUGIN_PREVIOUS_REGISTRY_DIR: '',
   PROPRIUM_PLUGIN_REGISTRY_VERSION: '1.0.0',
-  PROPRIUM_PLUGIN_ARTIFACT_BASE: 'https://authoring-build.invalid/plugins/',
+  PROPRIUM_PLUGIN_ARTIFACT_BASE: process.env.PROPRIUM_AUTHORING_TEST_ARTIFACT_BASE ?? 'https://authoring-build.invalid/plugins/',
   PROPRIUM_PLUGIN_REGISTRY_PRIVATE_KEY: registryKeys.privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(),
   PROPRIUM_PLUGIN_PUBLISHER_PRIVATE_KEY: publisherKeys.privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(),
   PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY: rawPublicKey(registryKeys),
@@ -36,6 +37,11 @@ function run(command, args) {
 }
 
 try {
+  if (retainedOutput) {
+    const keyPath = process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_KEY_FILE;
+    if (!keyPath || resolve(keyPath).startsWith(`${root}/`) || resolve(keyPath).startsWith(`${output}/`)) throw new Error('Retained test fixtures require a private key path outside the repository and served artifacts');
+    await writeFile(keyPath, registryKeys.privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(), { flag: 'wx', mode: 0o600 });
+  }
   await mkdir(output, { recursive: true });
   run(process.execPath, ['scripts/build-plugin-registry.mjs', 'authoring']);
   run(process.execPath, ['scripts/verify-plugin-registry.mjs', 'authoring']);

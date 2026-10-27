@@ -6,6 +6,18 @@ import { join, resolve } from "node:path";
 
 /** Build real official sources with a per-run test publisher and the Host's test trust root. */
 export default async function setup(): Promise<() => void> {
+  const retained = process.env.PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR;
+  if (retained) {
+    const signer = createPrivateKey(process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY!);
+    const publicKey = createPublicKey(signer).export({ format: "der", type: "spki" }).subarray(-32).toString("base64");
+    const source = resolve(process.env.PROPRIUM_E2E_SOURCE ?? ".");
+    execFileSync(process.execPath, [join(source, "scripts/verify-plugin-registry.mjs"), "authoring"], {
+      cwd: source, stdio: "inherit", env: { ...process.env,
+        PROPRIUM_PLUGIN_OUTPUT_DIR: resolve(retained), PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY: publicKey },
+    });
+    process.env.PROPRIUM_OFFICIAL_E2E_DIR = resolve(retained);
+    return () => { delete process.env.PROPRIUM_OFFICIAL_E2E_DIR; };
+  }
   const directory = mkdtempSync(join(tmpdir(), "proprium-official-e2e-"));
   try {
     const signer = createPrivateKey(process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY!);

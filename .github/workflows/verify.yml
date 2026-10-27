@@ -19,6 +19,10 @@ jobs:
     name: Browser host, Git, plugins and static assets
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    env:
+      PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR: ${{ runner.temp }}/signed-authoring-registry
+      PROPRIUM_E2E_PLUGIN_REGISTRY_KEY_FILE: ${{ runner.temp }}/authoring-test-registry-key.pem
+      PROPRIUM_AUTHORING_TEST_ARTIFACT_BASE: http://127.0.0.1:4173/plugin-fixture/
     steps:
       - uses: actions/checkout@v4
         with:
