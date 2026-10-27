@@ -1260,7 +1260,30 @@ const sceneRun: Handler = function* (raw, context, host) {
       if (requested.includes("speaker")) sections.speaker = { status: "unavailable", reason: "provider_unavailable" };
     }
   }
-  if (requested.includes("semanticHypotheses")) sections.semanticHypotheses = { status: "unavailable", reason: "provider_unavailable" };
+  let semanticStatus: "ready" | "unavailable" = "unavailable";
+  if (requested.includes("semanticHypotheses")) {
+    sections.semanticHypotheses = { status: "unavailable", reason: "provider_unavailable" };
+    // Semantic's index represents saved source, not an unsaved editor draft.
+    if (!draftGeneration) {
+      try {
+        const result = yield* invokeAction<Record<string, unknown>>(host, "proprium.semantic", "proprium.semantic.contradictions.candidates", { limit: 100 });
+        if (canonicalJson(result.snapshot) !== canonicalJson(context.snapshot)) throw new DiagnosticActionError("snapshot_stale", "Semantic returned a different snapshot", true);
+        if (result.indexAvailable === true) {
+          const candidates = boundedProviderRows(result.candidates, "Semantic hypotheses") as Array<Record<string, unknown>>;
+          if (typeof result.complete !== "boolean" || !(result.nextCursor === null || typeof result.nextCursor === "string")) throw new DiagnosticActionError("dependency_unavailable", "Semantic returned an invalid candidate page", true);
+          const selected = candidates.filter(candidate => {
+            const a = object(candidate.evidenceA, "Semantic evidence A");
+            const b = object(candidate.evidenceB, "Semantic evidence B");
+            return a.sceneId === input.sceneId || b.sceneId === input.sceneId;
+          });
+          semanticStatus = "ready";
+          sections.semanticHypotheses = { status: "ready", candidates: selected, model: result.model, complete: result.complete && result.nextCursor === null };
+        } else if (result.indexAvailable !== false) throw new DiagnosticActionError("dependency_unavailable", "Semantic returned an invalid index state", true);
+      } catch (error) {
+        if (!optionalProviderError(error)) throw error;
+      }
+    }
+  }
   findings.sort((left, right) => String(left.class ?? "").localeCompare(String(right.class ?? "")) ||
     Number((left.range as Record<string, unknown> | undefined)?.start ?? 0) - Number((right.range as Record<string, unknown> | undefined)?.start ?? 0) || String(left.fingerprint ?? "").localeCompare(String(right.fingerprint ?? "")));
   const classCounts: Record<string, number> = {};
@@ -1281,7 +1304,7 @@ const sceneRun: Handler = function* (raw, context, host) {
     ...(requested.includes("plotGoal") ? { plotGoal: plotGoalStatus } : {}),
     ...(requested.includes("declaredVoice") ? { declaredVoice: speakerStatus } : {}),
     ...(requested.includes("speaker") ? { speaker: speakerStatus } : {}),
-    ...(requested.includes("semanticHypotheses") ? { semanticHypotheses: "unavailable" } : {}),
+    ...(requested.includes("semanticHypotheses") ? { semanticHypotheses: semanticStatus } : {}),
   };
   return {
     identity: {

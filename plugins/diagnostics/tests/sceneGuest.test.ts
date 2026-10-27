@@ -62,3 +62,80 @@ test("scene report ties saved and explicit Draft analysis to Narrative identity"
   assert.equal(result.value.identity.documentRevision, savedRevision);
   guest.dispose();
 });
+
+test("scene report requests Semantic hypotheses and reports a missing index honestly", () => {
+  guest.initialize({ pluginId: "proprium.diagnostics", version: "0.1.0", workspaceId: scope.workspace_id });
+  const savedText = "本文。";
+  const savedRevision = sha256(savedText);
+  let result = JSON.parse(guest.invoke(JSON.stringify(request({ sceneId: "sc-1", sections: ["semanticHypotheses"] }))));
+  let semanticCalled = false;
+  while (result.kind === "host_call") {
+    const payload = result.payload as Record<string, unknown>;
+    if (result.operation === "workspace.plugin.invoke" && payload.action_id === "proprium.narrative.scene.context") {
+      result = resume(result, { request_id: "scene", scope, snapshot, ok: true, warnings: [], value: {
+        scene_id: "sc-1", title: "場面", volume: { id: "v", title: "巻" }, chapter: { id: "c", title: "章" },
+        manuscript_path: "manuscript/a.md", metadata_revision: revision, manuscript_revision: savedRevision, diagnostics: [],
+      } });
+    } else if (result.operation === "workspace.plugin.invoke" && payload.action_id === "proprium.semantic.contradictions.candidates") {
+      semanticCalled = true;
+      result = resume(result, { request_id: "semantic", scope, snapshot, ok: true, warnings: [], value: {
+        snapshot, model: { id: "test", revision: "1", role: "embedding", status: "unavailable" }, indexAvailable: false, candidates: [], nextCursor: null, complete: true,
+      } });
+    } else if (payload.path === "manuscript/a.md") {
+      const bytes = [...new TextEncoder().encode(savedText)];
+      result = resume(result, { revision: savedRevision, total_bytes: bytes.length, offset: 0, bytes, next_offset: null });
+    } else result = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: result.call_id, ok: false, error: { code: "file_not_found", message: "not configured", retryable: false } })));
+  }
+  assert.equal(result.ok, true);
+  assert.equal(semanticCalled, true);
+  assert.equal(result.value.sections.semanticHypotheses.status, "unavailable");
+  assert.equal(result.value.complete, false);
+  guest.dispose();
+});
+
+test("scene report returns matching Semantic evidence and marks a paginated result incomplete", async () => {
+  guest.initialize({ pluginId: "proprium.diagnostics", version: "0.1.0", workspaceId: scope.workspace_id });
+  const savedText = "本文。";
+  const savedRevision = sha256(savedText);
+  const evidence = (sceneId: string) => ({ sceneId, sentenceIndex: 0, quote: "本文。", path: "manuscript/a.md", revision: savedRevision, start: 0, end: 3 });
+  const candidate = (id: string, sceneId: string) => ({ id, kind: "embedding_midband", entityId: "person", score: 0.5, suspicion: "review", evidenceA: evidence(sceneId), evidenceB: evidence("other") });
+  let result = JSON.parse(guest.invoke(JSON.stringify(request({ sceneId: "sc-1", sections: ["semanticHypotheses"] }))));
+  while (result.kind === "host_call") {
+    const payload = result.payload as Record<string, unknown>;
+    if (result.operation === "workspace.plugin.invoke" && payload.action_id === "proprium.narrative.scene.context") {
+      result = resume(result, { request_id: "scene", scope, snapshot, ok: true, warnings: [], value: {
+        scene_id: "sc-1", title: "場面", volume: { id: "v", title: "巻" }, chapter: { id: "c", title: "章" },
+        manuscript_path: "manuscript/a.md", metadata_revision: revision, manuscript_revision: savedRevision, diagnostics: [],
+      } });
+    } else if (result.operation === "workspace.plugin.invoke" && payload.action_id === "proprium.semantic.contradictions.candidates") {
+      result = resume(result, { request_id: "semantic", scope, snapshot, ok: true, warnings: [], value: {
+        snapshot, model: { id: "test", revision: "1", role: "embedding", status: "ready", digest: null, byte_length: null, license: "MIT" }, indexAvailable: true,
+        candidates: [candidate("match", "sc-1"), candidate("other", "another")], nextCursor: "more", complete: false,
+      } });
+    } else if (payload.path === "manuscript/a.md") {
+      const bytes = [...new TextEncoder().encode(savedText)];
+      result = resume(result, { revision: savedRevision, total_bytes: bytes.length, offset: 0, bytes, next_offset: null });
+    } else result = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: result.call_id, ok: false, error: { code: "file_not_found", message: "not configured", retryable: false } })));
+  }
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.value.sections.semanticHypotheses.candidates.map((candidate: { id: string }) => candidate.id), ["match"]);
+  assert.equal(result.value.providerStatus.semanticHypotheses, "ready");
+  assert.equal(result.value.complete, false);
+  const { readFile } = await import("node:fs/promises");
+  const { assertValue } = await import("../../../app/src/browser/proprium/authoring/schema.js");
+  const manifest = JSON.parse(await readFile(new URL("../plugin.json", import.meta.url), "utf8"));
+  const descriptor = manifest.actions.find((action: { action_id: string }) => action.action_id === "proprium.diagnostics.scene.run.v1");
+  assertValue(descriptor.output_schema, result.value);
+  guest.dispose();
+});
+
+test("Diagnostics panel offers an explicit Semantic evidence review", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const manifest = JSON.parse(await readFile(new URL("../plugin.json", import.meta.url), "utf8"));
+  const scene = manifest.ui.find((panel: { id: string }) => panel.id === "diagnostics.analysis").body.tabs.find((tab: { id: string }) => tab.id === "scene");
+  const action = scene.body.tabs.find((tab: { id: string }) => tab.id === "semantic-run");
+  const evidence = scene.body.tabs.find((tab: { id: string }) => tab.id === "semantic-evidence");
+  assert.deepEqual(action.body.submit.input_template.sections, ["semanticHypotheses"]);
+  assert.equal(evidence.body.primary, "evidenceA.quote");
+  assert.equal(evidence.body.secondary, "evidenceB.quote");
+});
