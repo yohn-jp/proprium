@@ -66,7 +66,7 @@ export interface BrowserAuthoringAuthority {
   issue(principal: AuthoringPrincipal, plugin_id: string, action_id: string): Promise<HostInvocationContext>;
   issueChild(parent: InvocationContext, caller_plugin_id: string, target_plugin_id: string, action_id: string,
     staging_snapshot?: string): Promise<HostInvocationContext>;
-  assertCurrent(context: InvocationContext): Promise<void>;
+  assertCurrent(context: InvocationContext, pinnedRead?: boolean): Promise<void>;
   isSnapshotCurrent(context: InvocationContext): boolean;
 }
 export interface AuthoringServiceBackends {
@@ -438,7 +438,8 @@ export class BrowserAuthoringService {
     pluginId: string, gesture?: object, operationContext?: AuthoringHostOperationContext): Promise<T> {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw invalid("Host payload must be an object");
     const context = this.findLease(request.scope, request.snapshot);
-    await this.assertCurrent(context);
+    if (operation === "workspace.file.read" && context.reader.supportsPinnedReads) this.assertSelection(context);
+    else await this.assertCurrent(context);
     switch (operation) {
       case "workspace.identity.read": {
         if (!this.options.backends.identityRead) throw missing(operation);
@@ -471,7 +472,7 @@ export class BrowserAuthoringService {
         const boundScope = isScope(payload.scope) ? payload.scope : request.scope;
         const pinned = await this.resolveReadContext(boundScope, request.snapshot, payload.snapshot, operationContext);
         const path = requiredString(payload.path, "path");
-        const range = await pinned.reader.read(pinned.lease, path, { offset: optionalNumber(payload.offset) ?? 0,
+        const range = await pinned.reader.readPinned(pinned.lease, path, { offset: optionalNumber(payload.offset) ?? 0,
           length: Math.min(optionalNumber(payload.length) ?? 65_536, 65_536) });
         return { revision: range.revision, total_bytes: range.total_bytes, offset: range.offset,
           bytes: [...range.bytes], next_offset: range.next_offset } as T;
@@ -593,9 +594,10 @@ export class BrowserAuthoringService {
     await this.options.backends.navigate(target, intent, { scope: request.scope, snapshot: request.snapshot, editor });
   }
 
-  private async assertInvocationCurrent(context: InvocationContext): Promise<void> {
+  private async assertInvocationCurrent(context: InvocationContext, pinnedRead = false): Promise<void> {
     const saved = this.findLease(context.scope, context.snapshot);
-    await this.assertCurrent(saved);
+    if (pinnedRead && saved.reader.supportsPinnedReads) this.assertSelection(saved);
+    else await this.assertCurrent(saved);
   }
 
   private async resolveReadContext(scope: Scope, base: Snapshot, selector: unknown,
@@ -667,11 +669,14 @@ export class BrowserAuthoringService {
     this.leases.set(snapshotKey(scope, lease.snapshot), context);
     return context;
   }
-  private async assertCurrent(context: AuthoringSnapshotContext): Promise<void> {
+  private assertSelection(context: AuthoringSnapshotContext): void {
     const current = this.requireSelection();
     if (!sameScope(context.scope, this.scope(current)) && !this.isForeignLease(context)) {
       throw Object.assign(new Error("Workspace selection changed"), { code: "snapshot_stale" });
     }
+  }
+  private async assertCurrent(context: AuthoringSnapshotContext): Promise<void> {
+    this.assertSelection(context);
     const saved = this.findLease(context.scope, context.snapshot);
     await saved.reader.assertCurrent(saved.lease);
   }
@@ -776,7 +781,7 @@ export class BrowserAuthoringService {
         grants: installed.grants, host_capabilities: installed.host_capabilities, signal: parent.signal,
         call_stack: Object.freeze([...parent.call_stack, `${target_plugin_id}:${action_id}`]) });
     },
-    assertCurrent: context => this.assertInvocationCurrent(context),
+    assertCurrent: (context, pinnedRead) => this.assertInvocationCurrent(context, pinnedRead),
     isSnapshotCurrent: context => this.isSnapshotCurrent(context),
   };
 

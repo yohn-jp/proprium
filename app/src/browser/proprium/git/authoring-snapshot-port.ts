@@ -14,6 +14,7 @@ interface SnapshotState {
 
 /** Connects the authoring reader to the Host's selected Browser Git workspace. */
 export class BrowserGitSnapshotPort implements SnapshotPort {
+  readonly supports_pinned_reads = true as const;
   private readonly owner = Object.freeze({});
   private readonly handles = new WeakMap<object, string>();
   private readonly states = new Map<string, SnapshotState>();
@@ -63,10 +64,10 @@ export class BrowserGitSnapshotPort implements SnapshotPort {
     } catch (error) { throw mapError(error); }
   }
 
-  async stat(lease: SnapshotLease, path: string) {
+  async stat(lease: SnapshotLease, path: string, originalBytes = false) {
     const id = this.snapshotId(lease);
     try {
-      const file = await this.git.statAuthoringSnapshot(id, path);
+      const file = await this.git.statAuthoringSnapshot(id, path, originalBytes);
       return file && Object.freeze({
         path: file.path,
         revision: file.revision,
@@ -76,10 +77,10 @@ export class BrowserGitSnapshotPort implements SnapshotPort {
     } catch (error) { throw mapError(error); }
   }
 
-  async read_range(lease: SnapshotLease, path: string, offset: number, length: number) {
+  async read_range(lease: SnapshotLease, path: string, offset: number, length: number, originalBytes = false) {
     const id = this.snapshotId(lease);
     try {
-      const range = await this.git.readAuthoringSnapshotRange(id, path, offset, length);
+      const range = await this.git.readAuthoringSnapshotRange(id, path, offset, length, originalBytes);
       return Object.freeze({ ...range, bytes: range.bytes.slice() });
     } catch (error) { throw mapError(error); }
   }

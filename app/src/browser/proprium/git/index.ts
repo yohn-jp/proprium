@@ -225,19 +225,19 @@ export class BrowserLocalGit {
     return this.call({ operation: "authoring-snapshot-list", snapshotId, prefix, cursor, limit });
   }
 
-  statAuthoringSnapshot(snapshotId: string, path: string): Promise<AuthoringSnapshotFile | null> {
+  statAuthoringSnapshot(snapshotId: string, path: string, originalBytes = false): Promise<AuthoringSnapshotFile | null> {
     validateSnapshotId(snapshotId);
     validateGitPath(path);
-    return this.call({ operation: "authoring-snapshot-stat", snapshotId, path });
+    return this.call({ operation: "authoring-snapshot-stat", snapshotId, path, ...(originalBytes ? { originalBytes: true as const } : {}) });
   }
 
-  readAuthoringSnapshotRange(snapshotId: string, path: string, offset: number, length: number): Promise<AuthoringSnapshotRange> {
+  readAuthoringSnapshotRange(snapshotId: string, path: string, offset: number, length: number, originalBytes = false): Promise<AuthoringSnapshotRange> {
     validateSnapshotId(snapshotId);
     validateGitPath(path);
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 0 || length > 256 * 1024) {
       return Promise.reject(new BrowserLocalGitError("invalid_input", "Snapshot read range is invalid."));
     }
-    return this.call({ operation: "authoring-snapshot-read-range", snapshotId, path, offset, length });
+    return this.call({ operation: "authoring-snapshot-read-range", snapshotId, path, offset, length, ...(originalBytes ? { originalBytes: true as const } : {}) });
   }
 
   releaseAuthoringSnapshot(snapshotId: string): Promise<void> {

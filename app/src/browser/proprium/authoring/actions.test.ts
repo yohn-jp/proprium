@@ -417,3 +417,28 @@ test("stale snapshots prevent all Host capability operations", async () => {
   if (!result.ok) assert.equal(result.error.code, "snapshot_stale");
   assert.equal(fileReads, 0);
 });
+
+test("a pinned file read never exposes a result after its worktree becomes stale", async () => {
+  let changed = false;
+  let pinnedHint = false;
+  const harness = createHarness({
+    authority: {
+      issue: async p => context(p), issueChild: async () => context(),
+      assertCurrent: async (_context, pinnedRead) => {
+        if (pinnedRead) pinnedHint = true;
+        else if (changed) throw new ActionDispatchError("snapshot_stale", "Changed during pinned read");
+      },
+      isSnapshotCurrent: () => true,
+    },
+    runtime: { invoke: async options => {
+      await options.resolve_host_call({ call_id: "pinned-read:1", operation: "workspace.file.read",
+        payload: { snapshot: options.request.snapshot, path: "manuscript/a.md" } });
+      return { ok: true, request_id: options.request.request_id, scope, snapshot, value: { hits: 1 }, warnings: [] };
+    } },
+    capabilities: { fileRead: async () => { changed = true; return { bytes: [65] }; } },
+  });
+  const result = await harness.dispatcher.invoke({ plugin_id, action_id, input: { query: "test" } }, principal());
+  assert.equal(pinnedHint, true);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.code, "snapshot_stale");
+});

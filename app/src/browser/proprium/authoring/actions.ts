@@ -22,7 +22,7 @@ export interface InvocationAuthority {
   issue(principal: TrustedActionPrincipal, plugin_id: string, action_id: string): Promise<InvocationContext>;
   issueChild(parent: InvocationContext, caller_plugin_id: string, target_plugin_id: string, action_id: string,
     staging_snapshot?: string): Promise<InvocationContext>;
-  assertCurrent(context: InvocationContext): Promise<void>;
+  assertCurrent(context: InvocationContext, pinnedRead?: boolean): Promise<void>;
   isSnapshotCurrent(context: InvocationContext): boolean;
 }
 export interface RuntimeHostCall { call_id: string; operation: string; payload: Record<string, unknown> }
@@ -315,7 +315,7 @@ export class AuthoringActionDispatcher {
     const foreignLease = call.operation === "workspace.file.list" || call.operation === "workspace.file.read"
       ? this.findForeignLease(context.invocation_id ?? context.request_id, call.payload.snapshot, source.plugin_id, descriptor.action_id) : undefined;
     this.assertBoundPayload(call.operation, call.payload, request, foreignLease);
-    await this.options.authority.assertCurrent(context);
+    await this.options.authority.assertCurrent(context, call.operation === "workspace.file.read");
     const hostContext: HostOperationContext = { ...context, invocation_id: context.invocation_id ?? context.request_id,
       plugin_id: source.plugin_id, descriptor, request };
     const payload = this.bindIdentity(call.operation, call.payload, request, context, foreignLease);

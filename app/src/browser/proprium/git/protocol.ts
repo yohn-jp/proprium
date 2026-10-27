@@ -183,8 +183,8 @@ export type LocalGitRequest =
   | { id: string; workspace: WorkspaceIdentity; operation: "authoring-snapshot-pin" }
   | { id: string; workspace: WorkspaceIdentity; operation: "authoring-snapshot-assert"; snapshotId: string }
   | { id: string; workspace: WorkspaceIdentity; operation: "authoring-snapshot-list"; snapshotId: string; prefix: string; cursor: string | null; limit: number }
-  | { id: string; workspace: WorkspaceIdentity; operation: "authoring-snapshot-stat"; snapshotId: string; path: string }
-  | { id: string; workspace: WorkspaceIdentity; operation: "authoring-snapshot-read-range"; snapshotId: string; path: string; offset: number; length: number }
+  | { id: string; workspace: WorkspaceIdentity; operation: "authoring-snapshot-stat"; snapshotId: string; path: string; originalBytes?: true }
+  | { id: string; workspace: WorkspaceIdentity; operation: "authoring-snapshot-read-range"; snapshotId: string; path: string; offset: number; length: number; originalBytes?: true }
   | { id: string; workspace: WorkspaceIdentity; operation: "authoring-snapshot-release"; snapshotId: string }
   | { id: string; workspace: WorkspaceIdentity; operation: "status" }
   | { id: string; workspace: WorkspaceIdentity; operation: "diff" }
