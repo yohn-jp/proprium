@@ -410,6 +410,11 @@ export class AuthoringActionDispatcher {
   }
   private assertBoundPayload(operation: string, payload: Record<string, unknown>, request: ActionRequest,
     foreignLease?: ForeignSnapshotLease): void {
+    if (operation.startsWith("artifact.") &&
+        ((payload.scope !== undefined && !sameJson(payload.scope, request.scope)) ||
+         (payload.snapshot !== undefined && !sameJson(payload.snapshot, request.snapshot)))) {
+      throw new ActionDispatchError("snapshot_stale", "Artifact context differs from the Host request");
+    }
     if (operation === "workspace.file.list" || operation === "workspace.file.read") {
       if (!foreignLease || !sameJson(payload.snapshot, foreignLease.snapshot)) this.stagingReadToken(payload, request);
     }
@@ -489,7 +494,7 @@ export class AuthoringActionDispatcher {
       "workspace.change.timestamp": [], "workspace.asset.read": ["group_id", "file_path", "offset", "length"],
       "workspace.derived.cache.get": ["key"], "workspace.derived.cache.put": ["key", "value"],
       "workspace.derived.cache.evict": ["key"], "plugin.preferences.read": ["key", "schema_version"],
-      "artifact.create": ["media_type", "filename"], "artifact.append": ["artifact_id", "sequence", "bytes"],
+      "artifact.create": ["media_type", "filename", "scope", "snapshot"], "artifact.append": ["artifact_id", "sequence", "bytes"],
       "artifact.seal": ["artifact_id", "sha256", "total_bytes"], "artifact.discard": ["artifact_id"],
       "workspace.change.list": ["cursor", "limit", "status"], "workspace.change.status": ["proposal_id"],
       "workspace.change.observations": ["proposal_id", "cursor", "limit"],
@@ -529,7 +534,7 @@ export class AuthoringActionDispatcher {
     }
     if (operation.startsWith("workspace.derived.cache.") && !isRecord(payload.key)) throw new ActionDispatchError("invalid_input", "Cache key required");
     if (operation === "artifact.create") { str("media_type", 256); str("filename", 256); }
-    if (operation === "artifact.append") { str("artifact_id", 256); num("sequence", 0, Number.MAX_SAFE_INTEGER); if (!Array.isArray(payload.bytes) || payload.bytes.length > 65_536 || payload.bytes.some(value => !Number.isInteger(value) || (value as number) < 0 || (value as number) > 255)) throw new ActionDispatchError("invalid_input", "Artifact chunk exceeds RPC budget"); }
+    if (operation === "artifact.append") { str("artifact_id", 256); num("sequence", 0, Number.MAX_SAFE_INTEGER); if (!Array.isArray(payload.bytes) || payload.bytes.length > 256 * 1024 || payload.bytes.some(value => !Number.isInteger(value) || (value as number) < 0 || (value as number) > 255)) throw new ActionDispatchError("invalid_input", "Artifact chunk exceeds RPC budget"); }
     if (operation === "artifact.seal") { str("artifact_id", 256); num("total_bytes", 0, 128 * 1024 * 1024); if (typeof payload.sha256 !== "string" || !/^[a-f0-9]{64}$/u.test(payload.sha256)) throw new ActionDispatchError("invalid_input", "Artifact digest is invalid"); }
     if (operation.startsWith("artifact.") && operation !== "artifact.create" && operation !== "artifact.append" && operation !== "artifact.seal") str("artifact_id", 256);
     if (operation.startsWith("workspace.change.")) { str("proposal_id", 256); str("cursor", 512); str("ref", 512); num("limit", 1, operation === "workspace.change.inspect" ? 50 : 100); num("offset", 0, Number.MAX_SAFE_INTEGER); num("length", 1, 256 * 1024); if (payload.include_source !== undefined && typeof payload.include_source !== "boolean") throw new ActionDispatchError("invalid_input", "include_source must be boolean"); }

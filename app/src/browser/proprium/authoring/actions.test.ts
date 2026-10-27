@@ -115,6 +115,33 @@ test("dependency calls preserve the full typed result envelope consumed by offic
   assert.deepEqual(result.ok && result.value, { hits: 2 });
 });
 
+test("artifact creation accepts its declared bound context and rejects a foreign one", async () => {
+  let created = 0;
+  const make = (foreign = false) => createHarness({
+    authority: { issue: async p => context(p, { grants: ["artifact.create"], host_capabilities: ["artifact.create"] }),
+      issueChild: async () => { throw new Error("unused"); }, assertCurrent: async () => {}, isSnapshotCurrent: () => true },
+    runtime: { invoke: async options => {
+      await options.resolve_host_call({ call_id: "artifact:1", operation: "artifact.create", payload: {
+        media_type: "text/plain", filename: "book.txt", scope: foreign ? { ...scope, workspace_id: "foreign" } : scope, snapshot,
+      } });
+      return { request_id: options.request.request_id, scope: options.request.scope, snapshot: options.request.snapshot, ok: true, value: { hits: 1 }, warnings: [] };
+    } },
+    capabilities: { artifactCreate: async (payload, context) => {
+      assert.deepEqual(payload.scope, context.scope); assert.deepEqual(payload.snapshot, context.snapshot);
+      created++; return { artifact_id: "artifact-1", max_bytes: 128 * 1024 * 1024, max_chunk_bytes: 256 * 1024 };
+    } },
+  });
+  for (const foreign of [false, true]) {
+    const h = make(foreign);
+    h.entries.set(plugin_id, installed({ descriptors: [descriptor({ required_capabilities: ["artifact.create"] })],
+      grants: ["artifact.create"], host_capabilities: ["artifact.create"] }));
+    const result = await h.dispatcher.invoke({ plugin_id, action_id, input: { query: "x" } }, principal());
+    assert.equal(result.ok, !foreign);
+    if (!result.ok) assert.equal(result.error.code, "snapshot_stale");
+  }
+  assert.equal(created, 1);
+});
+
 test("metadata paging returns signed action descriptors without invoking a plugin Worker", async () => {
   const { dispatcher, executed } = createHarness({
     installed: async () => installed({ descriptors: [
