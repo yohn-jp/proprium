@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AuthoringSurface, formValuesToJson, mergeInitialFormValues, optionsForRecordField, resolveAuthoringNavigation, resolveAuthoringTemplate } from "./AuthoringSurface.js";
+import { AuthoringSurface, formValuesToJson, initialFormValues, mergeInitialFormValues, optionsForRecordField, resolveAuthoringNavigation, resolveAuthoringTemplate } from "./AuthoringSurface.js";
 import type { AuthoringSurfaceDeclaration } from "./types.js";
 import { validateAuthoringSurfaceDeclaration } from "./validate.js";
 
@@ -19,6 +19,15 @@ const outlineSurface: AuthoringSurfaceDeclaration = {
     activate: { action_id: "proprium.narrative.scene.open", input_template: { scene_id: { data_key: "item.id" } } },
   },
 };
+
+test("unchecked required boolean fields submit false while optional fields stay absent", () => {
+  const fields = [
+    { id: "appendix", type: "boolean" as const, label: "Include appendix", required: true },
+    { id: "optional", type: "boolean" as const, label: "Optional flag" },
+  ];
+  const values = initialFormValues(fields, {});
+  assert.deepEqual(formValuesToJson(fields, values), { appendix: false });
+});
 
 test("active nested tab exposes its signed read and separate detail/source controls", () => {
   const surface: AuthoringSurfaceDeclaration = {

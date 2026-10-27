@@ -302,10 +302,14 @@ function initialScalarValue(field: AuthoringScalarField, value: unknown): unknow
   return typeof value === "string" ? value : undefined;
 }
 
-function initialFormValues(fields: readonly AuthoringField[], data: AuthoringJson): FormValues {
+export function initialFormValues(fields: readonly AuthoringField[], data: AuthoringJson): FormValues {
   const values: FormValues = {};
   for (const field of fields) {
-    if (field.initial_value === undefined) continue;
+    if (field.initial_value === undefined) {
+      // An unchecked required boolean is a valid false value, not a missing field.
+      if (field.type === "boolean" && field.required) values[field.id] = false;
+      continue;
+    }
     try {
       const value = resolveAuthoringTemplate(field.initial_value, data);
       if (field.type === "record-list") {
