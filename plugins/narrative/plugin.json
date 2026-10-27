@@ -314,6 +314,11 @@
             "minLength": 71,
             "maxLength": 71,
             "pattern": "^sha256-[a-f0-9]{64}$"
+          },
+          "selected_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
           }
         },
         "required": [],
@@ -367,6 +372,19 @@
                         "expected_tree_revision": {
                           "type": "string",
                           "maxLength": 71
+                        },
+                        "selected_id": {
+                          "type": "string",
+                          "maxLength": 256
+                        },
+                        "cursor": {
+                          "type": "string",
+                          "maxLength": 4096
+                        },
+                        "limit": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 200
                         }
                       },
                       "required": [
@@ -389,7 +407,7 @@
               ],
               "additionalProperties": false
             },
-            "maxItems": 201,
+            "maxItems": 401,
             "minItems": 0
           },
           "next_cursor": {
@@ -450,6 +468,69 @@
               "string",
               "null"
             ]
+          },
+          "selected": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "maxLength": 256,
+                    "minLength": 0
+                  },
+                  "kind": {
+                    "enum": [
+                      "volume",
+                      "chapter",
+                      "scene"
+                    ]
+                  },
+                  "title": {
+                    "type": "string",
+                    "maxLength": 1048576,
+                    "minLength": 0
+                  },
+                  "order": {
+                    "type": "integer"
+                  },
+                  "parent_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "metadata_path": {
+                    "type": "string",
+                    "maxLength": 4096,
+                    "minLength": 0
+                  },
+                  "metadata_revision": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64,
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "manuscript_path": {
+                    "type": "string",
+                    "maxLength": 4096,
+                    "minLength": 0
+                  }
+                },
+                "required": [
+                  "id",
+                  "kind",
+                  "title",
+                  "parent_id",
+                  "metadata_path",
+                  "metadata_revision"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -458,7 +539,8 @@
           "next_cursor",
           "tree_revision",
           "diagnostics",
-          "previous_cursor"
+          "previous_cursor",
+          "selected"
         ],
         "additionalProperties": false
       },
@@ -4786,55 +4868,156 @@
         "workspace": true
       },
       "body": {
-        "id": "narrative-work-outline",
-        "type": "outline",
-        "title": "Work outline",
-        "description": "Volumes in the selected repository snapshot.",
+        "id": "narrative-outline-tabs",
+        "type": "tabs",
+        "title": "作品構成",
         "load_action": {
           "action_id": "proprium.narrative.hierarchy.outline",
           "input_template": {
             "limit": 128
           }
         },
-        "items": {
-          "data_key": "last_action_result.items"
-        },
-        "next_action": {
-          "action_id": "proprium.narrative.hierarchy.outline",
-          "input_template": {
-            "parent_id": {
-              "data_key": "last_action_result.parent_id"
-            },
-            "cursor": {
-              "data_key": "last_action_result.next_cursor"
-            },
-            "expected_tree_revision": {
-              "data_key": "last_action_result.tree_revision"
-            },
-            "limit": 128
+        "tabs": [
+          {
+            "id": "narrative-browse",
+            "title": "構成",
+            "body": {
+              "id": "narrative-outline-browser",
+              "type": "outline",
+              "title": "Work outline",
+              "description": "Volumes in the selected repository snapshot.",
+              "items": {
+                "data_key": "last_action_result.items"
+              },
+              "next_action": {
+                "action_id": "proprium.narrative.hierarchy.outline",
+                "input_template": {
+                  "parent_id": {
+                    "data_key": "last_action_result.parent_id"
+                  },
+                  "cursor": {
+                    "data_key": "last_action_result.next_cursor"
+                  },
+                  "expected_tree_revision": {
+                    "data_key": "last_action_result.tree_revision"
+                  },
+                  "limit": 128
+                }
+              },
+              "next_action_when": {
+                "data_key": "last_action_result.next_cursor"
+              },
+              "previous_action": {
+                "action_id": "proprium.narrative.hierarchy.outline",
+                "input_template": {
+                  "parent_id": {
+                    "data_key": "last_action_result.parent_id"
+                  },
+                  "cursor": {
+                    "data_key": "last_action_result.previous_cursor"
+                  },
+                  "expected_tree_revision": {
+                    "data_key": "last_action_result.tree_revision"
+                  },
+                  "limit": 128
+                }
+              },
+              "previous_action_when": {
+                "data_key": "last_action_result.previous_cursor"
+              }
+            }
+          },
+          {
+            "id": "narrative-rename-tab",
+            "title": "名前を変更",
+            "body": {
+              "id": "narrative-rename",
+              "type": "form",
+              "title": "選択した項目の名前",
+              "description": "構成の項目で「編集対象に選択」を選んでから変更します。",
+              "fields": [
+                {
+                  "id": "title",
+                  "label": "新しいタイトル",
+                  "type": "string",
+                  "required": true,
+                  "min_length": 1,
+                  "max_length": 500,
+                  "initial_value": {
+                    "data_key": "last_action_result.selected.title"
+                  }
+                }
+              ],
+              "submit": {
+                "action_id": "proprium.narrative.structure.update",
+                "input_template": {
+                  "kind": {
+                    "data_key": "last_action_result.selected.kind"
+                  },
+                  "id": {
+                    "data_key": "last_action_result.selected.id"
+                  },
+                  "patch": {
+                    "title": {
+                      "data_key": "form.title"
+                    }
+                  },
+                  "expected_metadata_revision": {
+                    "data_key": "last_action_result.selected.metadata_revision"
+                  }
+                }
+              },
+              "submit_when": {
+                "data_key": "last_action_result.selected.id"
+              },
+              "unavailable_message": "先に構成から編集対象を選んでください。"
+            }
+          },
+          {
+            "id": "narrative-relink-tab",
+            "title": "原稿リンク",
+            "body": {
+              "id": "narrative-relink",
+              "type": "form",
+              "title": "選択したシーンの原稿",
+              "description": "既存の Markdown ファイルへのリンクを変更します。原稿ファイルは移動されません。",
+              "fields": [
+                {
+                  "id": "manuscript",
+                  "label": "原稿のパス",
+                  "type": "string",
+                  "required": true,
+                  "min_length": 1,
+                  "max_length": 256,
+                  "initial_value": {
+                    "data_key": "last_action_result.selected.manuscript_path"
+                  }
+                }
+              ],
+              "submit": {
+                "action_id": "proprium.narrative.structure.update",
+                "input_template": {
+                  "kind": "scene",
+                  "id": {
+                    "data_key": "last_action_result.selected.id"
+                  },
+                  "patch": {
+                    "manuscript": {
+                      "data_key": "form.manuscript"
+                    }
+                  },
+                  "expected_metadata_revision": {
+                    "data_key": "last_action_result.selected.metadata_revision"
+                  }
+                }
+              },
+              "submit_when": {
+                "data_key": "last_action_result.selected.manuscript_path"
+              },
+              "unavailable_message": "先に有効な原稿リンクを持つシーンを編集対象に選んでください。"
+            }
           }
-        },
-        "next_action_when": {
-          "data_key": "last_action_result.next_cursor"
-        },
-        "previous_action": {
-          "action_id": "proprium.narrative.hierarchy.outline",
-          "input_template": {
-            "parent_id": {
-              "data_key": "last_action_result.parent_id"
-            },
-            "cursor": {
-              "data_key": "last_action_result.previous_cursor"
-            },
-            "expected_tree_revision": {
-              "data_key": "last_action_result.tree_revision"
-            },
-            "limit": 128
-          }
-        },
-        "previous_action_when": {
-          "data_key": "last_action_result.previous_cursor"
-        }
+        ]
       }
     },
     {

@@ -365,6 +365,22 @@ test("outline pages offer scoped hierarchy actions and scene opening", () => {
   assertDeclaredOutput(id, next);
 });
 
+test("outline selects a scene for revision-guarded rename and relink", () => {
+  const host = new MemoryHost(); addWork(host, 2);
+  const action = "proprium.narrative.hierarchy.outline";
+  const page = run(host, request(action, { parent_id: "work-chapter", limit: 1 })) as any;
+  const scene = page.items.find((row: any) => row.id === "scene-1");
+  const selected = run(host, request(action, page.items.find((row: any) => row.action.input_template.selected_id === "scene-1").action.input_template)) as any;
+  assert.equal(selected.selected.id, "scene-1");
+  assert.equal(selected.selected.metadata_revision, host.files.get("plot/volumes/folder-not-id/chapters/directory-not-id/scenes/file-scene-1.yaml")!.revision);
+  assert.equal(selected.selected.manuscript_path, "manuscript/custom/scene-1.md");
+  assertDeclaredOutput(action, selected);
+  host.add("manuscript/custom/new.md", "new body");
+  const result = run(host, request("proprium.narrative.structure.update", { kind: selected.selected.kind, id: selected.selected.id, patch: { manuscript: "manuscript/custom/new.md" }, expected_metadata_revision: selected.selected.metadata_revision }, "selected-relink"));
+  assertDeclaredOutput("proprium.narrative.structure.update", result);
+  assert.deepEqual(host.changeset!.units[0]!.operations.map(op => op.path), ["plot/volumes/folder-not-id/chapters/directory-not-id/scenes/file-scene-1.yaml"]);
+});
+
 test("scene creation proposes body, metadata and reordered siblings in one unit", () => {
   const host = new MemoryHost();
   addWork(host, 2);

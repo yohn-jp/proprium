@@ -526,7 +526,7 @@ function* executeAction(host: NarrativeHost, request: ActionRequest): Generator<
       };
     }
     case "proprium.narrative.hierarchy.outline": {
-      strictObject(input, [], ["parent_id", "cursor", "limit", "expected_tree_revision"]);
+      strictObject(input, [], ["parent_id", "cursor", "limit", "expected_tree_revision", "selected_id"]);
       const parentId = input.parent_id === undefined || input.parent_id === null ? null : nonEmptyString(input.parent_id, "parent_id");
       const limit = input.limit === undefined ? TREE_LIMIT : positiveInteger(input.limit, "limit", 200);
       const work = yield* readWorkSnapshot(host, request);
@@ -534,21 +534,36 @@ function* executeAction(host: NarrativeHost, request: ActionRequest): Generator<
       const rows = treeRows(work, parentId);
       const offset = input.cursor === undefined ? 0 : parseTreeCursor(nonEmptyString(input.cursor, "cursor"), request.snapshot, parentId, work.treeRevision);
       if (offset > rows.length) fail("snapshot_stale", "Hierarchy cursor is beyond this sibling list");
+      const selectedId = input.selected_id === undefined ? null : nonEmptyString(input.selected_id, "selected_id");
+      const pageRows = rows.slice(offset, offset + limit);
+      const selectedRow = selectedId === null ? null : pageRows.find(row => row.id === selectedId);
+      if (selectedId !== null && !selectedRow) fail("scene_not_found", "Selected hierarchy row is not on this page");
       const items: Array<Record<string, unknown>> = [];
+      const usedIds = new Set(pageRows.map(row => row.id));
+      const syntheticId = (candidate: string) => {
+        while (usedIds.has(candidate)) candidate = `@${candidate}`;
+        usedIds.add(candidate);
+        return candidate;
+      };
       if (parentId !== null) {
         const parent = work.byId.get(parentId)!;
-        items.push({ id: "__parent__", title: `← ${parent.title}`, action: {
+        items.push({ id: syntheticId("__parent__"), title: `← ${parent.title}`, action: {
           action_id: "proprium.narrative.hierarchy.outline",
           input_template: { parent_id: parent.parent_id, expected_tree_revision: work.treeRevision },
         } });
       }
-      for (const row of rows.slice(offset, offset + limit)) {
+      for (const row of pageRows) {
         items.push({ id: row.id, title: row.title, action: row.kind === "scene"
           ? { action_id: "proprium.narrative.scene.open", input_template: { scene_id: row.id, expected_tree_revision: work.treeRevision } }
-          : { action_id: "proprium.narrative.hierarchy.outline", input_template: { parent_id: row.id, expected_tree_revision: work.treeRevision } } });
+          : { action_id: "proprium.narrative.hierarchy.outline", input_template: { parent_id: row.id, expected_tree_revision: work.treeRevision } },
+        });
+        items.push({ id: syntheticId(`edit:${sha256Hex(row.metadata_path)}`), title: `${row.title.slice(0, 512)} を編集対象に選択`, action: { action_id: "proprium.narrative.hierarchy.outline", input_template: {
+          parent_id: parentId, ...(input.cursor === undefined ? {} : { cursor: input.cursor }), limit,
+          selected_id: row.id, expected_tree_revision: work.treeRevision,
+        } } });
       }
       const nextOffset = offset + Math.min(limit, rows.length - offset);
-      return { parent_id: parentId, items, next_cursor: nextOffset < rows.length ? treeCursor(request.snapshot, parentId, work.treeRevision, nextOffset) : null,
+      return { parent_id: parentId, items, selected: selectedRow ? treeItem(selectedRow) : null, next_cursor: nextOffset < rows.length ? treeCursor(request.snapshot, parentId, work.treeRevision, nextOffset) : null,
         previous_cursor: offset > 0 ? treeCursor(request.snapshot, parentId, work.treeRevision, Math.max(0, offset - limit)) : null,
         tree_revision: work.treeRevision, diagnostics: diagnosticValues(work) };
     }
