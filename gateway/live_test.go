@@ -156,7 +156,10 @@ func TestHostSelectionDoesNotFailOverAfterDisconnect(t *testing.T) {
     defer closeB()
     statusActivate,_:=f.httpJSON("POST","/live/sessions/"+second+"/activate",map[string]any{})
     if statusActivate!=200 {t.Fatalf("explicit foreground activation: %d",statusActivate)}
-    if !f.registry.activeHostConnected() || f.registry.activeSessionID!=second {t.Fatal("latest connected host must be active")}
+    f.registry.mu.Lock()
+    activeSessionID:=f.registry.activeSessionID
+    f.registry.mu.Unlock()
+    if !f.registry.activeHostConnected() || activeSessionID!=second {t.Fatal("latest connected host must be active")}
     closeB()
     deadline:=time.Now().Add(2*time.Second)
     for time.Now().Before(deadline) {
