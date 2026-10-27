@@ -16,7 +16,7 @@ test('derived index is rejected after snapshot changes or vector corruption', ()
  const index = makeIndex(context, corpus, [vector]);
  assert.throws(() => validateIndex(index, { ...context, snapshot: { ...snapshot, worktree_generation: 'w2' } }), (error: any) => error.code === 'index_stale');
  assert.throws(() => validateIndex({ ...index, passages: [{ ...index.passages[0], vector: [1] }] }, context), /corrupt/i);
- const changed = [...index.passages[0]!.vector]; changed[0] = 0.25;
+ const original = index.passages[0]!.vector; const changed = (original[0] === 'A' ? 'B' : 'A') + original.slice(1);
  assert.throws(() => validateIndex({ ...index, passages: [{ ...index.passages[0], vector: changed }] }, context), /corrupt/i);
 });
 test('cosine scores stay within the public schema after floating point rounding', () => {

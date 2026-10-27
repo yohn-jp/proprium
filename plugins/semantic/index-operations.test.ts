@@ -76,11 +76,22 @@ test('failed embedding leaves the previous cache untouched', () => {
 });
 test('oversized atomic index fails before loading the model or publishing a partial index', () => {
  stored = undefined;
- const previous = files['manuscript/custom.md']; files['manuscript/custom.md'] = '星を見る。'.repeat(65);
+ const previous = files['manuscript/custom.md']; files['manuscript/custom.md'] = '星を見る。'.repeat(257);
  let loaded = false;
  const bounded: any = { ...engine, *ensure() { loaded = true; } };
  try {
    assert.throws(() => run(rebuildIndex({ taskId:'large' }, context, host, bounded)), (error: any) => error.code === 'capacity');
    assert.equal(loaded, false); assert.equal(stored, undefined);
+ } finally { files['manuscript/custom.md'] = previous!; }
+});
+test('a 120-passage work fits in the atomic index without caching prose', () => {
+ stored = undefined;
+ const previous = files['manuscript/custom.md']; files['manuscript/custom.md'] = '星を見る。'.repeat(120);
+ try {
+   const result = run(rebuildIndex({ taskId:'fixture120' }, context, host, engine));
+   assert.equal(result.embedded, 120);
+   assert.equal(stored.passages.length, 120);
+   assert.ok(new TextEncoder().encode(JSON.stringify(stored)).length < 700_000);
+   assert.equal(JSON.stringify(stored).includes('星を見る。'), false);
  } finally { files['manuscript/custom.md'] = previous!; }
 });

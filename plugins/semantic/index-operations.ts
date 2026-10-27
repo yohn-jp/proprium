@@ -4,13 +4,13 @@ import { HOST_OPERATIONS, readFileVersioned } from '../shared/operations.ts';
 import { collectSemanticCorpus } from './corpus.ts';
 import { collectMentionGroups, embeddingContradictions } from './core.ts';
 import { E5_MODEL } from './inference.ts';
-import { makeIndex, rankedIndex, validateIndex, type SemanticIndex } from './index.ts';
+import { makeIndex, rankedIndex, validateIndex, decodeVector, type SemanticIndex } from './index.ts';
 import { sha256Text } from './sha256.ts';
 import { parseSemanticSourceFile } from './source.ts';
 
 export interface SemanticEngine { ensure(host: GuestHost): Generator<HostCall, void, unknown>; embed(texts: readonly string[]): number[][]; model(): Record<string, unknown> }
 function failure(code: string, message: string): Error { return Object.assign(new Error(message), { code, retryable: false }); }
-function key(request: ActionRequest) { return { plugin_id: 'proprium.semantic', snapshot: request.snapshot, schema_version: 1, config_digest: sha256Text(JSON.stringify(request.scope)), model_digest: E5_MODEL.model_sha256, key: 'semantic-index-v1' }; }
+function key(request: ActionRequest) { return { plugin_id: 'proprium.semantic', snapshot: request.snapshot, schema_version: 1, config_digest: sha256Text(JSON.stringify(request.scope)), model_digest: E5_MODEL.model_sha256, key: 'semantic-index-v2' }; }
 export function* loadIndex(request: ActionRequest, host: GuestHost): Generator<HostCall, SemanticIndex | undefined, unknown> {
  const result = yield* host.request<{ found: boolean; value?: unknown }>(HOST_OPERATIONS.cacheGet, { key: key(request) });
  if (!result || typeof result.found !== 'boolean') throw failure('storage_unknown', 'Invalid Semantic cache response');
@@ -25,7 +25,7 @@ export function* rebuildIndex(input: { taskId: string }, request: ActionRequest,
  const corpus = yield* collectSemanticCorpus(host, request);
  // A single atomic record preserves the previous generation on cancellation;
  // the Host continuation limit bounds this implementation to small corpora.
- if (corpus.passages.length > 64) throw failure('capacity', 'Semantic index exceeds the current 64-passage atomic cache limit');
+ if (corpus.passages.length > 256) throw failure('capacity', 'Semantic index exceeds the current 256-passage atomic cache limit');
  yield* engine.ensure(host);
  const vectors: number[][] = [];
  for (let offset = 0; offset < corpus.passages.length; offset += 32) vectors.push(...engine.embed(corpus.passages.slice(offset, offset + 32).map(item => item.text)));
@@ -76,7 +76,7 @@ export function* contradictionPage(input: { cursor?: string; limit?: number }, r
  const passages = corpus.passages.map(row => {
    const item = byKey.get(JSON.stringify([row.sourcePath, row.entityId, row.sentenceIndex]));
    if (!item || item.sourceRevision !== row.sourceRevision || item.textHash !== sha256Text(row.text)) throw failure('index_stale', `Semantic source changed: ${row.sourcePath}`);
-   return { entityId: row.entityId, sceneId: row.entityId, sentenceIndex: row.sentenceIndex, sourcePath: row.sourcePath, sourceRevision: row.sourceRevision, quote: row.evidence.quote, type: row.type, evidence: row.evidence, vector: item.vector };
+   return { entityId: row.entityId, sceneId: row.entityId, sentenceIndex: row.sentenceIndex, sourcePath: row.sourcePath, sourceRevision: row.sourceRevision, quote: row.evidence.quote, type: row.type, evidence: row.evidence, vector: decodeVector(item.vector) };
  });
  const entities = corpus.entities.map(row => ({ id: row.id, type: row.type, ...(row.name ? { name: row.name } : {}), aliases: row.aliases }));
  const candidates = embeddingContradictions(collectMentionGroups(entities, passages));
