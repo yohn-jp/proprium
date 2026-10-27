@@ -81,10 +81,7 @@ class HostFixture {
       return { proposal_id: "proposal-1", status: "proposed", preview: { title: changeset.title, units: changeset.units } };
     }
     if (operation === "workspace.change.timestamp") {
-      assert.deepEqual(payload.scope, { workspace_id: "workspace-1", repository_id: 7, branch: "main", generation: "generation-1" });
-      assert.equal(payload.plugin_id, "proprium.knowledge");
-      assert.equal(typeof payload.action_id, "string");
-      assert.equal(typeof payload.idempotency_key, "string");
+      assert.deepEqual(payload, {});
       return { timestamp: "2026-10-26T00:00:00.000Z" };
     }
     throw new Error(`unexpected Host operation: ${operation}`);

@@ -630,9 +630,7 @@ function* readJsonl(context: ActionRequest, host: GuestHost, path: string, label
 function* stableTimestamp(context: ActionRequest, host: GuestHost): Generator<HostCall, string, unknown> {
   const key = context.idempotency_key;
   if (!key || !key.trim()) throw error("invalid_input", "Host idempotency_key is required for a proposal");
-  const result = yield* host.request<{ timestamp: string }>("workspace.change.timestamp", {
-    scope: context.scope, plugin_id: context.plugin_id, action_id: context.action_id, idempotency_key: key,
-  });
+  const result = yield* host.request<{ timestamp: string }>("workspace.change.timestamp", {});
   if (!result || typeof result.timestamp !== "string" || Number.isNaN(Date.parse(result.timestamp))) throw error("guest_trap", "Host returned an invalid stable proposal timestamp");
   return result.timestamp;
 }
