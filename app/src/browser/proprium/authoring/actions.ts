@@ -79,6 +79,8 @@ export interface ActionDispatcherOptions {
   installed(plugin_id: string): Promise<VerifiedActionSet | undefined>; authority: InvocationAuthority; runtime: ActionRuntime;
   capabilities: HostCapabilityPorts; idempotency: ActionIdempotencyStore; schemas?: ActionSchemaValidator;
   randomId?: () => string; now?: () => number;
+  /** Host-owned controls do not enter the guest's exclusive execution slot. */
+  hostControlAction?: (pluginId: string, actionId: string) => boolean;
 }
 export interface ActionCall { plugin_id: string; action_id: string; input: Record<string, unknown>; idempotency_key?: string }
 export interface ActionListRequest { plugin_id: string; cursor?: string; limit?: number }
@@ -236,7 +238,8 @@ export class AuthoringActionDispatcher {
       throw new ActionDispatchError("capability_denied", "Required capability is not granted", false, { capability: name });
     }
     await this.options.authority.assertCurrent(current);
-    this.acquire(call.plugin_id, context.scope.workspace_id);
+    const executionId = this.options.hostControlAction?.(call.plugin_id, call.action_id) ? `${call.plugin_id}:${call.action_id}` : call.plugin_id;
+    this.acquire(executionId, context.scope.workspace_id);
     let idKey: IdempotencyKey | undefined; let bodyDigest: string | undefined; let reserved = false; let submitted = false;
     try {
       if (descriptor.effect === "propose") {
@@ -286,7 +289,7 @@ export class AuthoringActionDispatcher {
         retryable: error instanceof ActionDispatchError && error.retryable });
       throw error;
     } finally {
-      this.release(call.plugin_id, context.scope.workspace_id);
+      this.release(executionId, context.scope.workspace_id);
       if (ancestors.length === 0 && this.options.capabilities.releaseInvocation) {
         try {
           await this.options.capabilities.releaseInvocation({ scope: current.scope, invocation_id: current.invocation_id,
