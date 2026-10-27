@@ -28,6 +28,7 @@ import { listPortableResumeMarks, proposePortableResumeMark } from "./resume.js"
 export const NARRATIVE_ACTIONS = [
   "proprium.narrative.work.detect",
   "proprium.narrative.hierarchy.tree",
+  "proprium.narrative.hierarchy.outline",
   "proprium.narrative.scene.open",
   "proprium.narrative.scene.continue",
   "proprium.narrative.scene.context",
@@ -522,6 +523,33 @@ function* executeAction(host: NarrativeHost, request: ActionRequest): Generator<
         tree_revision: work.treeRevision,
         diagnostics: diagnosticValues(work),
       };
+    }
+    case "proprium.narrative.hierarchy.outline": {
+      strictObject(input, [], ["parent_id", "cursor", "limit", "expected_tree_revision"]);
+      const parentId = input.parent_id === undefined || input.parent_id === null ? null : nonEmptyString(input.parent_id, "parent_id");
+      const limit = input.limit === undefined ? TREE_LIMIT : positiveInteger(input.limit, "limit", 200);
+      const work = yield* readWorkSnapshot(host, request);
+      assertTreeRevision(input, work);
+      const rows = treeRows(work, parentId);
+      const offset = input.cursor === undefined ? 0 : parseTreeCursor(nonEmptyString(input.cursor, "cursor"), request.snapshot, parentId, work.treeRevision);
+      if (offset > rows.length) fail("snapshot_stale", "Hierarchy cursor is beyond this sibling list");
+      const items: Array<Record<string, unknown>> = [];
+      if (parentId !== null) {
+        const parent = work.byId.get(parentId)!;
+        items.push({ id: "__parent__", title: `← ${parent.title}`, action: {
+          action_id: "proprium.narrative.hierarchy.outline",
+          input_template: { parent_id: parent.parent_id, expected_tree_revision: work.treeRevision },
+        } });
+      }
+      for (const row of rows.slice(offset, offset + limit)) {
+        items.push({ id: row.id, title: row.title, action: row.kind === "scene"
+          ? { action_id: "proprium.narrative.scene.open", input_template: { scene_id: row.id, expected_tree_revision: work.treeRevision } }
+          : { action_id: "proprium.narrative.hierarchy.outline", input_template: { parent_id: row.id, expected_tree_revision: work.treeRevision } } });
+      }
+      const nextOffset = offset + Math.min(limit, rows.length - offset);
+      return { parent_id: parentId, items, next_cursor: nextOffset < rows.length ? treeCursor(request.snapshot, parentId, work.treeRevision, nextOffset) : null,
+        previous_cursor: offset > 0 ? treeCursor(request.snapshot, parentId, work.treeRevision, Math.max(0, offset - limit)) : null,
+        tree_revision: work.treeRevision, diagnostics: diagnosticValues(work) };
     }
     case "proprium.narrative.scene.open":
     case "proprium.narrative.scene.context": {

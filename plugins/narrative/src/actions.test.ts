@@ -331,6 +331,24 @@ test("tree pages more than 256 hierarchy files and opens the explicit manuscript
   assert.deepEqual(host.reads.filter((path) => path.startsWith("manuscript/")), ["manuscript/custom/scene-1.md"]);
 });
 
+test("outline pages offer scoped hierarchy actions and scene opening", () => {
+  const host = new MemoryHost();
+  addWork(host, 2);
+  const id = "proprium.narrative.hierarchy.outline";
+  const root = run(host, request(id, { limit: 1 })) as any;
+  assert.equal(root.items[0].action.action_id, id);
+  const chapters = run(host, request(id, root.items[0].action.input_template)) as any;
+  const scenes = run(host, request(id, { ...chapters.items.find((row: any) => row.id === "work-chapter").action.input_template, limit: 1 })) as any;
+  const scene = scenes.items.find((row: any) => row.id === "scene-1");
+  assert.equal(scene.action.action_id, "proprium.narrative.scene.open");
+  const opened = run(host, request(scene.action.action_id, scene.action.input_template)) as any;
+  assert.equal(opened.navigation.target.path, "manuscript/custom/scene-1.md");
+  assert.ok(scenes.next_cursor);
+  const next = run(host, request(id, { parent_id: scenes.parent_id, cursor: scenes.next_cursor, limit: 1, expected_tree_revision: scenes.tree_revision })) as any;
+  assert.ok(next.items.some((row: any) => row.id === "scene-2"));
+  assertDeclaredOutput(id, root);
+});
+
 test("scene creation proposes body, metadata and reordered siblings in one unit", () => {
   const host = new MemoryHost();
   addWork(host, 2);

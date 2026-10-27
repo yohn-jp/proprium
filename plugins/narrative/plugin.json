@@ -287,6 +287,191 @@
     },
     {
       "plugin_id": "proprium.narrative",
+      "action_id": "proprium.narrative.hierarchy.outline",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "expected_tree_revision": {
+            "type": "string",
+            "minLength": 71,
+            "maxLength": 71,
+            "pattern": "^sha256-[a-f0-9]{64}$"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 512
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 1048576
+                },
+                "action": {
+                  "type": "object",
+                  "properties": {
+                    "action_id": {
+                      "enum": [
+                        "proprium.narrative.hierarchy.outline",
+                        "proprium.narrative.scene.open"
+                      ]
+                    },
+                    "input_template": {
+                      "type": "object",
+                      "properties": {
+                        "parent_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 256
+                        },
+                        "scene_id": {
+                          "type": "string",
+                          "maxLength": 256
+                        },
+                        "expected_tree_revision": {
+                          "type": "string",
+                          "maxLength": 71
+                        }
+                      },
+                      "required": [
+                        "expected_tree_revision"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "action_id",
+                    "input_template"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "action"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 201,
+            "minItems": 0
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tree_revision": {
+            "type": "string",
+            "minLength": 71,
+            "maxLength": 71,
+            "pattern": "^sha256-[a-f0-9]{64}$"
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "maxLength": 128,
+                  "minLength": 0
+                },
+                "path": {
+                  "type": "string",
+                  "maxLength": 4096,
+                  "minLength": 0
+                },
+                "message": {
+                  "type": "string",
+                  "maxLength": 4096,
+                  "minLength": 0
+                },
+                "severity": {
+                  "enum": [
+                    "warning",
+                    "error"
+                  ]
+                },
+                "index": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "code",
+                "message",
+                "severity"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 262144,
+            "minItems": 0
+          },
+          "previous_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "parent_id",
+          "items",
+          "next_cursor",
+          "tree_revision",
+          "diagnostics",
+          "previous_cursor"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.narrative",
       "action_id": "proprium.narrative.scene.open",
       "schema_version": 1,
       "effect": "read",
@@ -4606,13 +4791,49 @@
         "title": "Work outline",
         "description": "Volumes in the selected repository snapshot.",
         "load_action": {
-          "action_id": "proprium.narrative.hierarchy.tree",
+          "action_id": "proprium.narrative.hierarchy.outline",
           "input_template": {
             "limit": 128
           }
         },
         "items": {
           "data_key": "last_action_result.items"
+        },
+        "next_action": {
+          "action_id": "proprium.narrative.hierarchy.outline",
+          "input_template": {
+            "parent_id": {
+              "data_key": "last_action_result.parent_id"
+            },
+            "cursor": {
+              "data_key": "last_action_result.next_cursor"
+            },
+            "expected_tree_revision": {
+              "data_key": "last_action_result.tree_revision"
+            },
+            "limit": 128
+          }
+        },
+        "next_action_when": {
+          "data_key": "last_action_result.next_cursor"
+        },
+        "previous_action": {
+          "action_id": "proprium.narrative.hierarchy.outline",
+          "input_template": {
+            "parent_id": {
+              "data_key": "last_action_result.parent_id"
+            },
+            "cursor": {
+              "data_key": "last_action_result.previous_cursor"
+            },
+            "expected_tree_revision": {
+              "data_key": "last_action_result.tree_revision"
+            },
+            "limit": 128
+          }
+        },
+        "previous_action_when": {
+          "data_key": "last_action_result.previous_cursor"
         }
       }
     },
