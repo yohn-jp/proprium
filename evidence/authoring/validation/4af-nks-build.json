@@ -1,0 +1,59 @@
+{
+  "source_commit": "4af02d53896897a0ba9fe260198e5380559d7636",
+  "registry_sha256": "073bf8202e5ae5ca5eed5273ee55a11e0322ce05a9d2f3dee7dc6e8848cc358f",
+  "registry_path": "/workspace/proprium-build-output/4af-nks-registry/registry.json",
+  "public_key_path": "/workspace/proprium-build-output/4af-nks-public-key.txt",
+  "build_log": "/workspace/proprium-build-output/4af-nks-build.log",
+  "verify_log": "/workspace/proprium-build-output/4af-nks-verify.log",
+  "verification_mode": "all",
+  "unchanged_plugin_tree_comparison": {
+    "plugins/research": {
+      "e8": "63cf6e4a805f8fef45b7c3abf421e748f3131cab",
+      "4af": "63cf6e4a805f8fef45b7c3abf421e748f3131cab"
+    },
+    "plugins/diagnostics": {
+      "e8": "a81912bbac6dc08ebcf4037005444fa3010b317f",
+      "4af": "a81912bbac6dc08ebcf4037005444fa3010b317f"
+    },
+    "plugins/semantic": {
+      "e8": "4bf32e78887f0d9b0737ba554e63caac87060612",
+      "4af": "4bf32e78887f0d9b0737ba554e63caac87060612"
+    },
+    "plugins/publishing": {
+      "e8": "de5e01a5e397e3f522cb672ec15a38f1dce9674c",
+      "4af": "de5e01a5e397e3f522cb672ec15a38f1dce9674c"
+    }
+  },
+  "plugins": [
+    {
+      "id": "proprium.knowledge",
+      "version": "0.1.0",
+      "manifestPath": "proprium/knowledge/0.1.0/manifest/53afc2853e52239ea1f975d336063e09e3cde0a9066a4d98058423cc890edbdc.json",
+      "manifestSha256": "53afc2853e52239ea1f975d336063e09e3cde0a9066a4d98058423cc890edbdc",
+      "manifestSignature": "xWdc7bwM4KncbdnaM4/tD4n3bzKrONNHIErpDh7hiZB4sEEEd880/SAXMFtxCja+b85US3BE5frVjNG7N9moDA==",
+      "publisherKey": "NOhm99au2ccMKlC2rfcvbBIE8NC2uoMzutXmVRBLwBg="
+    },
+    {
+      "id": "proprium.narrative",
+      "version": "0.1.0",
+      "manifestPath": "proprium/narrative/0.1.0/manifest/06fc2112eaac9087d11a61edb0fd6c7671c407364164bbd4b3265cc478ce9558.json",
+      "manifestSha256": "06fc2112eaac9087d11a61edb0fd6c7671c407364164bbd4b3265cc478ce9558",
+      "manifestSignature": "i3LV6GKWpxgfl4ci8ju0KOB8FYBY/VV4kg7mR4pZkUl84pRhO4HPwY+ZCHtR5+oIprX8u9wrntL4Gh0esPJEDw==",
+      "publisherKey": "NOhm99au2ccMKlC2rfcvbBIE8NC2uoMzutXmVRBLwBg="
+    },
+    {
+      "id": "proprium.speaker",
+      "version": "0.1.0",
+      "manifestPath": "proprium/speaker/0.1.0/manifest/61f1b91b3d530d6ed360c84e7dbb61fa4c80835da6da34145d6ace4b70956f76.json",
+      "manifestSha256": "61f1b91b3d530d6ed360c84e7dbb61fa4c80835da6da34145d6ace4b70956f76",
+      "manifestSignature": "cqirfBmOGSzNfgVI3h3eXx5x/TDr+BoDnrezAXZIu8BDhIKMlvWfvU7lf8kg1Eurg4TMV1oyYgfni0ED99nTAg==",
+      "publisherKey": "NOhm99au2ccMKlC2rfcvbBIE8NC2uoMzutXmVRBLwBg="
+    }
+  ],
+  "public_key_base64": "2puuOYBxGsV4adxSPgwqkwt+1x9R643jpngMVdi1Hj8=",
+  "scope_note": "Local signed fixture only. This subset build does not certify seven/eight plugins at one release SHA or production distribution.",
+  "build_artifact": "evidence/authoring/validation/4af-nks-build.txt",
+  "build_sha256": "9c0dcd938e1969d160852478566077963fbe779542d33ec916791bc61f22475b",
+  "verify_artifact": "evidence/authoring/validation/4af-nks-verify.txt",
+  "verify_sha256": "bb7fc6bd2f623d330e5a77bedea9a37ceb319d99166bf7da89d4e2039457ad56"
+}

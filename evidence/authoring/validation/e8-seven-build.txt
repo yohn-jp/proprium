@@ -1,0 +1,474 @@
+OK Successfully written /workspace/proprium-build-output/e8-seven-registry/.authoring-build/narrative-9n7G3i/plugin.component.wasm.
+Built signed proprium.narrative@0.1.0: proprium/narrative/0.1.0/e61db6137b2be975846ecf5e0508b284f7743b68e3e6365c570c2b510f4369be/plugin.component.wasm
+src/sha256.ts (21:43) [33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/sha256.ts:21:44 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m21 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mb[0m[38;5;249mi[0m[38;5;249mt[0m[38;5;249mL[0m[38;5;249me[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249mt[0m[38;5;249mh[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mB[0m[38;5;249mi[0m[38;5;249mg[0m[38;5;249mI[0m[38;5;249mn[0m[38;5;249mt[0m[38;5;249m([0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mp[0m[38;5;249mu[0m[38;5;249mt[0m[38;5;249m.[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249mt[0m[38;5;249mh[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m*[0m[38;5;249m [0m8n[38;5;249m;[0m
+ [38;5;240m   │[0m                                            ─┬  
+ [38;5;240m   │[0m                                             ╰── 
+[38;5;246m────╯[0m
+
+src/sha256.ts (22:98) [33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/sha256.ts:22:99 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m22 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mf[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249m [0m[38;5;249m([0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m0[0m[38;5;249m;[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m8[0m[38;5;249m;[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249m+[0m[38;5;249m+[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249mb[0m[38;5;249my[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249m[[0m[38;5;249mp[0m[38;5;249ma[0m[38;5;249md[0m[38;5;249md[0m[38;5;249me[0m[38;5;249md[0m[38;5;249mL[0m[38;5;249me[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249mt[0m[38;5;249mh[0m[38;5;249m [0m[38;5;249m-[0m[38;5;249m [0m[38;5;249m1[0m[38;5;249m [0m[38;5;249m-[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249m][0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mN[0m[38;5;249mu[0m[38;5;249mm[0m[38;5;249mb[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249m([0m[38;5;249m([0m[38;5;249mb[0m[38;5;249mi[0m[38;5;249mt[0m[38;5;249mL[0m[38;5;249me[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249mt[0m[38;5;249mh[0m[38;5;249m [0m[38;5;249m>[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249mB[0m[38;5;249mi[0m[38;5;249mg[0m[38;5;249mI[0m[38;5;249mn[0m[38;5;249mt[0m[38;5;249m([0m[38;5;249mi[0m[38;5;249m [0m[38;5;249m*[0m[38;5;249m [0m[38;5;249m8[0m[38;5;249m)[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m&[0m[38;5;249m [0m0xffn[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m   │[0m                                                                                                   ──┬──  
+ [38;5;240m   │[0m                                                                                                     ╰──── 
+[38;5;246m────╯[0m
+
+OK Successfully written /workspace/proprium-build-output/e8-seven-registry/.authoring-build/knowledge-5Od9Wr/plugin.component.wasm.
+Built signed proprium.knowledge@0.1.0: proprium/knowledge/0.1.0/f897f127428b0463aede3ee51e21f2e63a95b9a83e9d28f05791a7eba5c103d5/plugin.component.wasm
+Generated pinned IPADIC asset group proprium.research.ipadic: 3761 manifest bytes, 11357947 payload bytes, 66601c7e3f8ed946df567a97644135bfec786d79f5b28f2b5adbb54258fe5d07
+  Generating bindings for proprium-research-morphology (model/src/bindings.rs)
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling syn v3.0.9
+   Compiling synstructure v0.14.0
+   Compiling zerofrom-derive v0.1.8
+   Compiling zerofrom v0.1.8
+   Compiling yoke-derive v0.8.4
+   Compiling syn v2.0.119
+   Compiling stable_deref_trait v1.2.1
+   Compiling yoke v0.8.4
+   Compiling zerovec-derive v0.11.7
+   Compiling zerovec v0.11.9
+   Compiling displaydoc v0.2.7
+   Compiling cfg-if v1.0.5
+   Compiling tinystr v0.8.5
+   Compiling writeable v0.6.4
+   Compiling rustversion v1.0.23
+   Compiling serde_core v1.0.229
+   Compiling litemap v0.8.3
+   Compiling encoding_index_tests v0.1.4
+   Compiling fnv v1.0.7
+   Compiling ident_case v1.0.1
+   Compiling strsim v0.11.1
+   Compiling memchr v2.8.3
+   Compiling darling_core v0.20.11
+   Compiling icu_locale_core v2.4.0
+   Compiling zerotrie v0.2.5
+   Compiling potential_utf v0.1.6
+   Compiling ptr_meta_derive v0.3.2
+   Compiling version_check v0.9.5
+   Compiling utf8_iter v1.0.4
+   Compiling icu_properties_data v2.4.0
+   Compiling icu_normalizer_data v2.4.0
+   Compiling icu_collections v2.4.0
+   Compiling generic-array v0.14.7
+   Compiling ptr_meta v0.3.2
+   Compiling icu_provider v2.4.0
+   Compiling darling_macro v0.20.11
+   Compiling darling v0.20.11
+   Compiling encoding_rs v0.8.42
+   Compiling rancor v0.1.3
+   Compiling bytecheck_derive v0.8.3
+   Compiling smallvec v1.16.4
+   Compiling simdutf8 v0.1.5
+   Compiling zmij v1.0.23
+   Compiling serde v1.0.229
+   Compiling itoa v1.0.18
+   Compiling libc v0.2.191
+   Compiling typenum v1.20.1
+   Compiling crc32fast v1.5.3
+   Compiling bytecheck v0.8.3
+   Compiling icu_normalizer v2.4.0
+   Compiling icu_properties v2.4.0
+   Compiling derive_builder_core v0.20.2
+   Compiling aho-corasick v1.1.5
+   Compiling munge_macro v0.4.7
+   Compiling serde_derive v1.0.229
+   Compiling serde_json v1.0.154
+   Compiling regex-syntax v0.8.11
+   Compiling ryu v1.0.23
+   Compiling heck v0.5.0
+   Compiling scopeguard v1.2.0
+   Compiling multiversion_no_op v1.0.0
+   Compiling simd-adler32 v0.3.10
+   Compiling adler2 v2.0.1
+   Compiling thiserror v2.0.21
+   Compiling anyhow v1.0.104
+   Compiling miniz_oxide v0.9.1
+   Compiling strum_macros v0.27.2
+   Compiling regex-automata v0.4.18
+   Compiling munge v0.4.7
+   Compiling derive_builder_macro v0.20.2
+   Compiling idna_adapter v1.2.2
+   Compiling rend v0.5.4
+   Compiling csv-core v0.1.13
+   Compiling encoding-index-japanese v1.20141219.5
+   Compiling encoding-index-tradchinese v1.20141219.5
+   Compiling encoding-index-simpchinese v1.20141219.5
+   Compiling encoding-index-korean v1.20141219.5
+   Compiling encoding-index-singlebyte v1.20141219.5
+   Compiling filetime v0.2.29
+   Compiling rkyv_derive v0.8.13
+   Compiling tokio-macros v2.7.2
+   Compiling thiserror-impl v2.0.21
+   Compiling hashbrown v0.17.1
+   Compiling equivalent v1.0.3
+   Compiling percent-encoding v2.3.2
+   Compiling hashbrown v0.16.1
+   Compiling rand_core v0.9.5
+   Compiling pin-project-lite v0.2.17
+   Compiling bytes v1.12.1
+   Compiling tokio v1.54.1
+   Compiling rand v0.9.5
+   Compiling rkyv v0.8.13
+   Compiling form_urlencoded v1.2.2
+   Compiling indexmap v2.14.2
+   Compiling tar v0.4.46
+   Compiling encoding v0.2.33
+   Compiling csv v1.4.0
+   Compiling flate2 v1.1.10
+   Compiling num_cpus v1.17.0
+   Compiling idna v1.1.0
+   Compiling derive_builder v0.20.2
+   Compiling regex v1.13.1
+   Compiling strum v0.27.2
+   Compiling encoding_rs_io v0.1.8
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling bitflags v1.3.2
+   Compiling wit-bindgen-rt v0.44.0
+   Compiling memmap2 v0.9.12
+   Compiling tinyvec v1.13.3
+   Compiling md5 v0.8.1
+   Compiling log v0.4.34
+   Compiling glob v0.3.4
+   Compiling byteorder v1.5.0
+   Compiling unsafe-libyaml v0.2.11
+   Compiling yada v0.5.1
+   Compiling once_cell v1.21.4
+   Compiling lindera-dictionary v2.0.1
+   Compiling serde_yaml_ng v0.10.0
+   Compiling unicode-normalization v0.1.26
+   Compiling kanaria v0.2.0
+   Compiling digest v0.10.7
+   Compiling url v2.5.8
+   Compiling unicode-blocks v0.1.10
+   Compiling unicode-segmentation v1.13.3
+   Compiling bitflags v2.13.2
+   Compiling lindera v2.0.1
+   Compiling sha2 v0.10.9
+   Compiling proprium-research-morphology v0.1.0 (/workspace/terra-final-producer/plugins/research/model)
+    Finished `release` profile [optimized] target(s) in 1m 55s
+    Creating component /workspace/proprium-build-output/e8-seven-registry/.authoring-build/research-Gb8plG/cargo-target/wasm32-unknown-unknown/release/proprium_research_morphology.wasm
+component-guest.ts (9:7) [33m[UNRESOLVED_IMPORT] [0mCould not resolve 'proprium:plugin/morphology@2.0.0' in component-guest.ts
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m component-guest.ts:9:8 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m9 │[0m [38;5;249m}[0m[38;5;249m [0m[38;5;249mf[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mm[0m[38;5;249m [0m"proprium:plugin/morphology@2.0.0"[38;5;249m;[0m
+ [38;5;240m  │[0m        ─────────────────┬────────────────  
+ [38;5;240m  │[0m                         ╰────────────────── Module not found, treating it as an external dependency
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: The "main" field here was ignored. Main fields must be configured explicitly when using the "neutral" platform.
+[38;5;246m───╯[0m
+
+OK Successfully written /workspace/proprium-build-temp/research-component-re393i/research-guest.wasm.
+WARNING: `wasm-tools compose` has been deprecated.
+
+Please use `wac` instead. You can find more information about `wac` at https://github.com/bytecodealliance/wac.
+composed component `/workspace/proprium-build-output/e8-seven-registry/.authoring-build/research-Gb8plG/plugin.component.wasm`
+Built Research component at /workspace/proprium-build-output/e8-seven-registry/.authoring-build/research-Gb8plG/plugin.component.wasm
+Built signed proprium.research@1.0.0: proprium/research/1.0.0/36a7a65cb72334b5d54ef06ac5000673ef501c3a17666746460b23da7bd94e85/plugin.component.wasm
+OK Successfully written /workspace/proprium-build-output/e8-seven-registry/.authoring-build/diagnostics-V8nwfM/plugin.component.wasm.
+Built signed proprium.diagnostics@0.1.0: proprium/diagnostics/0.1.0/c9c3dc012b1ec520e9d1e9df7f46e20357876b9ea068906422136065d7dca379/plugin.component.wasm
+  Generating bindings for proprium-speaker-segmenter (segmenter/src/bindings.rs)
+   Compiling wit-bindgen-rt v0.44.0
+   Compiling bitflags v2.13.2
+   Compiling unicode-segmentation v1.13.3
+   Compiling proprium-speaker-segmenter v0.1.0 (/workspace/terra-final-producer/plugins/speaker/segmenter)
+    Finished `release` profile [optimized] target(s) in 1.25s
+    Creating component /workspace/proprium-build-output/e8-seven-registry/.authoring-build/speaker-hefA7o/cargo-target/wasm32-unknown-unknown/release/proprium_speaker_segmenter.wasm
+component-guest.ts (1:34) [33m[UNRESOLVED_IMPORT] [0mCould not resolve 'proprium:plugin/sentence-segmentation@2.0.0' in component-guest.ts
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m component-guest.ts:1:35 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m [38;5;249mi[0m[38;5;249mm[0m[38;5;249mp[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249m{[0m[38;5;249m [0m[38;5;249ms[0m[38;5;249mp[0m[38;5;249ml[0m[38;5;249mi[0m[38;5;249mt[0m[38;5;249mS[0m[38;5;249me[0m[38;5;249mn[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249me[0m[38;5;249mE[0m[38;5;249mn[0m[38;5;249md[0m[38;5;249ms[0m[38;5;249m [0m[38;5;249m}[0m[38;5;249m [0m[38;5;249mf[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mm[0m[38;5;249m [0m"proprium:plugin/sentence-segmentation@2.0.0"[38;5;249m;[0m
+ [38;5;240m  │[0m                                   ──────────────────────┬──────────────────────  
+ [38;5;240m  │[0m                                                         ╰──────────────────────── Module not found, treating it as an external dependency
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: The "main" field here was ignored. Main fields must be configured explicitly when using the "neutral" platform.
+[38;5;246m───╯[0m
+
+OK Successfully written /workspace/proprium-build-temp/speaker-component-z33S4w/guest.wasm.
+WARNING: `wasm-tools compose` has been deprecated.
+
+Please use `wac` instead. You can find more information about `wac` at https://github.com/bytecodealliance/wac.
+composed component `/workspace/proprium-build-output/e8-seven-registry/.authoring-build/speaker-hefA7o/plugin.component.wasm`
+package root:component;
+
+world root {
+  import proprium:plugin/host@2.0.0;
+
+  export proprium:plugin/guest@2.0.0;
+}
+
+Built signed proprium.speaker@0.1.0: proprium/speaker/0.1.0/8e21bef6990c105b323fdf02683e19e9e6d5e30ab5e553cec324b4cfefd2f54f/plugin.component.wasm
+  Generating bindings for proprium-semantic-inference (model/src/bindings.rs)
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.27
+   Compiling syn v2.0.119
+   Compiling autocfg v1.5.1
+   Compiling libm v0.2.16
+   Compiling cfg-if v1.0.5
+   Compiling zerocopy v0.8.63
+   Compiling num-traits v0.2.19
+   Compiling serde_core v1.0.229
+   Compiling zerocopy-derive v0.8.63
+   Compiling syn v3.0.9
+   Compiling memchr v2.8.3
+   Compiling rustversion v1.0.23
+   Compiling serde v1.0.229
+   Compiling serde_derive v1.0.229
+   Compiling num-integer v0.1.47
+   Compiling anyhow v1.0.104
+   Compiling either v1.19.0
+   Compiling smallvec v1.16.4
+   Compiling matrixmultiply v0.3.11
+   Compiling parking_lot_core v0.9.12
+   Compiling num-complex v0.4.6
+   Compiling foldhash v0.2.0
+   Compiling find-msvc-tools v0.1.15
+   Compiling version_check v0.9.5
+   Compiling shlex v2.0.1
+   Compiling scopeguard v1.2.0
+   Compiling memo-map v0.3.4
+   Compiling rawpointer v0.2.1
+   Compiling same-file v1.0.6
+   Compiling walkdir v2.5.0
+   Compiling half v2.7.1
+   Compiling minijinja v2.24.0
+   Compiling lock_api v0.4.14
+   Compiling cc v1.10.0
+   Compiling hashbrown v0.16.1
+   Compiling nom v8.0.0
+   Compiling pastey v0.2.3
+   Compiling typeid v1.0.3
+   Compiling portable-atomic v1.15.0
+   Compiling nom-language v0.1.0
+   Compiling parking_lot v0.12.5
+   Compiling string-interner v0.20.0
+   Compiling tract-linalg v0.23.9
+   Compiling ndarray v0.17.2
+   Compiling itertools v0.15.0
+   Compiling inventory v0.3.25
+   Compiling lazy_static v1.5.1
+   Compiling downcast-rs v2.0.2
+   Compiling maplit v1.0.2
+   Compiling strength_reduce v0.2.4
+   Compiling log v0.4.34
+   Compiling dyn-hash v1.0.0
+   Compiling dyn-clone v1.0.20
+   Compiling erased-serde v0.4.11
+   Compiling zmij v1.0.23
+   Compiling tract-data v0.23.9
+   Compiling transpose v0.2.3
+   Compiling primal-check v0.3.4
+   Compiling rapidhash v4.5.1
+   Compiling derive-new v0.7.0
+   Compiling serde_json v1.0.154
+   Compiling itoa v1.0.18
+   Compiling byteorder v1.5.0
+   Compiling bit-vec v0.10.1
+   Compiling crossbeam-utils v0.8.23
+   Compiling bit-set v0.11.1
+   Compiling metrics v0.24.6
+   Compiling rustfft v6.4.1
+   Compiling ident_case v1.0.1
+   Compiling crossbeam-epoch v0.9.21
+   Compiling fnv v1.0.7
+   Compiling anymap3 v1.1.0
+   Compiling strsim v0.11.1
+   Compiling darling_core v0.20.11
+   Compiling tract-core v0.23.9
+   Compiling generic-array v0.14.7
+   Compiling filetime v0.2.29
+   Compiling getrandom v0.3.4
+   Compiling rand_core v0.10.1
+   Compiling getrandom v0.4.3
+   Compiling crossbeam-deque v0.8.8
+   Compiling tar v0.4.46
+   Compiling darling_macro v0.20.11
+   Compiling simd-adler32 v0.3.10
+   Compiling typenum v1.20.1
+   Compiling rayon-core v1.13.0
+   Compiling tract-nnef v0.23.9
+   Compiling darling v0.20.11
+   Compiling chacha20 v0.10.2
+   Compiling aho-corasick v1.1.5
+   Compiling regex-syntax v0.8.11
+   Compiling regex-automata v0.4.18
+   Compiling itertools v0.14.0
+   Compiling rand v0.10.3
+   Compiling rand_core v0.9.5
+   Compiling derive_builder_core v0.20.2
+   Compiling ahash v0.8.12 (/workspace/terra-final-producer/plugins/semantic/model/vendor/ahash)
+   Compiling ppv-lite86 v0.2.21
+   Compiling paste v1.0.15
+   Compiling esaxx-rs v0.1.10
+   Compiling minimal-lexical v0.2.1
+   Compiling bit-vec v0.8.0
+   Compiling thiserror v2.0.21
+   Compiling bit-set v0.8.0
+   Compiling nom v7.1.3
+   Compiling rand_chacha v0.9.0
+   Compiling derive_builder_macro v0.20.2
+   Compiling rayon v1.12.0
+   Compiling rand_distr v0.6.0
+   Compiling prost-derive v0.14.4
+   Compiling tract-extra v0.23.9
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling num-bigint v0.4.8
+   Compiling castaway v0.2.4
+   Compiling thiserror-impl v2.0.21
+   Compiling monostate-impl v0.1.18
+   Compiling once_cell v1.21.4
+   Compiling ryu v1.0.23
+   Compiling unicode-segmentation v1.13.3
+   Compiling wit-bindgen-rt v0.44.0
+   Compiling base64 v0.13.1
+   Compiling macro_rules_attribute-proc_macro v0.2.3
+   Compiling bytes v1.12.1
+   Compiling float-ord v0.3.2
+   Compiling static_assertions v1.1.0
+   Compiling compact_str v0.9.1
+   Compiling tract-transformers v0.23.9
+   Compiling prost v0.14.4
+   Compiling macro_rules_attribute v0.2.3
+   Compiling spm_precompiled v0.1.4
+warning: unexpected `cfg` condition value: `128`
+   --> vendor/ahash/src/fallback_hash.rs:164:11
+    |
+164 |     #[cfg(target_pointer_width = "128")]
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: `#[warn(unexpected_cfgs)]` on by default
+help: `128` is an expected value for `target_has_atomic`
+    |
+164 -     #[cfg(target_pointer_width = "128")]
+164 +     #[cfg(target_has_atomic = "128")]
+    |
+help: `128` is an expected value for `target_has_atomic_load_store`
+    |
+164 -     #[cfg(target_pointer_width = "128")]
+164 +     #[cfg(target_has_atomic_load_store = "128")]
+    |
+help: `128` is an expected value for `target_has_atomic_primitive_alignment`
+    |
+164 -     #[cfg(target_pointer_width = "128")]
+164 +     #[cfg(target_has_atomic_primitive_alignment = "128")]
+    |
+
+warning: unexpected `cfg` condition name: `fuzzing`
+  --> vendor/ahash/src/random_state.rs:48:58
+   |
+48 |     if #[cfg(all(feature = "compile-time-rng", any(test, fuzzing)))] {
+   |                                                          ^^^^^^^
+   |
+   = help: expected names are: `docsrs`, `feature`, `folded_multiply`, `specialize`, and `test` and 34 more
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(fuzzing)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `fuzzing`
+  --> vendor/ahash/src/random_state.rs:68:54
+   |
+68 |     } else if #[cfg(all(feature = "runtime-rng", not(fuzzing)))] {
+   |                                                      ^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(fuzzing)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: methods `read_u128x2`, `read_u128x4`, `read_last_u16`, `read_last_u128x2`, and `read_last_u128x4` are never used
+  --> vendor/ahash/src/convert.rs:69:8
+   |
+64 | pub(crate) trait ReadFromSlice {
+   |                  ------------- methods in this trait
+...
+69 |     fn read_u128x2(&self) -> ([u128; 2], &[u8]);
+   |        ^^^^^^^^^^^
+70 |     fn read_u128x4(&self) -> ([u128; 4], &[u8]);
+   |        ^^^^^^^^^^^
+71 |     fn read_last_u16(&self) -> u16;
+   |        ^^^^^^^^^^^^^
+...
+75 |     fn read_last_u128x2(&self) -> [u128; 2];
+   |        ^^^^^^^^^^^^^^^^
+76 |     fn read_last_u128x4(&self) -> [u128; 4];
+   |        ^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: specialization is experimental
+  --> vendor/ahash/src/specialize.rs:42:5
+   |
+42 |     default fn get_hash<H: Hash + ?Sized>(value: &H, random_state: &RandomState) -> u64 {
+   |     ^^^^^^^
+   |
+   = note: see issue #31844 <https://github.com/rust-lang/rust/issues/31844> for more information
+   = warning: unstable syntax can change at any point in the future, causing a hard error!
+   = note: for more information, see issue #154045 <https://github.com/rust-lang/rust/issues/154045>
+
+warning: `ahash` (lib) generated 5 warnings
+   Compiling monostate v0.1.18
+   Compiling num-rational v0.4.2
+   Compiling rayon-cond v0.4.0
+   Compiling digest v0.10.7
+   Compiling tract-onnx-opl v0.23.9
+   Compiling derive_builder v0.20.2
+   Compiling rand v0.9.5
+   Compiling fancy-regex v0.14.0
+   Compiling regex v1.13.1
+   Compiling tract-hir v0.23.9
+   Compiling unicode-normalization-alignments v0.1.12
+   Compiling dary_heap v0.3.9
+   Compiling bitflags v2.13.2
+   Compiling unicode_categories v0.1.1
+   Compiling memmap2 v0.9.12
+   Compiling tract-onnx v0.23.9
+   Compiling tokenizers v0.21.4
+   Compiling sha2 v0.10.9
+   Compiling proprium-semantic-inference v0.1.0 (/workspace/terra-final-producer/plugins/semantic/model)
+    Finished `release` profile [optimized] target(s) in 10m 27s
+    Creating component /workspace/proprium-build-output/e8-seven-registry/.authoring-build/semantic-CC7Shb/cargo-target/wasm32-unknown-unknown/release/proprium_semantic_inference.wasm
+component-guest.ts (9:7) [33m[UNRESOLVED_IMPORT] [0mCould not resolve 'proprium:plugin/inference@2.0.0' in component-guest.ts
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m component-guest.ts:9:8 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m9 │[0m [38;5;249m}[0m[38;5;249m [0m[38;5;249mf[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mm[0m[38;5;249m [0m"proprium:plugin/inference@2.0.0"[38;5;249m;[0m
+ [38;5;240m  │[0m        ────────────────┬────────────────  
+ [38;5;240m  │[0m                        ╰────────────────── Module not found, treating it as an external dependency
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: The "main" field here was ignored. Main fields must be configured explicitly when using the "neutral" platform.
+[38;5;246m───╯[0m
+
+OK Successfully written /workspace/proprium-build-temp/semantic-component-mxnW4p/semantic-guest.wasm.
+WARNING: `wasm-tools compose` has been deprecated.
+
+Please use `wac` instead. You can find more information about `wac` at https://github.com/bytecodealliance/wac.
+composed component `/workspace/proprium-build-output/e8-seven-registry/.authoring-build/semantic-CC7Shb/plugin.component.wasm`
+package root:component;
+
+world root {
+  import proprium:plugin/host@2.0.0;
+
+  export proprium:plugin/guest@2.0.0;
+}
+
+Built Semantic component at /workspace/proprium-build-output/e8-seven-registry/.authoring-build/semantic-CC7Shb/plugin.component.wasm
+Built signed proprium.semantic@0.1.0: proprium/semantic/0.1.0/b80d860449dfa6a82bf700a8772485309f75e5d91f847f929eac02385a29d5bb/plugin.component.wasm
+OK Successfully written /workspace/proprium-build-output/e8-seven-registry/.authoring-build/publishing-rUP5vX/plugin.component.wasm.
+Built signed proprium.publishing@0.1.0: proprium/publishing/0.1.0/9edc7cc6bd04fbb9854778102c5785985655db570cdf1d70a8418e6c98120d22/plugin.component.wasm
+Built signed plugin registry in /workspace/proprium-build-output/e8-seven-registry
+Registry URL: https://authoring-build.invalid/plugins/registry.json
+Registry public key (base64): E1+FQDQcZ2MSZ4wfjeoiSxZ2Ydc0BHEV6XPOMsdnEXE=
+Preserved 0 prior version(s); registry contains 7 immutable entry/entries

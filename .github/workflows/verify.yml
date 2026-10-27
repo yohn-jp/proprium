@@ -105,6 +105,18 @@ jobs:
       - name: Exercise Knowledge and Research authoring surfaces
         if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         run: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts
+      - name: Exercise Narrative next scene and portable positions
+        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
+        run: pnpm exec playwright test --config tests/browser/authoring-navigation.playwright.config.ts
+      - name: Exercise repeated reading mark approval and source navigation
+        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
+        run: pnpm exec playwright test --config tests/browser/authoring-readingmarks.playwright.config.ts
+      - name: Preserve source BOM through Core editing and export
+        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
+        run: pnpm exec playwright test --config tests/browser/authoring-bom-core.playwright.config.ts
+      - name: Persist local Semantic preferences without model admission
+        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
+        run: pnpm exec playwright test --config tests/browser/semantic-preferences.playwright.config.ts
       - name: Exercise signed update and rollback with retained actual components
         if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         env:

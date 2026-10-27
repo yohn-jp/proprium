@@ -15355,13 +15355,14 @@
   },
   "execution": {
     "base_sha": "cf286eea88d9ef7c809463ff0e339a140e87abb4",
-    "candidate_sha": "9a708e80fb55818bdb18b47457e98aabe73f8b53",
+    "candidate_sha": "27a898ac69a5b586223469823cf46062b16eb657",
     "certified": false,
     "pr": "https://github.com/yohn-jp/proprium/pull/16",
-    "note": "Candidate source SHA, not a certified release. Full acceptance and live deployment are incomplete. Unit tests do not certify feature or R-ID completion.",
+    "note": "Seven active plugins; Paired Writing frozen unchanged at ebc74e8. Candidate source SHA, not a certified release. Named local build/unit/browser scenarios do not certify full Canon, all R-IDs, current same-SHA full suite or production publication.",
     "cloudflare_publication": {
       "status": "BLOCKED",
-      "reason": "No managed-environment signing/R2 credentials configured. GitHub Secrets and Variables metadata endpoints return HTTP403 for the injected integration identity; production credentials/permissions cannot be established. No production publication performed."
+      "reason": "Cloudflare connector read access confirmed for existing proprium-plugin-registry bucket, active custom domain and Host-origin CORS. Public proprium-assets.yohn.jp/plugins/registry.json returns 200 and contains only proprium.compute-sum@0.1.0 (registry 0.1.1). Official production signing authority is unavailable to this integration; GitHub Secrets/Variables metadata access was HTTP403, and the managed publication workflow only runs on main. No production objects or configuration changed.",
+      "evidence_ref": "evidence/authoring/validation/cloudflare-read-access.json"
     },
     "checks": [
       {
@@ -15517,6 +15518,38 @@
         "command": "node scripts/test-authoring-plugin-units.mjs",
         "evidence_ref": "evidence/authoring/validation/current-guest-unit.txt",
         "scope": "294 passed; does not certify realmodel Browser UX or allCanon features."
+      },
+      {
+        "name": "Seven selected actual WASM builds and signature verification",
+        "status": "PASS",
+        "git_sha": "e8f7c33560890fc50053438b1648660a7eb43dca",
+        "command": "PROPRIUM_AUTHORING_PLUGIN_IDS=<seven active official IDs> node scripts/build-plugin-registry.mjs authoring; node scripts/verify-plugin-registry.mjs all",
+        "evidence_ref": "evidence/authoring/validation/e8-seven-build.json",
+        "scope": "Seven selected actual components only. Ephemeral test signatures; not a production release, latest UI acceptance, or full R01-R14 certification. Paired Writing excluded and frozen."
+      },
+      {
+        "name": "narrative-navigation",
+        "status": "PASS",
+        "git_sha": "b6fc660e9509c2ac0f19783902d7e6b84a0caa34",
+        "tests": 6,
+        "evidence_ref": "evidence/authoring/validation/seven-plugin-browser-scenarios.json",
+        "scope": "Only the named scenarios; not full Canon/IME/physical-device or release acceptance."
+      },
+      {
+        "name": "narrative-readingmarks",
+        "status": "PASS",
+        "git_sha": "42c53475135a7449be803ef5707c01f1a4135f96",
+        "tests": 2,
+        "evidence_ref": "evidence/authoring/validation/seven-plugin-browser-scenarios.json",
+        "scope": "Only the named scenarios; not full Canon/IME/physical-device or release acceptance."
+      },
+      {
+        "name": "zero-plugin-bom",
+        "status": "PASS",
+        "git_sha": "4af02d53896897a0ba9fe260198e5380559d7636",
+        "tests": 2,
+        "evidence_ref": "evidence/authoring/validation/seven-plugin-browser-scenarios.json",
+        "scope": "Only the named scenarios; not full Canon/IME/physical-device or release acceptance."
       }
     ],
     "same_release_sha_certification": {

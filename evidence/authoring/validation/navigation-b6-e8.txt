@@ -1,0 +1,195 @@
+[WebServer] (node:224294) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 6 tests using 1 worker
+
+(node:224315) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [desktop-chromium] › tests/browser/authoring-navigation.acceptance.ts:61:5 › next scene opens the pinned next scene and reports the end (2ms)
+(node:224327) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 [desktop-chromium] › tests/browser/authoring-navigation.acceptance.ts:71:5 › dirty draft prevents navigation without losing editor text (4ms)
+(node:224339) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  3 [desktop-chromium] › tests/browser/authoring-navigation.acceptance.ts:81:5 › portable marker validates its saved body and opens the scene (2ms)
+(node:224359) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Skipping host requirements validation logic because `PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS` env variable is set.
+[WebServer] [BABEL] Note: The code generator has deoptimised the styling of /workspace/browser-temp/proprium-navigation-cache-224280/deps/react-dom_client.js?v=f21ee6d2 as it exceeds the max of 500KB.
+  ✘  4 [mobile-webkit] › tests/browser/authoring-navigation.acceptance.ts:61:5 › next scene opens the pinned next scene and reports the end (26.6s)
+(node:224511) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Skipping host requirements validation logic because `PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS` env variable is set.
+  ✘  5 [mobile-webkit] › tests/browser/authoring-navigation.acceptance.ts:71:5 › dirty draft prevents navigation without losing editor text (27.4s)
+(node:224653) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Skipping host requirements validation logic because `PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS` env variable is set.
+  ✘  6 [mobile-webkit] › tests/browser/authoring-navigation.acceptance.ts:81:5 › portable marker validates its saved body and opens the scene (9.5s)
+
+
+  1) [desktop-chromium] › tests/browser/authoring-navigation.acceptance.ts:61:5 › next scene opens the pinned next scene and reports the end 
+
+    Error: browserType.launch: Executable doesn't exist at /home/agent/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell
+    ╔════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright was just installed or updated.       ║
+    ║ Please run the following command to download new browsers: ║
+    ║                                                            ║
+    ║     npx playwright install                                 ║
+    ║                                                            ║
+    ║ <3 Playwright Team                                         ║
+    ╚════════════════════════════════════════════════════════════╝
+
+    Error Context: ../browser-temp/proprium-publishing-results-224315/authoring-navigation.accep-e83f1-t-scene-and-reports-the-end-desktop-chromium/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../browser-temp/proprium-publishing-results-224315/authoring-navigation.accep-e83f1-t-scene-and-reports-the-end-desktop-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace ../browser-temp/proprium-publishing-results-224315/authoring-navigation.accep-e83f1-t-scene-and-reports-the-end-desktop-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [desktop-chromium] › tests/browser/authoring-navigation.acceptance.ts:71:5 › dirty draft prevents navigation without losing editor text 
+
+    Error: browserType.launch: Executable doesn't exist at /home/agent/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell
+    ╔════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright was just installed or updated.       ║
+    ║ Please run the following command to download new browsers: ║
+    ║                                                            ║
+    ║     npx playwright install                                 ║
+    ║                                                            ║
+    ║ <3 Playwright Team                                         ║
+    ╚════════════════════════════════════════════════════════════╝
+
+    Error Context: ../browser-temp/proprium-publishing-results-224327/authoring-navigation.accep-8e79a--without-losing-editor-text-desktop-chromium/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../browser-temp/proprium-publishing-results-224327/authoring-navigation.accep-8e79a--without-losing-editor-text-desktop-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace ../browser-temp/proprium-publishing-results-224327/authoring-navigation.accep-8e79a--without-losing-editor-text-desktop-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [desktop-chromium] › tests/browser/authoring-navigation.acceptance.ts:81:5 › portable marker validates its saved body and opens the scene 
+
+    Error: browserType.launch: Executable doesn't exist at /home/agent/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell
+    ╔════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright was just installed or updated.       ║
+    ║ Please run the following command to download new browsers: ║
+    ║                                                            ║
+    ║     npx playwright install                                 ║
+    ║                                                            ║
+    ║ <3 Playwright Team                                         ║
+    ╚════════════════════════════════════════════════════════════╝
+
+    Error Context: ../browser-temp/proprium-publishing-results-224339/authoring-navigation.accep-8aa9d-ed-body-and-opens-the-scene-desktop-chromium/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../browser-temp/proprium-publishing-results-224339/authoring-navigation.accep-8aa9d-ed-body-and-opens-the-scene-desktop-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace ../browser-temp/proprium-publishing-results-224339/authoring-navigation.accep-8aa9d-ed-body-and-opens-the-scene-desktop-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [mobile-webkit] › tests/browser/authoring-navigation.acceptance.ts:61:5 › next scene opens the pinned next scene and reports the end 
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+      - waiting for getByRole('tabpanel', { name: 'Work outline', exact: true }).first().getByRole('button', { name: '読み込む', exact: true })
+
+
+      51 |   if (await configuration.getAttribute('open') !== null) await configuration.locator(':scope > summary').click();
+      52 |   const outline = page.getByRole('tabpanel', { name: 'Work outline', exact: true }).first();
+    > 53 |   await outline.getByRole('button', { name: '読み込む', exact: true }).click();
+         |                                                                    ^
+      54 |   await outline.getByText('第一巻', { exact: true }).click();
+      55 |   await outline.getByText('始まり', { exact: true }).click();
+      56 |   await outline.getByText('雨の夜', { exact: true }).click();
+        at openSceneA (/workspace/terra-navigation-b6/tests/browser/authoring-navigation.acceptance.ts:53:68)
+        at /workspace/terra-navigation-b6/tests/browser/authoring-navigation.acceptance.ts:62:22
+
+    Error Context: ../browser-temp/proprium-publishing-results-224359/authoring-navigation.accep-e83f1-t-scene-and-reports-the-end-mobile-webkit/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../browser-temp/proprium-publishing-results-224359/authoring-navigation.accep-e83f1-t-scene-and-reports-the-end-mobile-webkit/trace.zip
+    Usage:
+
+        npx playwright show-trace ../browser-temp/proprium-publishing-results-224359/authoring-navigation.accep-e83f1-t-scene-and-reports-the-end-mobile-webkit/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [mobile-webkit] › tests/browser/authoring-navigation.acceptance.ts:71:5 › dirty draft prevents navigation without losing editor text 
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+      - waiting for getByRole('tabpanel', { name: 'Work outline', exact: true }).first().getByRole('button', { name: '読み込む', exact: true })
+
+
+      51 |   if (await configuration.getAttribute('open') !== null) await configuration.locator(':scope > summary').click();
+      52 |   const outline = page.getByRole('tabpanel', { name: 'Work outline', exact: true }).first();
+    > 53 |   await outline.getByRole('button', { name: '読み込む', exact: true }).click();
+         |                                                                    ^
+      54 |   await outline.getByText('第一巻', { exact: true }).click();
+      55 |   await outline.getByText('始まり', { exact: true }).click();
+      56 |   await outline.getByText('雨の夜', { exact: true }).click();
+        at openSceneA (/workspace/terra-navigation-b6/tests/browser/authoring-navigation.acceptance.ts:53:68)
+        at /workspace/terra-navigation-b6/tests/browser/authoring-navigation.acceptance.ts:72:22
+
+    Error Context: ../browser-temp/proprium-publishing-results-224511/authoring-navigation.accep-8e79a--without-losing-editor-text-mobile-webkit/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../browser-temp/proprium-publishing-results-224511/authoring-navigation.accep-8e79a--without-losing-editor-text-mobile-webkit/trace.zip
+    Usage:
+
+        npx playwright show-trace ../browser-temp/proprium-publishing-results-224511/authoring-navigation.accep-8e79a--without-losing-editor-text-mobile-webkit/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [mobile-webkit] › tests/browser/authoring-navigation.acceptance.ts:81:5 › portable marker validates its saved body and opens the scene 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('tab')
+    Expected: visible
+    Error: strict mode violation: getByRole('tab') resolved to 4 elements:
+        1) <button role="tab" type="button" tabindex="-1" aria-selected="false" id="st-workspace-mobile-tab-editor" aria-controls="st-workspace-mobile-pane-editor">原稿</button> aka getByRole('tab', { name: '原稿' })
+        2) <button role="tab" tabindex="0" type="button" aria-selected="true" id="st-workspace-mobile-tab-review" aria-controls="st-workspace-mobile-pane-review">レビューとツール</button> aka getByRole('tab', { name: 'レビューとツール' })
+        3) <button role="tab" type="button" tabindex="-1" aria-selected="false" id="st-workspace-mobile-tab-outline" aria-controls="st-workspace-mobile-pane-outline">作品と構成</button> aka getByRole('tab', { name: '作品と構成' })
+        4) <button role="tab" type="button" tabindex="-1" aria-selected="false" id="st-workspace-mobile-tab-inspector" aria-controls="st-workspace-mobile-pane-inspector">文書と保存状態</button> aka getByRole('tab', { name: '文書と保存状態' })
+
+    Call log:
+      - Expect "toBeVisible" getByRole('tab') with timeout 90000ms
+      - waiting for getByRole('tab')
+
+
+       at restored-ui.helpers.ts:17
+
+      15 |     const panelTab = page.getByRole("tab", { name: panelNames[panel], exact: true });
+      16 |     await expect(page.getByRole("region", { name: "Composable workspace", exact: true })).toBeVisible();
+    > 17 |     if (panel !== "review") await expect(panelTab).toBeVisible();
+         |                                                    ^
+      18 |     if (await panelTab.isVisible()) {
+      19 |       if ((await panelTab.getAttribute("aria-selected")) !== "true") await panelTab.click();
+      20 |       await expect(page.getByRole("tabpanel", { name: panelNames[panel], exact: true })).toBeVisible();
+        at showPanel (/workspace/terra-navigation-b6/tests/browser/restored-ui.helpers.ts:17:52)
+        at /workspace/terra-navigation-b6/tests/browser/authoring-navigation.acceptance.ts:83:3
+
+    Error Context: ../browser-temp/proprium-publishing-results-224653/authoring-navigation.accep-8aa9d-ed-body-and-opens-the-scene-mobile-webkit/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../browser-temp/proprium-publishing-results-224653/authoring-navigation.accep-8aa9d-ed-body-and-opens-the-scene-mobile-webkit/trace.zip
+    Usage:
+
+        npx playwright show-trace ../browser-temp/proprium-publishing-results-224653/authoring-navigation.accep-8aa9d-ed-body-and-opens-the-scene-mobile-webkit/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6 failed
+    [desktop-chromium] › tests/browser/authoring-navigation.acceptance.ts:61:5 › next scene opens the pinned next scene and reports the end 
+    [desktop-chromium] › tests/browser/authoring-navigation.acceptance.ts:71:5 › dirty draft prevents navigation without losing editor text 
+    [desktop-chromium] › tests/browser/authoring-navigation.acceptance.ts:81:5 › portable marker validates its saved body and opens the scene 
+    [mobile-webkit] › tests/browser/authoring-navigation.acceptance.ts:61:5 › next scene opens the pinned next scene and reports the end 
+    [mobile-webkit] › tests/browser/authoring-navigation.acceptance.ts:71:5 › dirty draft prevents navigation without losing editor text 
+    [mobile-webkit] › tests/browser/authoring-navigation.acceptance.ts:81:5 › portable marker validates its saved body and opens the scene 

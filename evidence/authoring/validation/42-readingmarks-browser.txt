@@ -1,0 +1,45 @@
+[WebServer] (node:225881) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 2 tests using 1 worker
+
+(node:225903) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] [BABEL] Note: The code generator has deoptimised the styling of /tmp/proprium-navigation-cache-225838/deps/react-dom_client.js?v=16451d38 as it exceeds the max of 500KB.
+  ✓  1 [desktop-chromium] › tests/browser/authoring-readingmarks.acceptance.ts:61:5 › saved selection becomes a reviewed reading mark without changing manuscript text (30.5s)
+(node:226471) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Skipping host requirements validation logic because `PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS` env variable is set.
+  ✘  2 [mobile-webkit] › tests/browser/authoring-readingmarks.acceptance.ts:61:5 › saved selection becomes a reviewed reading mark without changing manuscript text (31.0s)
+
+
+  1) [mobile-webkit] › tests/browser/authoring-readingmarks.acceptance.ts:61:5 › saved selection becomes a reviewed reading mark without changing manuscript text 
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+      - waiting for getByRole('tabpanel', { name: 'Work outline', exact: true }).first().getByRole('button', { name: '読み込む', exact: true })
+
+
+      51 |   if (await configuration.getAttribute('open') !== null) await configuration.locator(':scope > summary').click();
+      52 |   const outline = page.getByRole('tabpanel', { name: 'Work outline', exact: true }).first();
+    > 53 |   await outline.getByRole('button', { name: '読み込む', exact: true }).click();
+         |                                                                    ^
+      54 |   await outline.getByText('第一巻', { exact: true }).click();
+      55 |   await outline.getByText('始まり', { exact: true }).click();
+      56 |   await outline.getByText('雨の夜', { exact: true }).click();
+        at openSceneA (/workspace/terra-readingmarks/tests/browser/authoring-readingmarks.acceptance.ts:53:68)
+        at /workspace/terra-readingmarks/tests/browser/authoring-readingmarks.acceptance.ts:62:22
+
+    Error Context: ../../tmp/proprium-publishing-results-226471/authoring-readingmarks.acc-e107d-ut-changing-manuscript-text-mobile-webkit/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../tmp/proprium-publishing-results-226471/authoring-readingmarks.acc-e107d-ut-changing-manuscript-text-mobile-webkit/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../tmp/proprium-publishing-results-226471/authoring-readingmarks.acc-e107d-ut-changing-manuscript-text-mobile-webkit/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [mobile-webkit] › tests/browser/authoring-readingmarks.acceptance.ts:61:5 › saved selection becomes a reviewed reading mark without changing manuscript text 
+  1 passed (1.2m)

@@ -1,0 +1,9 @@
+{
+  "schema": "proprium.authoring.freeze-boundary/v1",
+  "plugin_id": "proprium.paired-writing",
+  "freeze_source_sha": "ebc74e80f612634362ab5c0641829c14c2a1dead",
+  "directory_tree": "839d2aab38e521c380e14bbd69ec99c5b679efde",
+  "unchanged": true,
+  "acceptance_record_unchanged": true,
+  "note": "User froze Paired Writing. Subsequent implementation, selected builds and plugin checks target the other seven plugins. Existing frozen code was retained without revert."
+}

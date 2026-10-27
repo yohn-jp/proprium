@@ -1,0 +1,55 @@
+OK Successfully written /workspace/proprium-build-output/4af-nks-registry/.authoring-build/narrative-SMvE5B/plugin.component.wasm.
+Built signed proprium.narrative@0.1.0: proprium/narrative/0.1.0/41afe18127af0a44d8b740b8e58c89bd7bef3b72524d8305a7925aad8553f83b/plugin.component.wasm
+src/sha256.ts (21:43) [33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/sha256.ts:21:44 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m21 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mb[0m[38;5;249mi[0m[38;5;249mt[0m[38;5;249mL[0m[38;5;249me[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249mt[0m[38;5;249mh[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mB[0m[38;5;249mi[0m[38;5;249mg[0m[38;5;249mI[0m[38;5;249mn[0m[38;5;249mt[0m[38;5;249m([0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mp[0m[38;5;249mu[0m[38;5;249mt[0m[38;5;249m.[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249mt[0m[38;5;249mh[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m*[0m[38;5;249m [0m8n[38;5;249m;[0m
+ [38;5;240m   │[0m                                            ─┬  
+ [38;5;240m   │[0m                                             ╰── 
+[38;5;246m────╯[0m
+
+src/sha256.ts (22:98) [33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/sha256.ts:22:99 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m22 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mf[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249m [0m[38;5;249m([0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m0[0m[38;5;249m;[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m8[0m[38;5;249m;[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249m+[0m[38;5;249m+[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249mb[0m[38;5;249my[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249m[[0m[38;5;249mp[0m[38;5;249ma[0m[38;5;249md[0m[38;5;249md[0m[38;5;249me[0m[38;5;249md[0m[38;5;249mL[0m[38;5;249me[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249mt[0m[38;5;249mh[0m[38;5;249m [0m[38;5;249m-[0m[38;5;249m [0m[38;5;249m1[0m[38;5;249m [0m[38;5;249m-[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249m][0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mN[0m[38;5;249mu[0m[38;5;249mm[0m[38;5;249mb[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249m([0m[38;5;249m([0m[38;5;249mb[0m[38;5;249mi[0m[38;5;249mt[0m[38;5;249mL[0m[38;5;249me[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249mt[0m[38;5;249mh[0m[38;5;249m [0m[38;5;249m>[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249mB[0m[38;5;249mi[0m[38;5;249mg[0m[38;5;249mI[0m[38;5;249mn[0m[38;5;249mt[0m[38;5;249m([0m[38;5;249mi[0m[38;5;249m [0m[38;5;249m*[0m[38;5;249m [0m[38;5;249m8[0m[38;5;249m)[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m&[0m[38;5;249m [0m0xffn[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m   │[0m                                                                                                   ──┬──  
+ [38;5;240m   │[0m                                                                                                     ╰──── 
+[38;5;246m────╯[0m
+
+OK Successfully written /workspace/proprium-build-output/4af-nks-registry/.authoring-build/knowledge-bKgWEn/plugin.component.wasm.
+Built signed proprium.knowledge@0.1.0: proprium/knowledge/0.1.0/7c64d8de762ba6eed4d64a557d505b1f7f708b369e86d632eef384424435c64f/plugin.component.wasm
+  Generating bindings for proprium-speaker-segmenter (segmenter/src/bindings.rs)
+   Compiling wit-bindgen-rt v0.44.0
+   Compiling bitflags v2.13.2
+   Compiling unicode-segmentation v1.13.3
+   Compiling proprium-speaker-segmenter v0.1.0 (/workspace/terra-final-producer/plugins/speaker/segmenter)
+    Finished `release` profile [optimized] target(s) in 1.34s
+    Creating component /workspace/proprium-build-output/4af-nks-registry/.authoring-build/speaker-5nyIt9/cargo-target/wasm32-unknown-unknown/release/proprium_speaker_segmenter.wasm
+component-guest.ts (1:34) [33m[UNRESOLVED_IMPORT] [0mCould not resolve 'proprium:plugin/sentence-segmentation@2.0.0' in component-guest.ts
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m component-guest.ts:1:35 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m [38;5;249mi[0m[38;5;249mm[0m[38;5;249mp[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249m{[0m[38;5;249m [0m[38;5;249ms[0m[38;5;249mp[0m[38;5;249ml[0m[38;5;249mi[0m[38;5;249mt[0m[38;5;249mS[0m[38;5;249me[0m[38;5;249mn[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249me[0m[38;5;249mE[0m[38;5;249mn[0m[38;5;249md[0m[38;5;249ms[0m[38;5;249m [0m[38;5;249m}[0m[38;5;249m [0m[38;5;249mf[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mm[0m[38;5;249m [0m"proprium:plugin/sentence-segmentation@2.0.0"[38;5;249m;[0m
+ [38;5;240m  │[0m                                   ──────────────────────┬──────────────────────  
+ [38;5;240m  │[0m                                                         ╰──────────────────────── Module not found, treating it as an external dependency
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: The "main" field here was ignored. Main fields must be configured explicitly when using the "neutral" platform.
+[38;5;246m───╯[0m
+
+OK Successfully written /workspace/proprium-build-temp/speaker-component-Z6bpm0/guest.wasm.
+WARNING: `wasm-tools compose` has been deprecated.
+
+Please use `wac` instead. You can find more information about `wac` at https://github.com/bytecodealliance/wac.
+composed component `/workspace/proprium-build-output/4af-nks-registry/.authoring-build/speaker-5nyIt9/plugin.component.wasm`
+package root:component;
+
+world root {
+  import proprium:plugin/host@2.0.0;
+
+  export proprium:plugin/guest@2.0.0;
+}
+
+Built signed proprium.speaker@0.1.0: proprium/speaker/0.1.0/ae463a914ec4dcd53a2337dfea76e4c9d04f19cf0f4073b0cfa6a3e6a92e6460/plugin.component.wasm
+Built signed plugin registry in /workspace/proprium-build-output/4af-nks-registry
+Registry URL: https://authoring-build.invalid/plugins/registry.json
+Registry public key (base64): 2puuOYBxGsV4adxSPgwqkwt+1x9R643jpngMVdi1Hj8=
+Preserved 0 prior version(s); registry contains 3 immutable entry/entries

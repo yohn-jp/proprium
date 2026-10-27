@@ -1,0 +1,15 @@
+[WebServer] (node:228859) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 2 tests using 1 worker
+
+(node:228879) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] [BABEL] Note: The code generator has deoptimised the styling of /workspace/browser-temp/proprium-bom-cache-228845/deps/react-dom_client.js?v=4ec0472d as it exceeds the max of 500KB.
+  ✓  1 [desktop-chromium] › tests/browser/authoring-bom-core.acceptance.ts:7:5 › Core preserves BOM, Japanese, supplementary characters and CRLF through save and export (4.6s)
+(node:229031) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Skipping host requirements validation logic because `PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS` env variable is set.
+  ✓  2 [mobile-webkit] › tests/browser/authoring-bom-core.acceptance.ts:7:5 › Core preserves BOM, Japanese, supplementary characters and CRLF through save and export (3.2s)
+
+  2 passed (10.4s)

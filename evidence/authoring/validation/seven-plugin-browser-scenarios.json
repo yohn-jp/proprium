@@ -1,0 +1,78 @@
+{
+  "schema": "proprium.authoring.partial-browser-evidence/v1",
+  "records": [
+    {
+      "name": "narrative-navigation",
+      "host_source_sha": "b6fc660e9509c2ac0f19783902d7e6b84a0caa34",
+      "test_commit": "4f358b463619823336700ca721912e436e9485f1",
+      "status": "PASS",
+      "cases_passed": 6,
+      "platforms": [
+        "Desktop Chromium",
+        "Mobile WebKit emulation"
+      ],
+      "registry_source_sha": "e8f7c33560890fc50053438b1648660a7eb43dca",
+      "registry_sha256": "312e3152a78e1ec337d34d99256c71166799765a8c8b23088787192599aa8cb2",
+      "artifacts": [
+        {
+          "path": "evidence/authoring/validation/navigation-b6-e8-corrected.txt",
+          "sha256": "3a77be181e3d7ce9c904fe40b0857090a81edf0732077ff8002465ccbc99abce"
+        }
+      ],
+      "earlier_attempts": [
+        {
+          "path": "evidence/authoring/validation/navigation-b6-e8.txt",
+          "sha256": "574fd084d961d59c8fb7a40168474e0b8988395d3eb7f6145a131a54b61cb72c"
+        }
+      ],
+      "scope": "Only the named scenarios; not full Canon/IME/physical-device or release acceptance."
+    },
+    {
+      "name": "narrative-readingmarks",
+      "host_source_sha": "42c53475135a7449be803ef5707c01f1a4135f96",
+      "test_commit": "681e6fb1458b8d1bbb66c8fb32ec6e0eb35d1a75",
+      "status": "PASS",
+      "cases_passed": 2,
+      "platforms": [
+        "Desktop Chromium",
+        "Mobile WebKit emulation"
+      ],
+      "registry_source_sha": "42c53475135a7449be803ef5707c01f1a4135f96",
+      "registry_sha256": "d715043440de1049e37c2fb4b54001be1d8be38777048e7ff6eafab3ba67042f",
+      "artifacts": [
+        {
+          "path": "evidence/authoring/validation/42-readingmarks-browser.txt",
+          "sha256": "635a041f6feacdfdd071edd913e382d0a6d3e1d20367414d95848da3ec76cb0c"
+        },
+        {
+          "path": "evidence/authoring/validation/42-readingmarks-mobile-retry.txt",
+          "sha256": "b80614ff8d56827be283f9cc8fd894324dc675ca0455b7dd3b374707d7f281a4"
+        }
+      ],
+      "earlier_attempts": [],
+      "scope": "Only the named scenarios; not full Canon/IME/physical-device or release acceptance.",
+      "attempt_note": "Desktop passed in original combined run; the first mobile attempt failed test setup (unselected Work outline tab). Corrected mobile retry passed. Both original and retry logs retained."
+    },
+    {
+      "name": "zero-plugin-bom",
+      "host_source_sha": "4af02d53896897a0ba9fe260198e5380559d7636",
+      "test_commit": "a9d9a1e7337a32042caf532087747d18bb2b86b6",
+      "status": "PASS",
+      "cases_passed": 2,
+      "platforms": [
+        "Desktop Chromium",
+        "Mobile WebKit emulation"
+      ],
+      "registry_source_sha": null,
+      "registry_sha256": null,
+      "artifacts": [
+        {
+          "path": "evidence/authoring/validation/bom-core-4af.txt",
+          "sha256": "658ac0b494d0e0271d47c4bcadc9e94aa8deb4091638f317b661d3c1c412a98b"
+        }
+      ],
+      "earlier_attempts": [],
+      "scope": "Only the named scenarios; not full Canon/IME/physical-device or release acceptance."
+    }
+  ]
+}
