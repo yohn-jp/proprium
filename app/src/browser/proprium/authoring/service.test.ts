@@ -114,3 +114,15 @@ test("production action idempotency fails closed when durable IndexedDB is unava
   assert.equal(calls.length, 0);
   await service.dispose();
 });
+
+test("concurrent first callers share one paging snapshot", async () => {
+  const { service, pinCount } = makeService();
+  const principal = (request_id: string) => ({ caller: "mcp" as const, actor_id: "gateway", request_id, selected_scope: scope });
+  const [first, second] = await Promise.all([
+    service.authority.issue(principal("request-one"), pluginId, actionId),
+    service.authority.issue(principal("request-two"), pluginId, actionId),
+  ]);
+  assert.equal(pinCount(), 1);
+  assert.deepEqual(first.snapshot, second.snapshot);
+  await service.dispose();
+});

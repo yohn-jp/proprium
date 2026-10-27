@@ -213,6 +213,8 @@ export class BrowserAuthoringService {
   private readonly invocationStageLeases = new Map<string, Set<string>>();
   private readonly controllers = new Map<string, AbortController>();
   private readonly abortListeners = new Map<string, { signal: AbortSignal; listener: () => void }>();
+  private readonly verifiedUiContinuations = new Set<string>();
+  private actionSnapshotQueue: Promise<unknown> = Promise.resolve();
   private disposed = false;
   private retainedActionSnapshot: AuthoringSnapshotContext | null = null;
 
@@ -247,7 +249,10 @@ export class BrowserAuthoringService {
   /** Captures the browser's real trusted event before any asynchronous work. */
   async invokeUi(event: Event, pluginId: string, actionId: string, input: Record<string, unknown>, followNavigation = false): Promise<ActionResult> {
     const principal = this.makePrincipal("ui", event);
-    if (followNavigation && !principal.user_gesture_token) throw deniedGesture();
+    if (followNavigation) {
+      if (!principal.user_gesture_token || !this.options.gestures.consume(principal.user_gesture_token as object)) throw deniedGesture();
+      this.verifiedUiContinuations.add(principal.request_id);
+    }
     try {
       const result = await this.dispatcher.invoke({ plugin_id: pluginId, action_id: actionId, input,
         ...(typeof input.idempotency_key === "string" ? { idempotency_key: input.idempotency_key } : {}) }, principal);
@@ -263,7 +268,7 @@ export class BrowserAuthoringService {
         });
       }
       return result;
-    } finally { await this.releaseRequest(principal.request_id); this.preferenceGestures.delete(principal.request_id); }
+    } finally { await this.releaseRequest(principal.request_id); this.preferenceGestures.delete(principal.request_id); this.verifiedUiContinuations.delete(principal.request_id); }
   }
 
   /** Runs the normal UI action through the same dispatcher as MCP and admits a host-owned result artifact. */
@@ -375,6 +380,7 @@ export class BrowserAuthoringService {
     for (const listener of this.abortListeners.values()) listener.signal.removeEventListener("abort", listener.listener);
     this.abortListeners.clear();
     this.controllers.clear();
+    await this.actionSnapshotQueue;
     const contexts = [...this.leases.values()];
     this.leases.clear(); this.foreignLeases.clear(); this.requestLeases.clear();
     await Promise.allSettled(contexts.map(context => context.reader.release(context.lease)));
@@ -717,21 +723,32 @@ export class BrowserAuthoringService {
       if (!principal.selected_scope || !sameScope(principal.selected_scope, scope)) throw staleScope();
       const installed = await this.options.manager.verifiedActionSet(plugin_id);
       if (!installed?.activation_epoch) throw Object.assign(new Error("Plugin is unavailable or disabled"), { code: "plugin_unavailable" });
-      let pinned = this.retainedActionSnapshot;
-      if (pinned) {
-        try { await this.assertCurrent(pinned); }
-        catch (error) {
-          if ((error as { code?: string }).code !== "snapshot_stale") throw error;
-          this.retainedActionSnapshot = null;
-          if (![...this.requestLeases.values()].includes(pinned)) await this.release(pinned);
-          pinned = null;
+      const obtain = async () => {
+        this.requireSelection();
+        let current = this.retainedActionSnapshot;
+        if (current) {
+          try { await this.assertCurrent(current); }
+          catch (error) {
+            if ((error as { code?: string }).code !== "snapshot_stale") throw error;
+            this.retainedActionSnapshot = null;
+            if (![...this.requestLeases.values()].includes(current)) await this.release(current);
+            current = null;
+          }
         }
-      }
-      if (!pinned) { pinned = await this.pin(selected); this.retainedActionSnapshot = pinned; }
+        if (!current) {
+          current = await this.pin(selected);
+          if (this.disposed) { await this.release(current); throw staleScope(); }
+          this.retainedActionSnapshot = current;
+        }
+        return current;
+      };
+      const pending = this.actionSnapshotQueue.then(obtain, obtain);
+      this.actionSnapshotQueue = pending.then(() => undefined, () => undefined);
+      const pinned = await pending;
       this.requestLeases.set(principal.request_id, pinned);
       const controller = this.controllers.get(principal.request_id) ?? new AbortController();
       this.controllers.set(principal.request_id, controller);
-      const user_gesture_verified = !!principal.user_gesture_token && this.options.gestures.consume(principal.user_gesture_token as object);
+      const user_gesture_verified = this.verifiedUiContinuations.has(principal.request_id) || (!!principal.user_gesture_token && this.options.gestures.consume(principal.user_gesture_token as object));
       return Object.freeze({ ...pinned, caller: principal.caller, actor_id: principal.actor_id,
         request_id: principal.request_id, invocation_id: principal.request_id, deadline_at: Date.now() + 30_000, user_gesture_verified,
         activation_epoch: installed.activation_epoch, grants: installed.grants,
