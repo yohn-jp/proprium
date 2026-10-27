@@ -99,6 +99,20 @@ test("a synthetic UI event never satisfies a signed action gesture requirement",
   await service.dispose();
 });
 
+test("reading mark proposals reject dirty drafts and IME before entering the guest",async()=>{
+  for(const action_id of ["proprium.narrative.reading-marks.create","proprium.narrative.reading-marks.create-ui","proprium.narrative.reading-marks.delete"]){
+    for(const state of [{dirty:true,composing:false},{dirty:false,composing:true}]){
+      const descriptor={...action(),plugin_id:"proprium.narrative",action_id,effect:"propose" as const};
+      const {service,calls}=makeService(descriptor,()=>({path:"manuscript/a.md",draft_generation:null,...state}));
+      const result=await service.invokeUi(new Event("click"),descriptor.plugin_id,action_id,{});
+      assert.equal(result.ok,false);
+      if(!result.ok)assert.equal(result.error.code,"dirty_draft");
+      assert.equal(calls.length,0);
+      await service.dispose();
+    }
+  }
+});
+
 test("portable resume proposals cannot invent a position or capture a dirty editor",async()=>{
   const markerPlugin="proprium.narrative",markerAction="proprium.narrative.resume.mark.propose";
   const descriptor={...action(),plugin_id:markerPlugin,action_id:markerAction,effect:"propose" as const,

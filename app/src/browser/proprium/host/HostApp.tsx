@@ -994,7 +994,7 @@ export function HostApp(): ReactElement {
     scene_id:selectedScene.id,manuscript_path:selectedScene.path,metadata_revision:selectedScene.metadataRevision,manuscript_revision:selectedScene.manuscriptRevision,
   } : {};
   // Nonsecret identifiers only; never copy the editor or Draft into a plugin form.
-  const contextualAuthoringRegistrations=authoringRegistrations.map(row=>row.pluginId==="proprium.speaker"||row.pluginId==="proprium.knowledge" ? {
+  const contextualAuthoringRegistrations=authoringRegistrations.map(row=>["proprium.narrative","proprium.speaker","proprium.knowledge"].includes(row.pluginId) ? {
     ...row,data:{...(row.data&&typeof row.data==="object"&&!Array.isArray(row.data)?row.data:{}),host_context:sceneContext},
   } : row);
 

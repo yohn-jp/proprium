@@ -238,6 +238,12 @@ export class BrowserAuthoringService {
       installed: pluginId => options.manager.verifiedActionSet(pluginId),
       authority: this.authority,
       runtime: { invoke: invoke => {
+        if(invoke.request.plugin_id==="proprium.narrative"&&[
+          "proprium.narrative.reading-marks.create","proprium.narrative.reading-marks.create-ui","proprium.narrative.reading-marks.delete",
+        ].includes(invoke.request.action_id)){
+          const editor=options.editorState();
+          if(editor.dirty||editor.composing)throw Object.assign(new Error("Save locally and finish composition before changing reading marks"),{code:"dirty_draft"});
+        }
         if (invoke.request.plugin_id === "proprium.semantic") {
           const request=invoke.request, epoch=invoke.activation_epoch;
           if(request.action_id==="proprium.semantic.task.status")return Promise.resolve({request_id:request.request_id,scope:request.scope,snapshot:request.snapshot,ok:true as const,
