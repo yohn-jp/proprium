@@ -37,6 +37,11 @@ test("signed Narrative installs and navigates a large work in the real Host", as
   await page.getByRole("button", { name: "ダウンロードして無効状態でインストール" }).click();
   await expect(manager.getByRole("status")).toContainText("署名とダイジェストを検証し、無効状態でインストールしました");
   const plugin = page.getByRole("listitem").filter({ hasText: "proprium.narrative" }).filter({ hasText: "v0.1.0" });
+  for (const capability of ["workspace.change.propose", "workspace.change.timestamp", "workspace.file.read", "workspace.identity.read"]) {
+    const grant = plugin.getByRole("checkbox", { name: capability, exact: true });
+    await expect(grant).not.toBeChecked();
+    await grant.check();
+  }
   await plugin.getByRole("button", { name: "Enable" }).click();
   await expect(manager.getByRole("status")).toContainText("proprium.narrative@0.1.0 is enabled");
   const desktop = page.getByRole("button", { name: "パネル：Work outline", exact: true });
