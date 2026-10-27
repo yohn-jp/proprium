@@ -990,7 +990,7 @@ export function HostApp(): ReactElement {
     authoringRegistrations.filter(row=>row.pluginId==="proprium.research").map(row=>[row.manifestDigest,row.status])]);
   const researchScopeRef=useRef(researchScopeKey);researchScopeRef.current=researchScopeKey;
   const selectedScene=selectedNarrativeScene.current;
-  const sceneContext=selectedScene&&selectedScene.path===currentFile?.path&&selectedScene.generation===workspaceGeneration ? {
+  const sceneContext:Record<string,string>=selectedScene&&selectedScene.path===currentFile?.path&&selectedScene.generation===workspaceGeneration ? {
     scene_id:selectedScene.id,manuscript_path:selectedScene.path,metadata_revision:selectedScene.metadataRevision,manuscript_revision:selectedScene.manuscriptRevision,
   } : {};
   // Nonsecret identifiers only; never copy the editor or Draft into a plugin form.
