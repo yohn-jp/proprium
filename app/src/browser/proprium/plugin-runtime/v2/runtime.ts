@@ -110,7 +110,14 @@ function normalizedError(error: unknown): V2PluginRuntimeError {
   }
   return new V2PluginRuntimeError("unavailable", error instanceof Error ? error.message.slice(0, 512) : "Host request failed");
 }
-function thrownResponse(error: unknown): Extract<V2HostResponse, { ok: false }>["error"] {
+export function thrownResponse(error: unknown): Extract<V2HostResponse, { ok: false }>["error"] {
+  // Capability failures are typed domain results, not Worker lifecycle failures.
+  // Preserve bounded machine codes so guests can handle optional missing files.
+  const domain = error && typeof error === "object" ? error as { code?: unknown; message?: unknown; retryable?: unknown } : undefined;
+  if (typeof domain?.code === "string" && /^[a-z][a-z0-9_]{0,127}$/u.test(domain.code)) {
+    return { code: domain.code, message: typeof domain.message === "string" ? domain.message.slice(0, 4096) : domain.code,
+      retryable: typeof domain.retryable === "boolean" ? domain.retryable : ["timeout", "unavailable", "snapshot_stale"].includes(domain.code) };
+  }
   const value = normalizedError(error);
   return { code: value.code, message: value.message, retryable: ["timeout", "unavailable", "snapshot_stale"].includes(value.code) };
 }

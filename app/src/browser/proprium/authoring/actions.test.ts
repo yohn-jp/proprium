@@ -163,6 +163,26 @@ test("the declared preference read grant reaches only the Host-bound plugin/user
   assert.equal(result.ok, true);
 });
 
+test("empty-file reads and negotiated Semantic asset ranges reach their Host ports", async () => {
+  const asset = "workspace.asset.read";
+  const h = createHarness({
+    authority: { issue: async p => context(p, { grants: [cap, asset], host_capabilities: [cap, asset] }),
+      issueChild: async () => { throw new Error("unused"); }, assertCurrent: async () => {}, isSnapshotCurrent: () => true },
+    runtime: { invoke: async options => {
+      await options.resolve_host_call({ call_id: "empty:1", operation: "workspace.file.read", payload: { snapshot, path: "empty.md", offset: 0, length: 0 } });
+      await options.resolve_host_call({ call_id: "model:2", operation: asset, payload: { group_id: "model", file_path: "model/data.bin", offset: 0, length: 131072 } });
+      return { request_id: options.request.request_id, scope: options.request.scope, snapshot: options.request.snapshot, ok: true, value: { hits: 0 }, warnings: [] };
+    } },
+    capabilities: {
+      fileRead: async payload => { assert.equal(payload.length, 0); return { bytes: [], total_bytes: 0 }; },
+      assetRead: async payload => { assert.equal(payload.length, 131072); return { bytes: [] }; },
+    },
+  });
+  h.entries.set(plugin_id, installed({ descriptors: [descriptor({ required_capabilities: [cap, asset] })], grants: [cap, asset], host_capabilities: [cap, asset] }));
+  const result = await h.dispatcher.invoke({ plugin_id, action_id, input: { query: "x" } }, principal());
+  assert.equal(result.ok, true);
+});
+
 test("metadata paging returns signed action descriptors without invoking a plugin Worker", async () => {
   const { dispatcher, executed } = createHarness({
     installed: async () => installed({ descriptors: [

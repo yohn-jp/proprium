@@ -523,14 +523,14 @@ export class AuthoringActionDispatcher {
       }
     }
     if (operation === "workspace.file.list") { if (!isRecord(payload.snapshot)) throw new ActionDispatchError("invalid_input", "Host snapshot required"); str("prefix"); str("cursor", 512); num("limit", 1, 256); }
-    if (operation === "workspace.file.read") { if (!isRecord(payload.snapshot) || typeof payload.path !== "string" || !this.safePath(payload.path)) throw new ActionDispatchError("invalid_path", "File read path or snapshot invalid"); num("offset", 0, Number.MAX_SAFE_INTEGER); num("length", 1, 256 * 1024); }
+    if (operation === "workspace.file.read") { if (!isRecord(payload.snapshot) || typeof payload.path !== "string" || !this.safePath(payload.path)) throw new ActionDispatchError("invalid_path", "File read path or snapshot invalid"); num("offset", 0, Number.MAX_SAFE_INTEGER); num("length", 0, 256 * 1024); }
     if (operation === "workspace.change.propose" && !isRecord(payload.changeset)) throw new ActionDispatchError("invalid_input", "ChangeSet required");
     if (operation === "workspace.change.stage") { if (!isRecord(payload.base_snapshot)) throw new ActionDispatchError("invalid_input", "Original Host snapshot required"); str("previous_stage", 256); if (!Array.isArray(payload.units)) throw new ActionDispatchError("invalid_input", "Stage units required"); }
     if (operation === "workspace.change.timestamp" && Object.keys(payload).length !== 0) throw new ActionDispatchError("invalid_input", "Timestamp request is empty");
     if (operation === "workspace.asset.read") {
       str("group_id", 128);
       if (typeof payload.file_path !== "string" || !this.safePath(payload.file_path)) throw new ActionDispatchError("invalid_path", "Asset path is invalid");
-      num("offset", 0, Number.MAX_SAFE_INTEGER); num("length", 1, 65_536);
+      num("offset", 0, Number.MAX_SAFE_INTEGER); num("length", 1, 256 * 1024);
     }
     if (operation.startsWith("workspace.derived.cache.") && !isRecord(payload.key)) throw new ActionDispatchError("invalid_input", "Cache key required");
     if (operation === "artifact.create") { str("media_type", 256); str("filename", 256); }
