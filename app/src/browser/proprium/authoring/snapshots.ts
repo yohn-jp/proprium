@@ -47,6 +47,9 @@ export interface SnapshotRange {
  * In particular, a live worktree read is not a valid implementation of this port.
  */
 export interface SnapshotPort {
+  /** Only trusted adapters that validate before AND after every list/stat/read
+   * in the backing transaction may avoid duplicating those same I/O checks. */
+  readonly validates_current_on_io?: true;
   pin(scope: AuthoringScope, options: { readonly include_draft: boolean }): Promise<SnapshotLease>;
   assert_current(lease: SnapshotLease): Promise<void>;
   list(lease: SnapshotLease, query: {
@@ -140,9 +143,9 @@ export class AuthoringSnapshotReader {
       last_path = saved.last_path;
     }
 
-    await this.assertCurrent(lease);
+    if (!this.port.validates_current_on_io) await this.assertCurrent(lease);
     const page = await this.port.list(lease, { prefix, cursor: source_cursor, limit });
-    await this.assertCurrent(lease);
+    if (!this.port.validates_current_on_io) await this.assertCurrent(lease);
     if (!page || !Array.isArray(page.items) || page.items.length > limit ||
         !(page.next_cursor === null || (typeof page.next_cursor === "string" && page.next_cursor.length > 0 && page.next_cursor.length <= 2048))) {
       throw new AuthoringSnapshotError("storage_unknown", "Host returned an invalid or oversized file page.");
@@ -184,12 +187,12 @@ export class AuthoringSnapshotReader {
     if (!Number.isSafeInteger(offset) || offset < 0) throw invalid("offset must be a non-negative safe integer");
     if (!Number.isSafeInteger(length) || length < 0 || length > MAX_READ_CHUNK) throw invalid(`length must be between 0 and ${MAX_READ_CHUNK}`);
 
-    await this.assertCurrent(lease);
+    if (!this.port.validates_current_on_io) await this.assertCurrent(lease);
     const file = validateFile(await this.port.stat(lease, path), "", path);
     if (offset > file.byte_length) throw invalid("offset is beyond end of file");
     const read_length = Math.min(length, file.byte_length - offset);
     const bytes = await this.readAndVerify(lease, file, offset, read_length);
-    await this.assertCurrent(lease);
+    if (!this.port.validates_current_on_io) await this.assertCurrent(lease);
     const next = offset + bytes.byteLength;
     return Object.freeze({
       bytes,

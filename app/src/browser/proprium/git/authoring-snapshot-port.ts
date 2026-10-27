@@ -14,6 +14,9 @@ interface SnapshotState {
 
 /** Connects the authoring reader to the Host's selected Browser Git workspace. */
 export class BrowserGitSnapshotPort implements SnapshotPort {
+  // git.worker validates exact workspace generation before/after each of these
+  // operations and verifies bytes/revisions inside its workspace read lock.
+  readonly validates_current_on_io = true as const;
   private readonly owner = Object.freeze({});
   private readonly handles = new WeakMap<object, string>();
   private readonly states = new Map<string, SnapshotState>();
