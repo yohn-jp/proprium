@@ -568,7 +568,9 @@ function* executeAction(host: NarrativeHost, request: ActionRequest): Generator<
         } } });
       }
       const nextOffset = offset + Math.min(limit, rows.length - offset);
-      return { parent_id: parentId, items, selected: selectedRow ? treeItem(selectedRow) : null, next_cursor: nextOffset < rows.length ? treeCursor(request.snapshot, parentId, work.treeRevision, nextOffset) : null,
+      return { parent_id: parentId, items, selected: selectedRow ? treeItem(selectedRow) : null,
+        can_create_chapter: selectedRow?.kind === "volume", can_create_scene: selectedRow?.kind === "chapter",
+        selected_children_ids: selectedRow && selectedRow.kind !== "scene" ? treeRows(work, selectedRow.id).map(row => row.id) : [], next_cursor: nextOffset < rows.length ? treeCursor(request.snapshot, parentId, work.treeRevision, nextOffset) : null,
         previous_cursor: offset > 0 ? treeCursor(request.snapshot, parentId, work.treeRevision, Math.max(0, offset - limit)) : null,
         tree_revision: work.treeRevision, diagnostics: diagnosticValues(work) };
     }

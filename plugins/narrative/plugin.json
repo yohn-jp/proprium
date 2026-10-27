@@ -531,6 +531,20 @@
                 "type": "null"
               }
             ]
+          },
+          "can_create_chapter": {
+            "type": "boolean"
+          },
+          "can_create_scene": {
+            "type": "boolean"
+          },
+          "selected_children_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "maxItems": 262144
           }
         },
         "required": [
@@ -540,7 +554,10 @@
           "tree_revision",
           "diagnostics",
           "previous_cursor",
-          "selected"
+          "selected",
+          "can_create_chapter",
+          "can_create_scene",
+          "selected_children_ids"
         ],
         "additionalProperties": false
       },
@@ -5015,6 +5032,167 @@
                 "data_key": "last_action_result.selected.manuscript_path"
               },
               "unavailable_message": "先に有効な原稿リンクを持つシーンを編集対象に選んでください。"
+            }
+          },
+          {
+            "id": "narrative-add-chapter-tab",
+            "title": "章を追加",
+            "body": {
+              "id": "narrative-add-chapter",
+              "type": "form",
+              "title": "章を追加",
+              "description": "構成から親となる巻を編集対象に選んでください。",
+              "fields": [
+                {
+                  "id": "title",
+                  "label": "タイトル",
+                  "type": "string",
+                  "required": true,
+                  "min_length": 1,
+                  "max_length": 500
+                }
+              ],
+              "submit": {
+                "action_id": "proprium.narrative.structure.create",
+                "input_template": {
+                  "kind": "chapter",
+                  "title": {
+                    "data_key": "form.title"
+                  },
+                  "expected_tree_revision": {
+                    "data_key": "last_action_result.tree_revision"
+                  },
+                  "volume_id": {
+                    "data_key": "last_action_result.selected.id"
+                  }
+                }
+              },
+              "submit_when": {
+                "data_key": "last_action_result.can_create_chapter"
+              },
+              "unavailable_message": "先に親を構成から選んでください。"
+            }
+          },
+          {
+            "id": "narrative-add-scene-tab",
+            "title": "シーンを追加",
+            "body": {
+              "id": "narrative-add-scene",
+              "type": "form",
+              "title": "シーンを追加",
+              "description": "構成から親となる章を編集対象に選んでください。",
+              "fields": [
+                {
+                  "id": "title",
+                  "label": "タイトル",
+                  "type": "string",
+                  "required": true,
+                  "min_length": 1,
+                  "max_length": 500
+                }
+              ],
+              "submit": {
+                "action_id": "proprium.narrative.structure.create",
+                "input_template": {
+                  "kind": "scene",
+                  "title": {
+                    "data_key": "form.title"
+                  },
+                  "expected_tree_revision": {
+                    "data_key": "last_action_result.tree_revision"
+                  },
+                  "volume_id": {
+                    "data_key": "last_action_result.selected.parent_id"
+                  },
+                  "chapter_id": {
+                    "data_key": "last_action_result.selected.id"
+                  }
+                }
+              },
+              "submit_when": {
+                "data_key": "last_action_result.can_create_scene"
+              },
+              "unavailable_message": "先に親を構成から選んでください。"
+            }
+          },
+          {
+            "id": "narrative-order-chapter-tab",
+            "title": "章を並べ替え",
+            "body": {
+              "id": "narrative-order-chapter",
+              "type": "form",
+              "title": "章を並べ替え",
+              "description": "構成から親を選び、一覧の ID を移動して順序を変更します。全 ID を残してください。",
+              "fields": [
+                {
+                  "id": "ordered_ids",
+                  "label": "順序（1 行に 1 件）",
+                  "type": "ordered-list",
+                  "required": true,
+                  "initial_value": {
+                    "data_key": "last_action_result.selected_children_ids"
+                  }
+                }
+              ],
+              "submit": {
+                "action_id": "proprium.narrative.structure.reorder",
+                "input_template": {
+                  "kind": "chapter",
+                  "parent_id": {
+                    "data_key": "last_action_result.selected.id"
+                  },
+                  "ordered_ids": {
+                    "data_key": "form.ordered_ids"
+                  },
+                  "expected_tree_revision": {
+                    "data_key": "last_action_result.tree_revision"
+                  }
+                }
+              },
+              "submit_when": {
+                "data_key": "last_action_result.can_create_chapter"
+              },
+              "unavailable_message": "先に親を構成から選んでください。"
+            }
+          },
+          {
+            "id": "narrative-order-scene-tab",
+            "title": "シーンを並べ替え",
+            "body": {
+              "id": "narrative-order-scene",
+              "type": "form",
+              "title": "シーンを並べ替え",
+              "description": "構成から親を選び、一覧の ID を移動して順序を変更します。全 ID を残してください。",
+              "fields": [
+                {
+                  "id": "ordered_ids",
+                  "label": "順序（1 行に 1 件）",
+                  "type": "ordered-list",
+                  "required": true,
+                  "initial_value": {
+                    "data_key": "last_action_result.selected_children_ids"
+                  }
+                }
+              ],
+              "submit": {
+                "action_id": "proprium.narrative.structure.reorder",
+                "input_template": {
+                  "kind": "scene",
+                  "parent_id": {
+                    "data_key": "last_action_result.selected.id"
+                  },
+                  "ordered_ids": {
+                    "data_key": "form.ordered_ids"
+                  },
+                  "expected_tree_revision": {
+                    "data_key": "last_action_result.tree_revision"
+                  }
+                }
+              },
+              "submit_when": {
+                "data_key": "last_action_result.can_create_scene"
+              },
+              "unavailable_message": "先に親を構成から選んでください。"
             }
           }
         ]

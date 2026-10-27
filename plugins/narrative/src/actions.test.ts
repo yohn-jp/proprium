@@ -398,6 +398,21 @@ test("proposal output projects the durable Host preview to the declared compact 
   assert.deepEqual(result.preview.units[0].operation_paths, host.changeset!.units[0]!.operations.map(item => item.path));
 });
 
+test("selected outline rows expose the correct parent for structure creation", () => {
+  const host = new MemoryHost(); addWork(host, 1);
+  const id = "proprium.narrative.hierarchy.outline";
+  const chapters = run(host, request(id, { parent_id: "work-volume", selected_id: "work-chapter" })) as any;
+  assert.equal(chapters.can_create_scene, true);
+  assert.equal(chapters.can_create_chapter, false);
+  assert.equal(chapters.selected.parent_id, "work-volume");
+  assert.deepEqual(chapters.selected_children_ids, ["scene-1"]);
+  const volume = run(host, request(id, { selected_id: "work-volume" })) as any;
+  assert.equal(volume.can_create_chapter, true);
+  assert.equal(volume.can_create_scene, false);
+  assert.deepEqual(volume.selected_children_ids, ["work-chapter"]);
+  assertDeclaredOutput(id, chapters);
+});
+
 test("scene creation proposes body, metadata and reordered siblings in one unit", () => {
   const host = new MemoryHost();
   addWork(host, 2);
