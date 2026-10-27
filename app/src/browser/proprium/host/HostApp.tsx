@@ -681,6 +681,20 @@ export function HostApp(): ReactElement {
     const updatedFile: OpenFile = { ...latestFile, data, revision: read.revision, text, binary: data !== null && text === null, dirty: false };
     currentFileRef.current = updatedFile;
     setCurrentFile(updatedFile);
+    // Approved metadata edits can change the current scene revision without
+    // changing its manuscript. Refresh that binding before another proposal
+    // or resume capture; keep the active editor and its history mounted.
+    const selected=selectedNarrativeScene.current;
+    if(authoring&&selected?.path===updatedFile.path&&selected.generation===workspaceGenerationRef.current){
+      const result=await authoring.invokeRead("proprium.narrative","proprium.narrative.scene.context",{scene_id:selected.id}).catch(()=>null);
+      if(selectedNarrativeScene.current!==selected||currentFileRef.current!==updatedFile||gitRef.current!==targetGit||selected.generation!==workspaceGenerationRef.current)return;
+      const value=result?.ok?result.value as {scene_id?:string;manuscript_path?:string;metadata_revision?:string;manuscript_revision?:string}:null;
+      if(value?.scene_id===selected.id&&value.manuscript_path===updatedFile.path&&value.metadata_revision&&value.manuscript_revision){
+        selected.metadataRevision=value.metadata_revision;selected.manuscriptRevision=value.manuscript_revision;selected.savedBytes=updatedFile.data;
+        await persistWritingPosition();
+      }else selectedNarrativeScene.current=null;
+      refreshAuthoring();
+    }
   }
 
   async function loadFile(path: string): Promise<void> {
