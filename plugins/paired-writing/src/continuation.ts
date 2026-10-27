@@ -178,7 +178,10 @@ export function* previewContinuation(input:unknown,host:GuestHost,request:Action
    for(const hit of page.hits){if(hit.kind!=="document"||!hit.matchRanges?.length)continue;const span=hit.matchRanges[0]!;const file=yield* readText(host,request,hit.path);
     if(file.revision!==hit.fileRevision||!Number.isSafeInteger(span.start)||!Number.isSafeInteger(span.end)||span.start<0||span.end<=span.start||span.end>file.text.length||span.end-span.start>1024)throw new PairedError("snapshot_stale","Research evidence changed");
     retrievalHits.push({entityId:hit.path,text:file.text.slice(span.start,span.end)});sources.push({path:file.path,revision:file.revision});}
-  }catch(error){if(error instanceof PairedError&&["dependency_unavailable","plugin_unavailable"].includes(error.code))diagnostics.push("research_unavailable");else throw error;}
+  }catch(error){
+   const code=error && typeof error==="object" && "code" in error ? error.code : undefined;
+   if(typeof code==="string" && ["dependency_unavailable","plugin_unavailable"].includes(code))diagnostics.push("research_unavailable");else throw error;
+  }
  }
  const prepared=buildContinuationContext({recentSentences:recent,k,tokenBudget:budget,...(chapterSummary ? {chapterSummary} : {}),retrievalHits});const prompt=renderContinuationPrompt(prepared.text);
  if(new TextEncoder().encode(JSON.stringify({prompt,manifest:prepared.manifest,sources,diagnostics})).byteLength>768*1024)throw new PairedError("capacity","Continuation preview exceeds its output limit");

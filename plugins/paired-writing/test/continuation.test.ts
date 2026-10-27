@@ -27,3 +27,15 @@ test("continuation preview uses bounded Research evidence and the exact source p
  step=iter.next({ok:true,scope,snapshot,value:{hits:[],indexSnapshot:"s",nextCursor:null}});
  assert.equal(step.done,true);const result=step.value as any;assert.equal(result.provider_invoked,false);assert.match(result.prompt,/駅に着いた。/u);assert.equal(result.manifest.tokenCountMode,"approximate");
 });
+test("continuation tolerates WIT dependency absence without swallowing other errors",()=>{
+ const request={scope:{workspace_id:"w",repository_id:1,branch:"main",generation:"g"},snapshot:{id:"s",local_commit:null,worktree_generation:"v",draft_generation:null}} as any;
+ const host={request(operation:string,payload:any){return(function*(){return yield {operation,payload};})();}} as any;
+ for(const code of ["dependency_unavailable","plugin_unavailable"]){
+  const iter=previewContinuation({recentSentences:["駅。"]},host,request);iter.next();
+  const done=iter.throw({code,message:"missing"});assert.equal(done.done,true);assert.deepEqual((done.value as any).diagnostics,["research_unavailable"]);
+ }
+ for(const code of ["snapshot_stale","capability_denied"]){
+  const iter=previewContinuation({recentSentences:["駅。"]},host,request);iter.next();const error={code,message:"rejected"};
+  assert.throws(()=>iter.throw(error),value=>value===error);
+ }
+});
