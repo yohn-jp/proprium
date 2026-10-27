@@ -860,6 +860,23 @@ function* speakerOverride(input: Record<string, unknown>, context: ActionRequest
       line_count: validated.length, speaker: selectedSpeaker }, provenance: pipelineProvenance(loaded, pipeline) };
 }
 
+/** Build the direct correction from the author's selected exact line and current prediction. */
+function* directOverride(input: Record<string, unknown>, context: ActionRequest, host: Parameters<Handler>[2]): Generator<HostCall, unknown, unknown> {
+  exactKeys(input, ["scene_id", "sentence_index", "dialogue_text", "speaker_entity_id"], "speaker.override.direct input");
+  const sceneId = requiredString(input.scene_id, "scene_id");
+  const text = requiredString(input.dialogue_text, "dialogue_text", 500_000);
+  const key = proposalKey(context.idempotency_key);
+  const loaded = yield* loadScene(host, context, sceneId);
+  if (!canonicalScenePath(loaded.scene.filePath)) throw Object.assign(new Error("Narrative returned a non-canonical scene metadata path"), { code: "invalid_scene_path" });
+  const pipeline = yield* speakerPipeline(host, context, loaded);
+  const row = lineByInput(pipeline.result.attributions, { sentence_index: input.sentence_index, dialogue_text: text, text_hash: hashDialogueText(text) });
+  const target = input.speaker_entity_id === "" || input.speaker_entity_id === undefined ? null : input.speaker_entity_id;
+  if (target !== null && typeof target !== "string") throw Object.assign(new Error("speaker_entity_id must be a character ID or null"), { code: "invalid_input" });
+  return yield* speakerOverride({ mode: "propose", scene_id: sceneId, items: [{ sentence_index: row.sentenceIndex,
+    dialogue_text: row.text, text_hash: hashDialogueText(row.text), predicted_speaker_entity_id: row.speakerEntityId,
+    predicted_reason: row.reason, speaker_group_id: row.speakerGroupId, speaker_entity_id: target, label: "direct" }], idempotency_key: key }, context, host);
+}
+
 function* countUpdate(input: Record<string, unknown>, context: ActionRequest, host: Parameters<Handler>[2]): Generator<HostCall, unknown, unknown> {
   exactKeys(input, ["scene_id", "speaker_count", "idempotency_key"], "speaker.count.update input");
   const sceneId = requiredString(input.scene_id, "scene_id");
@@ -1257,6 +1274,7 @@ const handlers: Record<string, Handler> = {
   "speaker.attribute": attribute,
   "speaker.review.queue": reviewQueue,
   "speaker.override": speakerOverride,
+  "speaker.override.direct": directOverride,
   "speaker.count.update": countUpdate,
   "speaker.dialogue.list": dialogueList,
   "speaker.voice.profiles": voiceProfiles,

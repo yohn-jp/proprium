@@ -205,7 +205,7 @@ async function invoke(actionId: string, input: Record<string, unknown>, options:
 }
 
 test("all Speaker action descriptors pass the adopted bounded-schema validator", () => {
-  assert.equal(speakerManifest.actions.length, 12);
+  assert.equal(speakerManifest.actions.length, 13);
   for (const descriptor of speakerManifest.actions) hostSchema.assertDescriptor(descriptor as never);
 });
 
@@ -328,4 +328,21 @@ test("Speaker manifest passes the release registry declaration validator", async
   const { assertAuthoringDeclarations } = await import(validatorPath);
   const manifest = JSON.parse(readFileSync(new URL("../plugin.json", import.meta.url), "utf8"));
   await assertAuthoringDeclarations(manifest.id, manifest.capabilities, manifest.actions, manifest.ui ?? []);
+});
+
+test("direct correction derives prediction and refuses stale selected text", async () => {
+  const { value: analysis, state } = await invoke("speaker.attribute", { scene_id: sceneId });
+  const line = (analysis.attributions as Array<Record<string, unknown>>)[0]!;
+  const key = "direct-correction-1";
+  const input = { scene_id: sceneId, sentence_index: line.sentence_index, dialogue_text: line.text, speaker_entity_id: "char-hanako" };
+  await assert.rejects(() => invoke("speaker.override.direct", { ...input, dialogue_text: "改変された台詞" }, { setup: state, idempotencyKey: key }), { code: "snapshot_stale" });
+  assert.equal(state.proposals.length, 0);
+  const { value } = await invoke("speaker.override.direct", input, { setup: state, idempotencyKey: key });
+  assert.equal(value.proposal_id, "proposal-1");
+  assert.equal(state.proposals.length, 1);
+  const change = state.proposals[0]!;
+  assert.deepEqual(change.read_set.find((entry) => entry.path === manuscriptPath), { path: manuscriptPath, revision: revision("manuscript") });
+  assert.equal((value.affected_lines as Array<Record<string, unknown>>)[0]!.dialogue_text, line.text);
+  const { value: unknown } = await invoke("speaker.override.direct", { scene_id: sceneId, sentence_index: line.sentence_index, dialogue_text: line.text }, { setup: state, idempotencyKey: "direct-unknown-1" });
+  assert.equal((unknown.affected_lines as Array<Record<string, unknown>>)[0]!.speaker_entity_id, null);
 });

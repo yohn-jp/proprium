@@ -8089,6 +8089,585 @@
         "plugin"
       ],
       "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.speaker",
+      "action_id": "speaker.override.direct",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "scene_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "sentence_index": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500000
+          },
+          "dialogue_text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500000
+          },
+          "speaker_entity_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "scene_id",
+          "sentence_index",
+          "dialogue_text"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "proposal_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "status": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "affected_lines": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sentence_index": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 500000
+                },
+                "dialogue_text": {
+                  "type": "string",
+                  "minLength": 0,
+                  "maxLength": 500000
+                },
+                "text_hash": {
+                  "type": "string",
+                  "minLength": 8,
+                  "maxLength": 8,
+                  "pattern": "^[a-f0-9]{8}$"
+                },
+                "speaker_entity_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 128,
+                  "enum": [
+                    "direct",
+                    "propagated"
+                  ]
+                }
+              },
+              "required": [
+                "sentence_index",
+                "dialogue_text",
+                "text_hash",
+                "speaker_entity_id",
+                "label"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 0,
+            "maxItems": 200
+          },
+          "expected_revisions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "revision": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "path",
+                "revision"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 0,
+            "maxItems": 10000
+          },
+          "preview": {
+            "type": "object",
+            "properties": {
+              "scene_path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "correction_history_path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "line_count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 200
+              },
+              "speaker": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "scene_path",
+              "correction_history_path",
+              "line_count",
+              "speaker"
+            ],
+            "additionalProperties": false
+          },
+          "provenance": {
+            "type": "object",
+            "properties": {
+              "snapshot": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "local_commit": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 0,
+                        "maxLength": 512
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "worktree_generation": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "draft_generation": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 0,
+                        "maxLength": 256
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "remote_commit": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 0,
+                        "maxLength": 512
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "local_commit",
+                  "worktree_generation",
+                  "draft_generation"
+                ],
+                "additionalProperties": false
+              },
+              "speaker_engine": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "speaker_engine_version": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "speaker_plugin_version": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "adopted_model_revision": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 1024
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "rule_gates": {
+                "type": "object",
+                "patternProperties": {
+                  "^[A-Za-z][A-Za-z0-9._-]{0,79}$": {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "maxLength": 128,
+                        "enum": [
+                          "demote",
+                          "disable"
+                        ]
+                      },
+                      "measured_precision": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "sample_size": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 500000
+                      }
+                    },
+                    "required": [
+                      "action",
+                      "measured_precision",
+                      "sample_size"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false,
+                "maxProperties": 128
+              },
+              "tokenizer": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "digest": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "version",
+                      "digest"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "digest": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version",
+                        "digest"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 0,
+                    "maxItems": 500
+                  }
+                ]
+              },
+              "source_revisions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    },
+                    "revision": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "revision"
+                  ],
+                  "additionalProperties": false
+                },
+                "minItems": 0,
+                "maxItems": 262144
+              },
+              "source_files": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    },
+                    "revision": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "revision"
+                  ],
+                  "additionalProperties": false
+                },
+                "minItems": 0,
+                "maxItems": 262144
+              },
+              "draft_generation": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 256
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "minItems": 0,
+                "maxItems": 64
+              },
+              "stylometric_profiles": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "entity_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "sample_count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 500
+                    }
+                  },
+                  "required": [
+                    "entity_id",
+                    "sample_count"
+                  ],
+                  "additionalProperties": false
+                },
+                "minItems": 0,
+                "maxItems": 500
+              },
+              "engine": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "additionalProperties": false
+              },
+              "scenes_scanned": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 500
+              },
+              "tokenizers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "version": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "digest": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "version",
+                    "digest"
+                  ],
+                  "additionalProperties": false
+                },
+                "minItems": 0,
+                "maxItems": 500
+              },
+              "model_revisions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "minItems": 0,
+                "maxItems": 500
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "unresolved_rows": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "utterance_count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 500
+              },
+              "stylometry_available": {
+                "type": "boolean"
+              },
+              "warning": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "proposal_id",
+          "affected_lines",
+          "expected_revisions",
+          "preview",
+          "provenance"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.plugin.invoke",
+        "workspace.change.propose",
+        "workspace.change.timestamp",
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
     }
   ],
   "ui": [
@@ -8327,6 +8906,7 @@
             "id": "scene_id",
             "label": "Scene ID",
             "type": "string",
+            "required": true,
             "min_length": 1,
             "max_length": 256
           },
@@ -8338,89 +8918,35 @@
           },
           {
             "id": "dialogue_text",
-            "label": "Dialogue text",
+            "label": "Exact dialogue text",
             "type": "string",
+            "required": true,
             "min_length": 1,
             "max_length": 100000
-          },
-          {
-            "id": "text_hash",
-            "label": "Dialogue hash",
-            "type": "string",
-            "min_length": 8,
-            "max_length": 8
-          },
-          {
-            "id": "predicted_speaker_entity_id",
-            "label": "Predicted character ID",
-            "type": "string",
-            "min_length": 1,
-            "max_length": 256
-          },
-          {
-            "id": "predicted_reason",
-            "label": "Prediction reason",
-            "type": "string",
-            "min_length": 1,
-            "max_length": 80
-          },
-          {
-            "id": "speaker_group_id",
-            "label": "Speaker group ID",
-            "type": "string",
-            "min_length": 1,
-            "max_length": 256
           },
           {
             "id": "speaker_entity_id",
             "label": "Knowledge character ID (blank for unknown)",
             "type": "string",
+            "required": false,
             "min_length": 0,
             "max_length": 256
-          },
-          {
-            "id": "idempotency_key",
-            "label": "Review key",
-            "type": "string",
-            "min_length": 1,
-            "max_length": 128
           }
         ],
         "submit": {
-          "action_id": "speaker.override",
+          "action_id": "speaker.override.direct",
           "input_template": {
-            "mode": "propose",
             "scene_id": {
               "data_key": "form.scene_id"
             },
-            "items": [
-              {
-                "sentence_index": {
-                  "data_key": "form.sentence_index"
-                },
-                "dialogue_text": {
-                  "data_key": "form.dialogue_text"
-                },
-                "text_hash": {
-                  "data_key": "form.text_hash"
-                },
-                "predicted_speaker_entity_id": {
-                  "data_key": "form.predicted_speaker_entity_id"
-                },
-                "predicted_reason": {
-                  "data_key": "form.predicted_reason"
-                },
-                "speaker_group_id": {
-                  "data_key": "form.speaker_group_id"
-                },
-                "speaker_entity_id": {
-                  "data_key": "form.speaker_entity_id"
-                },
-                "label": "direct"
-              }
-            ],
-            "idempotency_key": {
-              "data_key": "form.idempotency_key"
+            "sentence_index": {
+              "data_key": "form.sentence_index"
+            },
+            "dialogue_text": {
+              "data_key": "form.dialogue_text"
+            },
+            "speaker_entity_id": {
+              "data_key": "form.speaker_entity_id"
             }
           }
         }
