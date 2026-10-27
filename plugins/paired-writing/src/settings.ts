@@ -108,7 +108,7 @@ export function* proposeWorkspaceSettings(input: unknown, host: GuestHost, reque
   let next: ReturnType<typeof builtinAssistantSettings>;
   try { next = applyAssistantSettingsPatch(current, patch); }
   catch (error) { throw new PairedError("invalid_input", error instanceof Error ? error.message : "Invalid settings patch"); }
-  const updates = Object.fromEntries(Object.keys(patch).map(key => [key, next[key as keyof typeof next]]));
+  const updates: Record<string, unknown> = Object.fromEntries(Object.keys(patch).map(key => [key, next[key as keyof typeof next]]));
   if (Array.isArray(updates.presets) && Array.isArray(raw.presets)) {
     updates.presets = updates.presets.map((preset: Record<string, unknown>) => {
       const prior = (raw.presets as Array<Record<string, unknown>>).find(item => item && item.id === preset.id);
