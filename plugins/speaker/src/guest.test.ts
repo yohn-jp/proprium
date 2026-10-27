@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { parse } from "yaml";
@@ -47,7 +48,7 @@ function assertInput(actionId: string, value: unknown): void {
 }
 
 function bytes(value: string): Uint8Array { return new TextEncoder().encode(value); }
-function revision(name: string): string { return `revision:${name}`; }
+function revision(name: string): string { return createHash("sha256").update(name).digest("hex"); }
 
 function fixture(options: { training?: boolean } = {}) {
   files.clear();

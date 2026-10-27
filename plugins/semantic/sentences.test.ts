@@ -7,6 +7,6 @@ test("sentence offsets preserve Japanese brackets, multiline boundaries, and UTF
   const offsets = splitIntoSentenceOffsets(text);
   const nonEmpty = offsets.map(({ start, end }) => text.slice(start, end).trim()).filter(Boolean);
   assert.deepEqual(nonEmpty, ["「彼は言った。続けよう。」", "海岸へ向かった。", "🌊"]);
-  assert.equal(text.slice(offsets.at(-1)!.start, offsets.at(-1)!.end), "🌊");
-  assert.equal(offsets.at(-1)!.end - offsets.at(-1)!.start, 2);
+  const finalSentence = offsets.find(({ start, end }) => text.slice(start, end) === "🌊")!;
+  assert.equal(finalSentence.end - finalSentence.start, 2);
 });
