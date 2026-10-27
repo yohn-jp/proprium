@@ -121,3 +121,24 @@ test('a second active task is rejected and disposing a generator clears its task
  first.return(undefined);
  assert.deepEqual(semanticTasks(), []);
 });
+test('contradiction pages default to 50 and reject cursors from another snapshot', async () => {
+ const { contradictionPage } = await import('./index-operations.ts');
+ stored = undefined;
+ files['bible/characters/a.yaml'] = 'id: character-a\ntype: character\nname: 星乃\n';
+ const previous = files['manuscript/custom.md'];
+ files['manuscript/custom.md'] = Array.from({length: 16}, (_, i) => `星乃は${i % 2 ? '海' : '駅'}にいた。`).join('');
+ const second = [0.5, Math.sqrt(0.75), ...Array(382).fill(0)];
+ const engine2: any = { ...engine, embed: (texts: string[]) => texts.map((text) => text.includes('海') ? second : vector) };
+ try {
+   run(rebuildIndex({ taskId: 'page' }, context, host, engine2));
+   const first = run(contradictionPage({}, context, host, engine2));
+   assert.equal(first.candidates.length, 50);
+   assert.equal(first.complete, false);
+   const next = run(contradictionPage({ cursor: first.nextCursor }, context, host, engine2));
+   assert.equal(next.candidates.length, 14);
+   assert.equal(next.complete, true);
+   assert.throws(() => run(contradictionPage({ cursor: 'semantic1.' + 'f'.repeat(64) + '.0' }, context, host, engine2)), (error: any) => error.code === 'snapshot_stale');
+ } finally {
+   delete files['bible/characters/a.yaml']; files['manuscript/custom.md'] = previous!;
+ }
+});

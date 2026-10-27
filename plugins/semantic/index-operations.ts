@@ -92,7 +92,7 @@ export function* contradictionPage(input: { cursor?: string; limit?: number }, r
  let offset = 0;
  if (input.cursor !== undefined) {
    const match = /^semantic1\.([a-f0-9]{64})\.(0|[1-9][0-9]*)$/u.exec(input.cursor);
-   if (!match || match[1] !== digest || !Number.isSafeInteger(Number(match[2]))) throw failure('index_stale', 'Semantic candidate cursor does not match this snapshot');
+   if (!match || match[1] !== digest || !Number.isSafeInteger(Number(match[2]))) throw failure('snapshot_stale', 'Semantic candidate cursor does not match this snapshot');
    offset = Number(match[2]);
  }
  const corpus = yield* collectSemanticCorpus(host, request);
@@ -105,7 +105,7 @@ export function* contradictionPage(input: { cursor?: string; limit?: number }, r
  });
  const entities = corpus.entities.map(row => ({ id: row.id, type: row.type, ...(row.name ? { name: row.name } : {}), aliases: row.aliases }));
  const candidates = embeddingContradictions(collectMentionGroups(entities, passages));
- if (offset > candidates.length) throw failure('index_stale', 'Semantic candidate cursor is outside this generation');
- const limit = input.limit ?? 100; const page = candidates.slice(offset, offset + limit); const next = offset + page.length;
+ if (offset > candidates.length) throw failure('snapshot_stale', 'Semantic candidate cursor is outside this generation');
+ const limit = input.limit ?? 50; const page = candidates.slice(offset, offset + limit); const next = offset + page.length;
  return { snapshot: request.snapshot, model: engine.model(), indexAvailable: true, candidates: page, nextCursor: next < candidates.length ? `semantic1.${digest}.${next}` : null, complete: next >= candidates.length };
 }
