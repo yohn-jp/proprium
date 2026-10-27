@@ -6,6 +6,7 @@ import type { ActionDescriptor, ActionRequest, ActionResult, SurfaceDeclaration 
 import { assertValue } from "../authoring/schema.js";
 import { admitRegistry, admitRegistryManifest, compareVersions, PluginRegistryError, registryArtifactURL, registryManifestEntry, registrySignatureUrl, satisfiesVersion, type PluginDependency, type PluginRegistryEntry, type PluginRegistryTrust, type SignedRegistrySnapshot } from "./registry.js";
 import { IndexedDbPluginStore, pluginKey, type InstalledPluginRecord, type PluginStore } from "./store.js";
+import { RuntimeReservations } from "./runtime-reservations.js";
 
 export { PluginRegistryError } from "./registry.js";
 export type { PluginCapability, PluginTranscript, RuntimeSnapshot };
@@ -226,6 +227,7 @@ export class BrowserPluginManager {
   private readonly store: PluginStore;
   private readonly trusts: Map<string, PluginRegistryTrust>;
   private readonly active = new Map<string, ActivePlugin>();
+  private readonly reservations = new RuntimeReservations();
   private readonly enabled = new Map<string, EnabledPlugin>();
   private operation = Promise.resolve();
   private closed = false;
@@ -506,7 +508,7 @@ export class BrowserPluginManager {
 
   /** Adapter consumed by the shared UI/MCP action dispatcher. */
   authoringRuntime(pluginId: string): ManagedActionRuntime {
-    return Object.freeze({ invoke: async (options: InvokeManagedActionOptions): Promise<ActionResult> => {
+    return Object.freeze({ invoke: (options: InvokeManagedActionOptions): Promise<ActionResult> => this.reservations.run(pluginId, async () => {
       const enabled = this.enabled.get(pluginId);
       if (!enabled || enabled.activationEpoch !== options.activation_epoch || options.request.plugin_id !== pluginId) {
         throw new PluginManagerError("not_active", "Plugin action belongs to a stale or disabled activation");
@@ -514,14 +516,13 @@ export class BrowserPluginManager {
       if (!Number.isSafeInteger(options.deadline_at) || Date.now() >= options.deadline_at) {
         throw new V2PluginRuntimeError("timeout", "Plugin action deadline has expired");
       }
-      const remainingMs = Math.floor(options.deadline_at - Date.now());
-      const deadlineMs = Math.min(options.request.deadline_ms, remainingMs);
-      if (deadlineMs < 1) throw new V2PluginRuntimeError("timeout", "Plugin action deadline has expired");
       const granted = enabled.grants.filter(capability => enabled.hostAllowed.includes(capability)).sort();
       if (canonicalJson(granted) !== canonicalJson([...options.granted_capabilities].sort())) {
         throw new V2PluginRuntimeError("capability_denied", "Action grant set differs from the active Host grant set");
       }
       const active = await this.ensureActive(pluginId);
+      const deadlineMs = Math.min(options.request.deadline_ms, Math.floor(options.deadline_at - Date.now()));
+      if (deadlineMs < 1) throw new V2PluginRuntimeError("timeout", "Plugin action deadline has expired");
       if (this.enabled.get(pluginId) !== enabled || enabled.activationEpoch !== options.activation_epoch) {
         throw new PluginManagerError("not_active", "Plugin action activation changed before invocation");
       }
@@ -543,7 +544,7 @@ export class BrowserPluginManager {
         }
         throw error;
       } finally { options.signal?.removeEventListener("abort", cancel); }
-    } });
+    }) });
   }
 
   /** Records explicit capability grants. It does not start a Worker until the first invocation. */
@@ -607,7 +608,11 @@ export class BrowserPluginManager {
     return this.serialize(async () => {
       this.assertOpen();
       const active = this.active.get(pluginId);
-      if (active?.runtime.state === "active") return active;
+      if (active?.runtime.state === "active") {
+        this.active.delete(pluginId);
+        this.active.set(pluginId, active);
+        return active;
+      }
       if (active) {
         this.active.delete(pluginId);
         await (active.abi === "v1" ? active.runtime.destroy() : active.runtime.stop()).catch(() => undefined);
@@ -635,7 +640,19 @@ export class BrowserPluginManager {
         await verifyPluginArtifact(manifest, path, bytes);
       });
       try {
-        await runtime.start({ context: enabled.context, user_grants: enabled.grants, host_allowed: enabled.hostAllowed });
+        for (;;) {
+          try {
+            await runtime.start({ context: enabled.context, user_grants: enabled.grants, host_allowed: enabled.hostAllowed });
+            break;
+          } catch (error) {
+            if (!(error instanceof V2PluginRuntimeError) || error.code !== "overloaded" || runtime.state !== "idle") throw error;
+            const idle = [...this.active].find(([id, instance]) => instance.abi === "v2" && !this.reservations.isBusy(id));
+            if (!idle) throw error;
+            // Only discard execution resources. Installation, grants and activation stay intact.
+            this.active.delete(idle[0]);
+            if (idle[1].abi === "v2") await idle[1].runtime.stop().catch(() => undefined);
+          }
+        }
         const instance: ActivePlugin = { abi: "v2", version: enabled.version, runtime };
         this.active.set(pluginId, instance);
         return instance;
