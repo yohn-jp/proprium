@@ -90,6 +90,8 @@ jobs:
         run: pnpm exec playwright test --config tests/browser/plugin-runtime-v2.playwright.config.ts
       - name: Exercise actual signed official plugins through the Host
         run: pnpm exec playwright test --config tests/browser/authoring-official.playwright.config.ts
+      - name: Exercise official typed actions through the live Gateway
+        run: pnpm exec playwright test --config tests/browser/authoring-mcp.playwright.config.ts
       - name: Exercise the production static shell offline
         env:
           PROPRIUM_E2E_GITHUB_TOKEN: ${{ secrets.PROPRIUM_E2E_GITHUB_TOKEN }}
