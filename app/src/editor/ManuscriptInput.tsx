@@ -8,6 +8,7 @@ import {
   placeholder as cmPlaceholder,
 } from "@codemirror/view";
 import { forwardRef, useEffect, useImperativeHandle, useRef, type CSSProperties } from "react";
+import { manuscriptSourceText } from "./cm/sourceText";
 import { bracketPairsExtension } from "./cm/bracketPairs";
 import { editorCompositionExtension, isViewComposing } from "./cm/compositionGuard";
 import { ellipsisNormalizeExtension } from "./cm/ellipsisNormalize";
@@ -158,6 +159,7 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
     const state = EditorState.create({
       doc: value,
       extensions: [
+        manuscriptSourceText,
         history(),
         editabilityCompartment.of(editabilityExtensions(readOnly)),
         drawSelection(),
