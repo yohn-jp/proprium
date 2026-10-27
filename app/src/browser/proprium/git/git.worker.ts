@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { createIgnoreReadCache } from "./ignore-read-cache.js";
+import { WorkspaceOperationQueue } from "./operation-queue.js";
 import { Buffer } from "buffer";
 import LightningFS from "@isomorphic-git/lightning-fs";
 import * as git from "isomorphic-git";
@@ -24,6 +25,7 @@ const fs = storage.promises;
 const flush = (): Promise<void> => (fs as unknown as { flush(): Promise<void> }).flush();
 const dataRoot = "/proprium";
 const uncertainWorkspaces = new Set<string>();
+const operationQueue = new WorkspaceOperationQueue();
 const knownHeads = new Map<string, string | null>();
 const authoringMutationGenerations = new Map<string, number>();
 const authoringSnapshots = new Map<string, PinnedAuthoringSnapshot>();
@@ -1633,7 +1635,7 @@ scope.addEventListener("message", async (event: MessageEvent<LocalGitRequest>) =
     if (!scope.navigator.locks) failure("lock_unavailable", "This browser does not provide Web Locks; local Git workspace access is disabled.");
     const write = ["init", "write", "delete", "apply-changes", "add", "commit", "commit-reviewed", "create-branch", "verify", "remote-fetch", "remote-pull", "remote-publish"].includes(request.operation);
     const paths = await workspacePaths(request.workspace);
-    const result = await scope.navigator.locks.request(paths.lock, { mode: write ? "exclusive" : "shared", ifAvailable: true }, async (lock) => {
+    const result = await operationQueue.run(paths.lock, () => scope.navigator.locks.request(paths.lock, { mode: write ? "exclusive" : "shared", ifAvailable: true }, async (lock) => {
       if (!lock) failure("workspace_busy", "Another tab is using this local workspace. Retry when its operation finishes.");
       if (uncertainWorkspaces.has(paths.lock) && request.operation !== "verify") {
         failure("storage_unknown", "A previous local Git operation had an uncertain result; reopen and verify this workspace before continuing.");
@@ -1643,7 +1645,7 @@ scope.addEventListener("message", async (event: MessageEvent<LocalGitRequest>) =
         authoringMutationGenerations.set(paths.lock, (authoringMutationGenerations.get(paths.lock) ?? 0) + 1);
       }
       return result;
-    });
+    }));
     scope.postMessage({ id: request.id, workspaceId, result } satisfies LocalGitResponse);
   } catch (error) {
     const known = error && typeof error === "object" && "propriumCode" in error ? String(error.propriumCode) as LocalGitErrorCode : null;
