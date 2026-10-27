@@ -9,6 +9,18 @@ import type { GenerateProvider } from "./state-events.js";
 
 export type SummaryScope = "scene" | "chapter";
 export type Summary = { summaryLines: string[]; characters?: string[]; stateChanges?: string[] };
+export type SummaryCitation = { path: string; revision: string; sceneId: string };
+export type SummaryChild = { id: string; sourceHash: string; summary: Summary; cached: boolean; provenance: unknown };
+export type SummaryDiagnostic = { code: string; severity: "warning"; sceneId: string; message: string };
+export type SummarySuggestion = { scope: SummaryScope; targetId: string; summary: Summary; sourceHash: string;
+  children?: SummaryChild[]; cached: boolean; citations: SummaryCitation[]; diagnostics: SummaryDiagnostic[];
+  expectedFileRevisions: Array<{ path: string; revision: string | null }>; provenance: unknown };
+export type SummaryPreview = { scope: SummaryScope; targetId: string; snapshot: ActionRequest["snapshot"]; provider_invoked: false;
+  children: Array<{ id: string; sourceHash: string; cached: boolean; prompt: string }>; diagnostics: SummaryDiagnostic[];
+  expectedFileRevisions: Array<{ path: string; revision: string | null }>; chapterPrompt: string | null };
+export type SummaryProposalInput = { scope: SummaryScope; targetId: string; expectedFileRevisions: Array<{ path: string; revision: string | null }>;
+  summary: Summary; citations: SummaryCitation[]; sourceHash: string; provenance: Record<string, unknown>; children?: SummaryChild[] };
+
 export type SummarySource = { id: string; metadata_path: string; metadata_revision: string; manuscript_path: string;
   manuscript_revision: string; text: string; summary_path: string; summary_revision: string | null; existing: Record<string, unknown> | null; existing_text: string | null;
   known_characters: string[]; context_files: Array<{path:string; revision:string}>; knowledge_available: boolean };

@@ -12,6 +12,11 @@ export type GenerateProvider = (host: GuestHost, request: ActionRequest, input: 
 export type StateEventCandidate = { kind: "location" | "acquaintance" | "ownership" | "knowledge"; target: string; operation: string;
   before: Record<string, unknown> | null; after: Record<string, unknown> | null; object: string | null;
   payload: Record<string, unknown>; evidence: { path: string; revision: string; start: number; end: number; quote: string }; confidence: 0.5 };
+export type StateEventPreview = { prompt: string; promptVersion: string; provider_invoked: false; sources: Array<{ path: string; revision: string }> };
+export type StateEventSuggestion = { sceneId: string; events: StateEventCandidate[]; diagnostics: Array<{ code: string; index: number; message: string }>;
+  citations: Array<{ path: string; revision: string }>; provenance: Generated["provenance"] };
+export type StateEventProposalInput = { sceneId: string; candidate: StateEventCandidate };
+
 const obj = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const nonempty = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0 && v.length <= 4096;
 
