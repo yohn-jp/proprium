@@ -7,6 +7,7 @@ const port = process.env.PROPRIUM_E2E_PORT ?? "4173";
 const { webServer: _unused, ...shared } = base;
 export default defineConfig(shared, {
   testMatch: "authoring-official.acceptance.spec.ts",
+  testIgnore: [],
   globalSetup: "./authoring-official.setup.ts",
   timeout: 180_000,
   webServer: [
