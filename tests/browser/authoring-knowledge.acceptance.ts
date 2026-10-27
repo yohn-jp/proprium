@@ -3,7 +3,11 @@ import { readFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { chooseFile, expectEditorText, reviewChangedFiles, showPanel } from "./restored-ui.helpers.js";
 
-const registry = resolve(process.env.PROPRIUM_KNOWLEDGE_REGISTRY ?? "/tmp/proprium-2e210ba-registry");
+function registryDirectory(): string {
+  const directory = process.env.PROPRIUM_KNOWLEDGE_REGISTRY ?? process.env.PROPRIUM_OFFICIAL_E2E_DIR;
+  if (!directory) throw new Error("A verified signed authoring registry is required for this test");
+  return resolve(directory);
+}
 
 async function install(page: Page, id: string, grants: string[]) {
   const manager = page.locator("details.plugin-manager-panel");
@@ -29,6 +33,7 @@ async function showAuthoringPanel(page: Page, title: string) {
 
 test("signed Knowledge and Research surfaces read and navigate real workspace data", async ({ page }, info) => {
   const origin = new URL(info.project.use.baseURL!).origin;
+  const registry = registryDirectory();
   const serve = async (route: import("@playwright/test").Route) => {
     const pathname = new URL(route.request().url()).pathname;
     const relative = decodeURIComponent(pathname.split(pathname.startsWith("/plugins/") ? "/plugins/" : "/plugin-fixture/")[1] ?? "");
