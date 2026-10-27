@@ -14867,7 +14867,14 @@
               },
               "value": {
                 "data_key": "last_action_result"
-              }
+              },
+              "fields": [
+                { "key": "effective.defaultPresetId", "label": "Effective default preset" },
+                { "key": "effective.totalCuBudget", "label": "Effective compute budget" },
+                { "key": "effective.maxConcurrentModels", "label": "Maximum concurrent models" },
+                { "key": "provenance.defaultPresetId", "label": "Preset source" },
+                { "key": "provenance.totalCuBudget", "label": "Budget source" }
+              ]
             }
           },
           {
