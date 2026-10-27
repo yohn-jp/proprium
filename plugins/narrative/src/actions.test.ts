@@ -346,7 +346,10 @@ test("outline pages offer scoped hierarchy actions and scene opening", () => {
   assert.ok(scenes.next_cursor);
   const next = run(host, request(id, { parent_id: scenes.parent_id, cursor: scenes.next_cursor, limit: 1, expected_tree_revision: scenes.tree_revision })) as any;
   assert.ok(next.items.some((row: any) => row.id === "scene-2"));
+  const previous = run(host, request(id, { parent_id: next.parent_id, cursor: next.previous_cursor, limit: 1, expected_tree_revision: next.tree_revision })) as any;
+  assert.ok(previous.items.some((row: any) => row.id === "scene-1"));
   assertDeclaredOutput(id, root);
+  assertDeclaredOutput(id, next);
 });
 
 test("scene creation proposes body, metadata and reordered siblings in one unit", () => {
