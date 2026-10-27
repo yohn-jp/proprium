@@ -1,0 +1,220 @@
+{
+  "schema": "proprium.semantic-real-probe/v1",
+  "source_revision": "a6526697a39a50e0f896bed83f19a1f680613ec5",
+  "component_sha256": "68f012c881c0bca9a0a97f82cd1774065fcc7532ef3d28ece87607615497d841",
+  "registry_sha256": "99ef5ff51195c7b426e71e8050c14ca959b56b277d9986b36719559a7120c60c",
+  "group_sha256": "f2b7669761e09dacdff1fa165b43e8654fa30d908e7011be45fb9b5c4d4ff400",
+  "host": "Node.js jco transpiled actual composed component; synthetic in-memory continuation adapter",
+  "browser_admission": "NOT_TESTED: Host currently reports model unsupported",
+  "limitations": [
+    "Not Browser Host acceptance",
+    "Node harness does not enforce Host action deadline",
+    "No network or private workspace data"
+  ],
+  "asset_files": [
+    {
+      "path": "proprium/semantic/embedding/e5-small/onnx/model.onnx",
+      "bytes": 470268533,
+      "sha256": "4aa845c27760e06e9a686b9d8b5d440eae4b6612cd09e5b522b716d3941f77ff",
+      "chunks": 29
+    },
+    {
+      "path": "proprium/semantic/embedding/e5-small/tokenizer.json",
+      "bytes": 17082730,
+      "sha256": "0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39",
+      "chunks": 2
+    },
+    {
+      "path": "proprium/semantic/embedding/e5-small/sentencepiece.bpe.model",
+      "bytes": 5069051,
+      "sha256": "cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865",
+      "chunks": 1
+    },
+    {
+      "path": "proprium/semantic/embedding/e5-small/config.json",
+      "bytes": 658,
+      "sha256": "cb99455288675345e1a4f411438d5d0adbba5fbd3a67ea4fb03c015433b996c1",
+      "chunks": 1
+    },
+    {
+      "path": "proprium/semantic/embedding/e5-small/tokenizer_config.json",
+      "bytes": 443,
+      "sha256": "a1d6bc8734a6f635dc158508bef000f8e2e5a759c7d92f984b2c86e5ff53425b",
+      "chunks": 1
+    },
+    {
+      "path": "proprium/semantic/embedding/e5-small/special_tokens_map.json",
+      "bytes": 167,
+      "sha256": "d05497f1da52c5e09554c0cd874037a083e1dc1b9cfd48034d1c717f1afc07a7",
+      "chunks": 1
+    },
+    {
+      "path": "proprium/semantic/embedding/e5-small/provenance.json",
+      "bytes": 1591,
+      "sha256": "0cb5e03d5ba56c3b073df09b054b7c1f0bbc989936acbd52a6bb26f277860ced",
+      "chunks": 1
+    }
+  ],
+  "timings_ms": {
+    "verify_all_assets": 993.871826,
+    "instantiate": 247.45882400000005
+  },
+  "calls": {
+    "workspace.derived.cache.get": 2,
+    "workspace.file.list": 1,
+    "workspace.file.read": 3,
+    "workspace.asset.read": 3719,
+    "workspace.derived.cache.put": 1
+  },
+  "rebuild": {
+    "value": {
+      "snapshot": {
+        "id": "snapshot-probe",
+        "local_commit": null,
+        "worktree_generation": "generation-probe",
+        "draft_generation": null
+      },
+      "taskId": "real-e5-probe",
+      "scanned": 2,
+      "embedded": 120,
+      "reused": 0,
+      "removed": 0,
+      "indexedGeneration": "generation-probe"
+    },
+    "elapsed_ms": 511329.04499100003,
+    "calls": 3724,
+    "model_loaded": true
+  },
+  "query": {
+    "value": {
+      "snapshot": {
+        "id": "snapshot-probe",
+        "local_commit": null,
+        "worktree_generation": "generation-probe",
+        "draft_generation": null
+      },
+      "model": {
+        "id": "Xenova/multilingual-e5-small",
+        "revision": "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
+        "role": "embedding",
+        "dimensions": 384,
+        "digest": "4aa845c27760e06e9a686b9d8b5d440eae4b6612cd09e5b522b716d3941f77ff",
+        "byte_length": 470268533,
+        "license": "MIT",
+        "status": "ready"
+      },
+      "results": [
+        {
+          "entityId": "scene-probe",
+          "sourcePath": "manuscript/probe.md",
+          "sourceRevision": "fad05d231b9c394c6b75b364e8a66321dcd9d0859577e41a1013520c7611b1cd",
+          "sentenceIndex": 73,
+          "quote": "A silver lighthouse guides sailors through the northern storm.",
+          "cosineScore": 0.8579019629851629,
+          "rank": 1,
+          "indexCoverage": 1,
+          "evidence": [
+            {
+              "path": "manuscript/probe.md",
+              "revision": "fad05d231b9c394c6b75b364e8a66321dcd9d0859577e41a1013520c7611b1cd",
+              "start": 3641,
+              "end": 3703,
+              "quote": "A silver lighthouse guides sailors through the northern storm."
+            }
+          ]
+        },
+        {
+          "entityId": "scene-probe",
+          "sourcePath": "manuscript/probe.md",
+          "sourceRevision": "fad05d231b9c394c6b75b364e8a66321dcd9d0859577e41a1013520c7611b1cd",
+          "sentenceIndex": 38,
+          "quote": "At station 39, a traveller remembers a quiet day.",
+          "cosineScore": 0.7733412004529587,
+          "rank": 2,
+          "indexCoverage": 1,
+          "evidence": [
+            {
+              "path": "manuscript/probe.md",
+              "revision": "fad05d231b9c394c6b75b364e8a66321dcd9d0859577e41a1013520c7611b1cd",
+              "start": 1891,
+              "end": 1940,
+              "quote": "At station 39, a traveller remembers a quiet day."
+            }
+          ]
+        },
+        {
+          "entityId": "scene-probe",
+          "sourcePath": "manuscript/probe.md",
+          "sourceRevision": "fad05d231b9c394c6b75b364e8a66321dcd9d0859577e41a1013520c7611b1cd",
+          "sentenceIndex": 1,
+          "quote": "At station 2, a traveller remembers a quiet day.",
+          "cosineScore": 0.7712121763378894,
+          "rank": 3,
+          "indexCoverage": 1,
+          "evidence": [
+            {
+              "path": "manuscript/probe.md",
+              "revision": "fad05d231b9c394c6b75b364e8a66321dcd9d0859577e41a1013520c7611b1cd",
+              "start": 49,
+              "end": 97,
+              "quote": "At station 2, a traveller remembers a quiet day."
+            }
+          ]
+        },
+        {
+          "entityId": "scene-probe",
+          "sourcePath": "manuscript/probe.md",
+          "sourceRevision": "fad05d231b9c394c6b75b364e8a66321dcd9d0859577e41a1013520c7611b1cd",
+          "sentenceIndex": 59,
+          "quote": "At station 60, a traveller remembers a quiet day.",
+          "cosineScore": 0.7708402231510135,
+          "rank": 4,
+          "indexCoverage": 1,
+          "evidence": [
+            {
+              "path": "manuscript/probe.md",
+              "revision": "fad05d231b9c394c6b75b364e8a66321dcd9d0859577e41a1013520c7611b1cd",
+              "start": 2941,
+              "end": 2990,
+              "quote": "At station 60, a traveller remembers a quiet day."
+            }
+          ]
+        },
+        {
+          "entityId": "scene-probe",
+          "sourcePath": "manuscript/probe.md",
+          "sourceRevision": "fad05d231b9c394c6b75b364e8a66321dcd9d0859577e41a1013520c7611b1cd",
+          "sentenceIndex": 5,
+          "quote": "At station 6, a traveller remembers a quiet day.",
+          "cosineScore": 0.7708136263672594,
+          "rank": 5,
+          "indexCoverage": 1,
+          "evidence": [
+            {
+              "path": "manuscript/probe.md",
+              "revision": "fad05d231b9c394c6b75b364e8a66321dcd9d0859577e41a1013520c7611b1cd",
+              "start": 245,
+              "end": 293,
+              "quote": "At station 6, a traveller remembers a quiet day."
+            }
+          ]
+        }
+      ]
+    },
+    "elapsed_ms": 3214.946551000001,
+    "calls": 2
+  },
+  "grounding": {
+    "pass": true,
+    "target_rank": 1,
+    "result_count": 5
+  },
+  "result": "PASS",
+  "peak_rss": 2146562048,
+  "final_memory": {
+    "rss": 2145951744,
+    "heap": 10827056,
+    "arrayBuffers": 209179
+  },
+  "total_ms": 516281.908797
+}

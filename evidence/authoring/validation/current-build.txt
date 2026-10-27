@@ -1,0 +1,41 @@
+Scope: all 11 workspace projects
+✓ Lockfile passes supply-chain policies (verified 2h ago)
+Lockfile is up to date, resolution step is skipped
+Already up to date
+Done in 724ms using pnpm v12.10.1
+$ pnpm --filter @scriptorium/contracts build && pnpm --dir app exec vite build --config vite.proprium.config.ts && node scripts/verify-proprium-static.mjs
+$ tsc -p tsconfig.json
+vite v6.4.4 building for production...
+transforming...
+../node_modules/.pnpm/@bytecodealliance+jco-transpile@0.20.0/node_modules/@bytecodealliance/jco-transpile/vendor/js-component-bindgen-component.js (1:0): Module level directives cause errors when bundled, "use components" in "../node_modules/.pnpm/@bytecodealliance+jco-transpile@0.20.0/node_modules/@bytecodealliance/jco-transpile/vendor/js-component-bindgen-component.js" was ignored.
+[plugin vite:resolve] Module "node:fs/promises" has been externalized for browser compatibility, imported by "/workspace/proprium/node_modules/.pnpm/@bytecodealliance+jco-transpile@0.20.0/node_modules/@bytecodealliance/jco-transpile/vendor/js-component-bindgen-component.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+../node_modules/.pnpm/@bytecodealliance+jco-transpile@0.20.0/node_modules/@bytecodealliance/jco-transpile/vendor/js-component-bindgen-component.js (1:0): Module level directives cause errors when bundled, "use components" in "../node_modules/.pnpm/@bytecodealliance+jco-transpile@0.20.0/node_modules/@bytecodealliance/jco-transpile/vendor/js-component-bindgen-component.js" was ignored.
+[plugin vite:resolve] Module "node:fs/promises" has been externalized for browser compatibility, imported by "/workspace/proprium/node_modules/.pnpm/@bytecodealliance+jco-transpile@0.20.0/node_modules/@bytecodealliance/jco-transpile/vendor/js-component-bindgen-component.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+✓ 363 modules transformed.
+rendering chunks...
+computing gzip size...
+../dist/proprium/assets/__vite-browser-external-9wXp6ZBx.js                     0.03 kB
+../dist/proprium/index.html                                                     0.61 kB │ gzip:     0.36 kB
+../dist/proprium/proprium-sw.js                                                 1.83 kB
+../dist/proprium/assets/js-component-bindgen-component.core2-B2FPOw2f.wasm     14.12 kB │ gzip:     6.60 kB
+../dist/proprium/assets/component.worker-DGQvGwFs.js                          258.62 kB
+../dist/proprium/assets/component.worker-TToJien_.js                          260.31 kB
+../dist/proprium/assets/git.worker-CaXbbSDN.js                                303.18 kB
+../dist/proprium/assets/js-component-bindgen-component.core-C73M4s7Z.wasm   3,538.38 kB │ gzip: 1,186.34 kB
+../dist/proprium/assets/styles-FeuA4ab_.css                                    42.93 kB │ gzip:     8.61 kB
+../dist/proprium/assets/styles-C2-grVRi.css                                   103.75 kB │ gzip:    18.64 kB
+../dist/proprium/assets/p-DD92Fw3n-BNQUjPRF.js                                  0.52 kB │ gzip:     0.37 kB
+../dist/proprium/assets/p-BVNUhOOf-CDYni9C2.js                                  0.71 kB │ gzip:     0.50 kB
+../dist/proprium/assets/p-Uk13YgEc-C-szS1fi.js                                  0.97 kB │ gzip:     0.54 kB
+../dist/proprium/assets/p-C1AxSUnp-Bu7wC3UQ.js                                  1.66 kB │ gzip:     0.86 kB
+../dist/proprium/assets/p-YNnH1_Hs-DkgnpAgq.js                                  4.88 kB │ gzip:     2.19 kB
+../dist/proprium/assets/p-Dvyv9SMk-CUrYv9qe.js                                 10.42 kB │ gzip:     3.07 kB
+../dist/proprium/assets/MobileShell-jzFt6gdz.js                               922.67 kB │ gzip:   201.17 kB
+../dist/proprium/assets/index-COZ5CM7O.js                                   1,230.89 kB │ gzip:   378.37 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 17.95s
+Verified the dedicated Proprium SPA entry, security headers, and Wrangler asset directory.

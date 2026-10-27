@@ -1,5 +1,5 @@
 {
-  "candidate_sha": "465c344bdbb854b959832c90b7edab464f064596",
+  "candidate_sha": "8932dee5e918a998609c83a1672ac831f0537bb0",
   "overall": "INCOMPLETE",
   "core_browser_suite": {
     "status": "PASS",
@@ -10,10 +10,10 @@
   },
   "official_registry": {
     "status": "PASS",
-    "source_sha": "2e210babe7921a9d7790eb26dcb5107ff98c6708",
-    "registry_digest": "8a12c2fdfb35d57ce753113d1047a4796396834068821cc8430aacf3f18ef822",
+    "source_sha": "a6526697a39a50e0f896bed83f19a1f680613ec5",
+    "registry_digest": "99ef5ff51195c7b426e71e8050c14ca959b56b277d9986b36719559a7120c60c",
     "evidence_ref": "evidence/authoring/validation/components.json",
-    "scope": "Eight actual independent component builds and signature/dependency integrity with ephemeral test keys. Predates corrected guest payloads/declarations; fresh build required."
+    "scope": "Eight actual independent builds and signature/dependency integrity with ephemeral test keys. Predates later Speaker, Paired and Host fixes; not a production release certificate."
   },
   "official_narrative_local_chain": {
     "status": "PASS",
@@ -35,28 +35,39 @@
     "scope": "Source-aware links and pinned revisions checked; does not certify feature behavior."
   },
   "remaining": [
-    "Full R01–R14 and 104 individual acceptance gates, including mandatory failure dimensions",
-    "Fresh all-eight build using corrected payloads and declarations, same-source Host/Gateway/browser validation",
-    "Semantic actual E5 model execution and measured admission, progress/task cancellation/incremental reuse, BGE rerank",
-    "Paired Writing remaining canon workflows and Host provider broker production wiring",
-    "Complete update/rollback/uninstall/reinstall lifecycle, currently under actual browser test",
-    "Live Cloudflare publication/acquisition is BLOCKED: signing/R2 credentials not available",
-    "Physical devices and real Japanese IME remain NOT_CHECKED"
+    "Full R01–R14 and 104 individual acceptance gates, including required failure dimensions",
+    "Same-source current eight-component build, Host/Gateway/browser validation and final CI",
+    "Semantic Browser cold model load within bounded tasks, task progress/cancellation, incremental cache reuse and BGE rerank",
+    "Paired Writing remaining continuation/summary/dialogue/reader reaction workflows, usage and actual configured provider execution",
+    "Update/rollback/uninstall/reinstall browser verification is still in progress",
+    "Live Cloudflare publication/acquisition BLOCKED: production signing/R2 credentials unavailable",
+    "Physical devices and real Japanese IME NOT_CHECKED"
   ],
   "ci": {
-    "source_sha": "465c344bdbb854b959832c90b7edab464f064596",
+    "source_sha": "a6526697a39a50e0f896bed83f19a1f680613ec5",
     "gateway": {
       "status": "PASS",
-      "url": "https://github.com/yohn-jp/proprium/actions/runs/40479271482"
+      "url": "https://github.com/yohn-jp/proprium/actions/runs/40479932986"
     },
     "browser": {
-      "status": "NOT_CHECKED",
-      "state": "in_progress",
-      "url": "https://github.com/yohn-jp/proprium/actions/runs/40479271442"
+      "status": "FAIL",
+      "url": "https://github.com/yohn-jp/proprium/actions/runs/40479932994",
+      "evidence_ref": "evidence/authoring/validation/ci-a652-summary.json",
+      "reason": "All-eight activation persistence and MCP setup failed. Core, real signed Host, Knowledge/Research, Publishing, static and adapter steps passed. Fixes are in newer local commits and require CI rerun."
     },
     "production_publish": {
       "status": "BLOCKED",
-      "reason": "No configured production signing/R2 credentials; metadata API access denied. No production publication attempted."
+      "reason": "No configured production signing/R2 credentials; no production publication attempted."
     }
+  },
+  "semantic_real_model": {
+    "status": "PASS",
+    "evidence_ref": "evidence/authoring/validation/semantic-real-node.json",
+    "scope": "Actual composed WASM + pinned E5, Node diagnostic only, 120 passages and exact grounded query. Cold rebuild 511.3s exceeds the 30s Host deadline; no Browser Host/model admission PASS."
+  },
+  "diagnostics_paired_speaker": {
+    "status": "PASS",
+    "evidence_ref": "evidence/authoring/validation/publishing-registry-record.json",
+    "scope": "Both browser engines, real five-plugin sequence. Three fresh and five retained diagnostic components; not all-eight current release."
   }
 }

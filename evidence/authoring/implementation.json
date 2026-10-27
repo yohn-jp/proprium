@@ -1,7 +1,7 @@
 {
   "schema": "proprium.authoring.evidence/v1",
-  "release_sha": "2e210babe7921a9d7790eb26dcb5107ff98c6708",
-  "registry_digest": "8a12c2fdfb35d57ce753113d1047a4796396834068821cc8430aacf3f18ef822",
+  "release_sha": "a6526697a39a50e0f896bed83f19a1f680613ec5",
+  "registry_digest": "99ef5ff51195c7b426e71e8050c14ca959b56b277d9986b36719559a7120c60c",
   "generated_from": {
     "acceptance": "docs/canon/ACCEPTANCE.md",
     "inventory": "docs/canon/RECOVERY-INVENTORY.md",
@@ -44,7 +44,7 @@
       "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
-      "output": "Eight independent real component builds/signatures/dependencies verified at source2e210ba; latest corrected declarations and complete lifecycle still require fresh-build verification. Production publication is BLOCKED.",
+      "output": "Fresh actual8 build/signature/dependency verification passed a6526697. Actualall8 install/enable and reload restoration exposed defects now under browser retest; lifecycleupdate/rollback is not yet certified. LiveR2 publication BLOCKED.",
       "receipt": null,
       "artifact": "evidence/authoring/validation/components.json",
       "evidence_ref": "evidence/authoring/validation/results.json",
@@ -156,7 +156,7 @@
       "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
-      "output": "Actual fixed-eight-tool Go Gateway/active Browser Host typed Narrative action, stale/capability denial, proposal/human approval, disconnect/reopen and real timeout tested. Paired Writing canon workflows and provider.request production wiring remain incomplete.",
+      "output": "Typed NarrativeMCP/humanapproval/disconnect/timeout proof exists. PairedQA localpreview/evidence extraction and Host exact-provider-consent route now implemented; latestactualUI and canonicalMCP reruns pending. OtherPairedCanon workflows remain incomplete.",
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
@@ -172,7 +172,7 @@
       "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
       "browser_platform": null,
       "input": null,
-      "output": "Bounded E5 index/retrieval/candidate code and real native inference component exist. Real model inference/browser admission are not certified; task progress/cancel, cross-snapshot incremental reuse and BGE rerank are incomplete.",
+      "output": "ActualE5 inference and groundedquery succeeded in Node composedWASM diagnostic. Coldrebuild511s exceeds current30s Hostactiondeadline. Browseradmission, taskprogress/cancel, crosssnapshotincrementalreuse andBGErerank remain incomplete.",
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
@@ -5563,7 +5563,7 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
+          "output": "Registered local QA preview and source-verified low-confidence excerpts, with Research and bounded local fallback, are implemented. Full PW-04 acceptance and currentBrowser UI proof are not certified.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
@@ -9007,7 +9007,7 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": "Implementation exists for bounded E5 indexing and source-grounded candidates; full feature requirements and real model execution are not certified. Bounded E5 index/retrieval/candidate code and real native inference component exist. Real model inference/browser admission are not certified; task progress/cancel, cross-snapshot incremental reuse and BGE rerank are incomplete.",
+          "output": "ActualE5 model inference proven only in Node diagnostic; currentBrowser coldload exceeds actiondeadline, tasklifecycle/incrementalreuse/rerank remain incomplete. See semantic-real-node.json.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
@@ -9058,7 +9058,7 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": "Implementation exists for bounded E5 indexing and source-grounded candidates; full feature requirements and real model execution are not certified. Bounded E5 index/retrieval/candidate code and real native inference component exist. Real model inference/browser admission are not certified; task progress/cancel, cross-snapshot incremental reuse and BGE rerank are incomplete.",
+          "output": "ActualE5 model inference proven only in Node diagnostic; currentBrowser coldload exceeds actiondeadline, tasklifecycle/incrementalreuse/rerank remain incomplete. See semantic-real-node.json.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
@@ -9109,7 +9109,7 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": "Implementation exists for bounded E5 indexing and source-grounded candidates; full feature requirements and real model execution are not certified. Bounded E5 index/retrieval/candidate code and real native inference component exist. Real model inference/browser admission are not certified; task progress/cancel, cross-snapshot incremental reuse and BGE rerank are incomplete.",
+          "output": "ActualE5 model inference proven only in Node diagnostic; currentBrowser coldload exceeds actiondeadline, tasklifecycle/incrementalreuse/rerank remain incomplete. See semantic-real-node.json.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
@@ -9151,7 +9151,7 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": "Implementation exists for bounded E5 indexing and source-grounded candidates; full feature requirements and real model execution are not certified. Bounded E5 index/retrieval/candidate code and real native inference component exist. Real model inference/browser admission are not certified; task progress/cancel, cross-snapshot incremental reuse and BGE rerank are incomplete.",
+          "output": "ActualE5 model inference proven only in Node diagnostic; currentBrowser coldload exceeds actiondeadline, tasklifecycle/incrementalreuse/rerank remain incomplete. See semantic-real-node.json.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
@@ -9202,7 +9202,7 @@
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
           "browser_platform": null,
           "input": null,
-          "output": "Implementation exists for bounded E5 indexing and source-grounded candidates; full feature requirements and real model execution are not certified. Bounded E5 index/retrieval/candidate code and real native inference component exist. Real model inference/browser admission are not certified; task progress/cancel, cross-snapshot incremental reuse and BGE rerank are incomplete.",
+          "output": "ActualE5 model inference proven only in Node diagnostic; currentBrowser coldload exceeds actiondeadline, tasklifecycle/incrementalreuse/rerank remain incomplete. See semantic-real-node.json.",
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
@@ -15355,7 +15355,7 @@
   },
   "execution": {
     "base_sha": "cf286eea88d9ef7c809463ff0e339a140e87abb4",
-    "candidate_sha": "465c344bdbb854b959832c90b7edab464f064596",
+    "candidate_sha": "8932dee5e918a998609c83a1672ac831f0537bb0",
     "certified": false,
     "pr": "https://github.com/yohn-jp/proprium/pull/16",
     "note": "Candidate source SHA, not a certified release. Full acceptance and live deployment are incomplete. Unit tests do not certify feature or R-ID completion.",
@@ -15479,11 +15479,49 @@
         "command": "node --import tsx --test 'app/src/browser/proprium/plugins/*.test.ts'",
         "evidence_ref": "evidence/authoring/validation/worker-reclamation-unit.txt",
         "scope": "17 tests, including overlapping/nested reservations. Actual five-plugin UI rerun pending; unit result alone does not certify pool lifecycle."
+      },
+      {
+        "name": "Fresh independently built and signed official eight",
+        "status": "PASS",
+        "git_sha": "a6526697a39a50e0f896bed83f19a1f680613ec5",
+        "command": "TMPDIR=/workspace/proprium-build-temp taskset -c 0 node scripts/test-authoring-plugin-build.mjs",
+        "evidence_ref": "evidence/authoring/validation/components.json",
+        "scope": "Actual8 components and independently reverified signatures/digests/dependencies; retainedfixture and outside0600key controls exercised. Not production distribution or fullR02."
+      },
+      {
+        "name": "Diagnostics Paired Speaker actual five-plugin sequence",
+        "status": "PASS",
+        "git_sha": "f20e8c2",
+        "evidence_ref": "evidence/authoring/validation/publishing-registry-record.json",
+        "scope": "Both engines passed: real default lint, saved context, local synonym preview, readable settings, Japanese Speaker attribution after fifthWorker idle reclamation. Three fresh/five retained diagnostic components; not freshall8."
+      },
+      {
+        "name": "Real E5 inference through composed Semantic WASM",
+        "status": "PASS",
+        "git_sha": "a6526697a39a50e0f896bed83f19a1f680613ec5",
+        "evidence_ref": "evidence/authoring/validation/semantic-real-node.json",
+        "scope": "Node diagnostic with real492423173 assetbytes;120passages,511329ms coldrebuild,3724Hostcontinuations,query3215ms,5exact-groundedresults. NO Hostdeadline enforcement/Browseradmission; NOT BrowserE2E or fullSemantic acceptance."
+      },
+      {
+        "name": "Current Host units",
+        "status": "PASS",
+        "git_sha": "b9681c61ab18b14a452610a799aed64256c96b49",
+        "command": "node --import tsx --test 'src/browser/proprium/**/*.test.ts'",
+        "evidence_ref": "evidence/authoring/validation/current-host-unit.txt",
+        "scope": "192 passed including provider consent/cancellation, optional Canon enrichment, exactscope restoration and effectivegrant denial. Browser and actualprovider validation remain separate."
+      },
+      {
+        "name": "Current official plugin domain units",
+        "status": "PASS",
+        "git_sha": "4fd0e50",
+        "command": "node scripts/test-authoring-plugin-units.mjs",
+        "evidence_ref": "evidence/authoring/validation/current-guest-unit.txt",
+        "scope": "294 passed; does not certify realmodel Browser UX or allCanon features."
       }
     ],
     "same_release_sha_certification": {
       "status": "NOT_CHECKED",
-      "reason": "Actual all-eight build source2e210ba predates the current Host and corrected guest payloads/declarations. A fresh complete build and same-source full product acceptance remain required."
+      "reason": "Fresh all-eight build a6526697 passed. Later Speaker segmentation, Paired QA/provider routes, scope restoration and CI changes are newer; same-source full product acceptance is not certified."
     }
   }
 }

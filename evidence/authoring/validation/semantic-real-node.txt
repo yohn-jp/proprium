@@ -1,0 +1,19 @@
+VERIFIED 7 files 994 ms { rss: 84430848, heap: 7289360, arrayBuffers: 30472484 }
+INSTANTIATED 247 ms { rss: 138313728, heap: 8033536, arrayBuffers: 143643 }
+CONTINUATIONS proprium.semantic.index.rebuild 256 elapsed_ms 23968 memory { rss: 550232064, heap: 116375024, arrayBuffers: 602395 }
+CONTINUATIONS proprium.semantic.index.rebuild 512 elapsed_ms 48391 memory { rss: 610181120, heap: 98255736, arrayBuffers: 340251 }
+CONTINUATIONS proprium.semantic.index.rebuild 768 elapsed_ms 71830 memory { rss: 609394688, heap: 85125616, arrayBuffers: 602395 }
+CONTINUATIONS proprium.semantic.index.rebuild 1024 elapsed_ms 98193 memory { rss: 667045888, heap: 133320536, arrayBuffers: 733467 }
+CONTINUATIONS proprium.semantic.index.rebuild 1280 elapsed_ms 120826 memory { rss: 724668416, heap: 112876648, arrayBuffers: 340251 }
+CONTINUATIONS proprium.semantic.index.rebuild 1536 elapsed_ms 145146 memory { rss: 709177344, heap: 86822344, arrayBuffers: 602395 }
+CONTINUATIONS proprium.semantic.index.rebuild 1792 elapsed_ms 169915 memory { rss: 776192000, heap: 142916120, arrayBuffers: 733467 }
+CONTINUATIONS proprium.semantic.index.rebuild 2048 elapsed_ms 194763 memory { rss: 773144576, heap: 62038040, arrayBuffers: 471323 }
+CONTINUATIONS proprium.semantic.index.rebuild 2304 elapsed_ms 226815 memory { rss: 855298048, heap: 122205024, arrayBuffers: 602395 }
+CONTINUATIONS proprium.semantic.index.rebuild 2560 elapsed_ms 276979 memory { rss: 853254144, heap: 110875296, arrayBuffers: 864539 }
+CONTINUATIONS proprium.semantic.index.rebuild 2816 elapsed_ms 313245 memory { rss: 905064448, heap: 86294016, arrayBuffers: 471323 }
+CONTINUATIONS proprium.semantic.index.rebuild 3072 elapsed_ms 352132 memory { rss: 901885952, heap: 73591688, arrayBuffers: 733467 }
+CONTINUATIONS proprium.semantic.index.rebuild 3328 elapsed_ms 401345 memory { rss: 954765312, heap: 48999464, arrayBuffers: 340251 }
+CONTINUATIONS proprium.semantic.index.rebuild 3584 elapsed_ms 436542 memory { rss: 1024184320, heap: 109032368, arrayBuffers: 471323 }
+ACTION proprium.semantic.index.rebuild elapsed_ms 511329 calls 3724 ok true error null memory { rss: 2146562048, heap: 8743752, arrayBuffers: 209179 }
+ACTION proprium.semantic.passages.query elapsed_ms 3215 calls 2 ok true error null memory { rss: 2145951744, heap: 10762448, arrayBuffers: 209179 }
+RESULT PASS peak_rss 2146562048 total_ms 516282
