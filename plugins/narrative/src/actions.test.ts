@@ -689,6 +689,14 @@ test("resume markers reject malformed manuscript revisions", () => {
   assert.throws(() => run(host, request("proprium.narrative.resume.marks.list", {})), { code: "unsupported_format" });
 });
 
+test("resume marker non-mapping rows report malformed storage", () => {
+  for (const row of ["null", "42", "[a, b]"]) {
+    const host = new MemoryHost();
+    host.add("meta/proprium/plugins/proprium.narrative/resume.v1.yaml", `schemaVersion: 1\npositions:\n  - ${row}\n`);
+    assert.throws(() => run(host, request("proprium.narrative.resume.marks.list", {})), { code: "unsupported_format" });
+  }
+});
+
 test("resume.mark.propose updates only this device marker and preserves unknown YAML with exact preconditions", () => {
   const host = new MemoryHost();
   addWork(host, 1);

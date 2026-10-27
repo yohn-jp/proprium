@@ -69,7 +69,11 @@ function validUtc(value: unknown): value is string {
   return typeof value === "string" && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/u.test(value) && Number.isFinite(Date.parse(value));
 }
 function validateMarker(value: unknown): Marker {
-  const row = record(value, "resume marker");
+  if (value === null || typeof value !== "object" || Array.isArray(value) ||
+      (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)) {
+    fail("unsupported_format", "Resume marker must be a YAML mapping", { path: MARKER_PATH });
+  }
+  const row = value as Row;
   const required = ["deviceId", "repositoryId", "branch", "sceneId", "manuscriptPath", "manuscriptRevision", "sentenceIndex", "scrollTop", "updatedAt"];
   for (const key of required) if (!(key in row)) fail("unsupported_format", `Resume marker is missing ${key}`);
   if (typeof row.deviceId !== "string" || !row.deviceId || row.deviceId.length > 256 ||
