@@ -67,18 +67,39 @@ export class BrowserGitWriterWorkspace implements WriterWorkspacePort {
 
   async assert_read_set(scope: WriterScope, snapshot: WriterSnapshot, read_set: readonly WriterReadRevision[]): Promise<void> {
     this.assertSelected(scope);
+    assertSavedSnapshot(snapshot);
+    const local = new Map<string, string | null>();
     for (const read of read_set) {
       const readScope = read.scope ?? scope;
       const readSnapshot = read.snapshot ?? snapshot;
       if (sameScope(readScope, scope) && sameSnapshot(readSnapshot, snapshot)) {
-        const actual = await this.read(scope, snapshot, read.path);
-        if (actual.revision !== read.revision) throw new BrowserGitWriterError("snapshot_stale", `Read dependency ${read.path} changed since the proposal was computed.`);
+        local.set(read.path, read.revision);
       } else {
         if (!this.context.assert_foreign_read) throw new BrowserGitWriterError("dependency_unavailable", "A foreign source read lease cannot be revalidated by the active Host.");
         try { await this.context.assert_foreign_read(readScope, readSnapshot, read.path, read.revision); }
         catch (error) { throw mapGitError(error); }
       }
     }
+    if (!local.size) return;
+    // Each list page hashes the current pinned files and validates the complete
+    // generation. Avoid pinning and rescanning the whole repository per source.
+    const pinned = await this.pinSnapshot(scope);
+    try {
+      compareSnapshot(pinned.snapshot, snapshot);
+      let cursor: string | null = null;
+      do {
+        const page = await this.git.listAuthoringSnapshot(pinned.snapshot.id, "", cursor, 128);
+        for (const file of page.items) {
+          if (!local.has(file.path)) continue;
+          if (local.get(file.path) !== file.revision) throw new BrowserGitWriterError("snapshot_stale", `Read dependency ${file.path} changed since the proposal was computed.`);
+          local.delete(file.path);
+        }
+        cursor = page.next_cursor;
+      } while (cursor !== null);
+      for (const [path, revision] of local) if (revision !== null) throw new BrowserGitWriterError("snapshot_stale", `Read dependency ${path} is no longer present.`);
+      await this.git.assertAuthoringSnapshot(pinned.snapshot.id);
+    } catch (error) { throw mapGitError(error); }
+    finally { await this.releaseSnapshot(pinned.snapshot.id); }
   }
 
   read(scope: WriterScope, path: string): Promise<{
