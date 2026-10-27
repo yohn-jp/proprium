@@ -25,7 +25,7 @@ process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY = pluginFixturePrivateKey.e
 export default defineConfig({
   testDir: ".",
   testMatch: "**/*.spec.ts",
-  testIgnore: ["**/static-offline.acceptance.spec.ts", "**/authoring-official.acceptance.spec.ts"],
+  testIgnore: ["**/static-offline.acceptance.spec.ts", "**/authoring-official.acceptance.spec.ts", "**/plugin-runtime-v2.acceptance.spec.ts"],
   outputDir: "test-results/host",
   fullyParallel: false,
   workers: 1,

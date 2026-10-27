@@ -39,6 +39,8 @@ jobs:
         with:
           toolchain: 1.99.0
           target: wasm32-unknown-unknown
+      - name: Install Research pinned Rust toolchain
+        run: rustup toolchain install 1.99.1 --profile minimal --target wasm32-unknown-unknown
       - name: Install pinned cargo-component
         run: cargo install cargo-component --version 0.21.1 --locked
       - name: Install pinned wasm-tools composer
@@ -78,6 +80,10 @@ jobs:
           PROPRIUM_E2E_GITHUB_REPOSITORY_ID: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY_ID }}
           PROPRIUM_E2E_GITHUB_BRANCH: ${{ vars.PROPRIUM_E2E_GITHUB_BRANCH }}
         run: pnpm test:browser:e2e
+      - name: Exercise signed v2 transport with its fixture setup
+        run: pnpm exec playwright test --config tests/browser/plugin-runtime-v2.playwright.config.ts
+      - name: Exercise actual signed official plugins through the Host
+        run: pnpm exec playwright test --config tests/browser/authoring-official.playwright.config.ts
       - name: Exercise the production static shell offline
         env:
           PROPRIUM_E2E_GITHUB_TOKEN: ${{ secrets.PROPRIUM_E2E_GITHUB_TOKEN }}
