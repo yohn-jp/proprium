@@ -2017,7 +2017,7 @@
               "description": "保存済み原稿から検索用インデックスを生成します。モデルと文章解析機能が必要です。現在は最大256文まで対応しています。",
               "fields": [
                 {
-                  "id": "taskId",
+                  "id": "task_id",
                   "label": "タスク ID",
                   "type": "string",
                   "required": true,
@@ -2028,7 +2028,7 @@
                 "action_id": "proprium.semantic.index.rebuild",
                 "input_template": {
                   "taskId": {
-                    "data_key": "form.taskId"
+                    "data_key": "form.task_id"
                   }
                 }
               }

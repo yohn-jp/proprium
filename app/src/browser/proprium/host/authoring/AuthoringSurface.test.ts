@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -19,6 +20,17 @@ const outlineSurface: AuthoringSurfaceDeclaration = {
     activate: { action_id: "proprium.narrative.scene.open", input_template: { scene_id: { data_key: "item.id" } } },
   },
 };
+
+test("every official signed surface fits the Host renderer while pathological JSON remains bounded", () => {
+  for (const name of ["narrative", "knowledge", "research", "paired-writing", "diagnostics", "speaker", "semantic", "publishing"]) {
+    const manifest = JSON.parse(readFileSync(new URL(`../../../../../../plugins/${name}/plugin.json`, import.meta.url), "utf8"));
+    for (const surface of manifest.ui) assert.doesNotThrow(() => validateAuthoringSurfaceDeclaration(surface), `${name}:${surface.id}`);
+  }
+  assert.throws(() => validateAuthoringSurfaceDeclaration({ ...outlineSurface, context: { values: Array(1024).fill(0) } }), /nesting or item limit/u);
+  let deep: unknown = "leaf";
+  for (let i = 0; i < 20; i++) deep = { value: deep };
+  assert.throws(() => validateAuthoringSurfaceDeclaration({ ...outlineSurface, context: deep }), /nesting or item limit/u);
+});
 
 test("unchecked required boolean fields submit false while optional fields stay absent", () => {
   const fields = [
