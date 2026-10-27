@@ -53,7 +53,7 @@ export function parseStateEventCandidates(output: string, source: { path: string
   return { events, diagnostics };
 }
 
-export function* previewStateEvents(input: unknown, host: GuestHost, request: ActionRequest): Generator<HostCall, {
+function* prepareStateEvents(input: unknown, host: GuestHost, request: ActionRequest): Generator<HostCall, {
   prompt: string; promptVersion: string; provider_invoked: false; sources: Array<{ path: string; revision: string }>;
   manuscript: { path: string; revision: string; text: string };
 }, unknown> {
@@ -75,8 +75,13 @@ export function* previewStateEvents(input: unknown, host: GuestHost, request: Ac
     manuscript: { path: manuscript.path, revision: manuscript.revision, text: manuscript.text } };
 }
 
+export function* previewStateEvents(input: unknown, host: GuestHost, request: ActionRequest): Generator<HostCall, unknown, unknown> {
+  const prepared = yield* prepareStateEvents(input, host, request);
+  return { prompt: prepared.prompt, promptVersion: prepared.promptVersion, provider_invoked: false, sources: prepared.sources };
+}
+
 export function* suggestStateEvents(input: unknown, host: GuestHost, request: ActionRequest, generate: GenerateProvider): Generator<HostCall, unknown, unknown> {
-  const preview = yield* previewStateEvents(input, host, request);
+  const preview = yield* prepareStateEvents(input, host, request);
   const generated = yield* generate(host, request, { feature: "state-event-draft", prompt: preview.prompt,
     promptVersion: preview.promptVersion, maxOutputTokens: 1024, sourceManifest: preview.sources });
   return { sceneId: (input as { sceneId: string }).sceneId, ...parseStateEventCandidates(generated.text, preview.manuscript),

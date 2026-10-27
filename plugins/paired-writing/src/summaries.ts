@@ -72,7 +72,9 @@ function* sourceForScene(host: GuestHost, request: ActionRequest, id: string): G
       if (!isObj(item) || item.status !== "resolved" || item.type !== "character" || typeof item.name !== "string" || !item.name.trim()) continue;
       if (typeof item.path !== "string" || typeof item.revision !== "string" || !/^[a-f0-9]{64}$/u.test(item.revision)) throw new PairedError("snapshot_stale", "Character reference has no pinned revision");
       if (!known_characters.includes(item.name.trim())) known_characters.push(item.name.trim());
-      if (!context_files.some(file => file.path === item.path)) context_files.push({ path: item.path, revision: item.revision });
+      const existingFile = context_files.find(file => file.path === item.path);
+      if (existingFile && existingFile.revision !== item.revision) throw new PairedError("snapshot_stale", "Character references have conflicting revisions");
+      if (!existingFile) context_files.push({ path: item.path, revision: item.revision });
     }
   } catch (error) {
     if ((error as { code?: string }).code !== "dependency_unavailable") throw error;
@@ -111,9 +113,10 @@ export function* prepareSummary(input: unknown, host: GuestHost, request: Action
 }
 function sceneSummaryCurrent(source: SummarySource): boolean {
   const expected = [{ path: source.metadata_path, revision: source.metadata_revision }, { path: source.manuscript_path, revision: source.manuscript_revision }];
-  return isFreshSummary(source.existing, source.manuscript_revision, "scene-summary@3") && source.existing?.sceneId === source.id &&
-    JSON.stringify(source.existing?.source_files) === JSON.stringify(expected) &&
-    JSON.stringify(source.existing?.context_files) === JSON.stringify(source.context_files) && source.existing?.knowledge_available === source.knowledge_available;
+  if (!isFreshSummary(source.existing, source.manuscript_revision, "scene-summary@3") || source.existing?.sceneId !== source.id ||
+      JSON.stringify(source.existing?.source_files) !== JSON.stringify(expected) ||
+      JSON.stringify(source.existing?.context_files) !== JSON.stringify(source.context_files) || source.existing?.knowledge_available !== source.knowledge_available) return false;
+  try { parseSummaryOutput(JSON.stringify(source.existing), "scene"); return true; } catch { return false; }
 }
 function sceneBody(text: string): string { return text.replace(/^---\s*\r?\n[\s\S]*?\r?\n---\s*\r?\n/u, "").trim(); }
 const common = "あなたは小説執筆支援アシスタントです。\n主張には根拠の引用を付けてください。引用できない内容は断言しないでください。\n出力は日本語で行ってください。";
@@ -190,7 +193,7 @@ export function updateSummaryYaml(source: string | null, updates: Record<string,
       output += `${output.endsWith("\n") || output.length === 0 ? "" : eol}${fragment}`;
       continue;
     }
-    if (!node || !node.range || node.comment || node.commentBefore) throw new PairedError("unsupported_format", `Cannot safely edit ${key}`);
+    if (!node || !node.range || node.comment || node.commentBefore || (node as { anchor?: string; tag?: string }).anchor || (node as { tag?: string }).tag) throw new PairedError("unsupported_format", `Cannot safely edit ${key}`);
     const [start, end] = node.range;
     const original = output.slice(start, end);
     if (/(^|\s)#/u.test(original)) throw new PairedError("unsupported_format", `Cannot safely preserve comments inside ${key}`);
