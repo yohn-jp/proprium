@@ -84,10 +84,25 @@ test('saved scene resumes the exact Japanese selection and viewport after reopen
   });
   expect(saved.anchor).toBeGreaterThan(saved.head);
   expect(saved.scroll).toBeGreaterThan(0);
-  await expect.poll(() => page.evaluate(({ anchor, head, scroll }) => Object.values(localStorage).some(raw => {
-    try { const record = JSON.parse(raw); return record.schema === 'proprium.writing-resume/v1' && record.value?.selection?.anchor === anchor && record.value?.selection?.head === head && record.value?.position?.scroll_top === scroll; }
-    catch { return false; }
-  }), saved), { timeout: 30_000 }).toBe(true);
+  // CodeMirror layout may adjust the outer pane after the initial scroll assignment.
+  // Wait until the persisted value matches the actual settled pane and selection.
+  let settledScroll = 0;
+  await expect.poll(async () => {
+    const result = await page.evaluate(({ anchor, head }) => {
+      const node = document.querySelector('.cm-content') as any; const view = node?.cmTile?.root?.view;
+      const outer = view?.scrollDOM.closest('.st-workspace-panel-body, .st-workspace-mobile-pane') as HTMLElement | null;
+      if (!view || !outer || view.state.selection.main.anchor !== anchor || view.state.selection.main.head !== head) return null;
+      const scroll = outer.scrollTop;
+      const saved = Object.values(localStorage).some(raw => {
+        try { const record = JSON.parse(raw); return record.schema === 'proprium.writing-resume/v1' && record.value?.selection?.anchor === anchor && record.value?.selection?.head === head && record.value?.position?.scroll_top === scroll; }
+        catch { return false; }
+      });
+      return saved ? scroll : null;
+    }, saved);
+    if (result !== null) settledScroll = result;
+    return result !== null;
+  }, { timeout: 30_000 }).toBe(true);
+  saved.scroll = settledScroll;
   const originalBytes = await page.evaluate(async ({ identity }) => {
     const { BrowserLocalGit } = await import(/* @vite-ignore */ new URL('/src/browser/proprium/git/index.ts', location.origin).href);
     const git = new BrowserLocalGit(identity); await git.init(); const file = await git.read('manuscript/custom/a.md'); git.close();
