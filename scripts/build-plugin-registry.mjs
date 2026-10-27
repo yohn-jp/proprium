@@ -11,6 +11,23 @@ const buildMode = process.argv[2] ?? 'example';
 if (!['example', 'authoring'].includes(buildMode)) {
   throw new Error('Usage: node scripts/build-plugin-registry.mjs [example|authoring]');
 }
+const authoringPluginIds = [
+  'proprium.narrative', 'proprium.knowledge', 'proprium.research', 'proprium.paired-writing',
+  'proprium.diagnostics', 'proprium.speaker', 'proprium.semantic', 'proprium.publishing',
+];
+// This order puts each official hard dependency before its dependent. An explicit
+// subset never implicitly rebuilds an unselected component.
+const requestedPluginIds = process.env.PROPRIUM_AUTHORING_PLUGIN_IDS;
+let selectedPluginIds = authoringPluginIds;
+if (requestedPluginIds !== undefined) {
+  if (buildMode !== 'authoring') throw new Error('PROPRIUM_AUTHORING_PLUGIN_IDS is only valid for authoring builds');
+  const requested = requestedPluginIds.split(',').map(id => id.trim());
+  if (requested.some(id => !id || !authoringPluginIds.includes(id)) || new Set(requested).size !== requested.length) {
+    throw new Error('PROPRIUM_AUTHORING_PLUGIN_IDS must contain unique, nonempty official plugin IDs');
+  }
+  const chosen = new Set(requested);
+  selectedPluginIds = authoringPluginIds.filter(id => chosen.has(id));
+}
 const pluginId = 'proprium.compute-sum';
 const pluginVersion = process.env.PROPRIUM_PLUGIN_VERSION;
 const registryVersion = buildMode === 'authoring' ? process.env.PROPRIUM_PLUGIN_REGISTRY_VERSION : pluginVersion;
@@ -371,10 +388,7 @@ function verifyV2ComponentInterface(jco, componentPath, pluginId) {
 }
 
 async function buildAuthoringSuite() {
-  const pluginIds = [
-    'proprium.narrative', 'proprium.knowledge', 'proprium.research', 'proprium.paired-writing',
-    'proprium.diagnostics', 'proprium.speaker', 'proprium.semantic', 'proprium.publishing',
-  ];
+  const pluginIds = selectedPluginIds;
   const sourceRoot = resolve(process.env.PROPRIUM_AUTHORING_PLUGIN_SOURCE_DIR ?? resolve(root, 'plugins'));
   const sourceRootReal = await realpath(sourceRoot);
   const wit = resolve(process.env.PROPRIUM_PLUGIN_V2_WIT ?? resolve(root, 'app/src/browser/proprium/plugin-runtime/wit-v2/main.wit'));

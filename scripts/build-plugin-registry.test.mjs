@@ -318,3 +318,20 @@ test('authoring producer applies the canonical Host schema safety bounds to acti
     await rm(temporary, { recursive: true, force: true });
   }
 });
+
+test('authoring selection rejects empty, unknown and duplicate IDs before build or signing', () => {
+  for (const value of ['', 'proprium.narrative,', 'proprium.unknown', 'proprium.narrative,proprium.narrative']) {
+    const result = spawnSync(process.execPath, ['scripts/build-plugin-registry.mjs', 'authoring'], {
+      cwd: root, env: { ...process.env, PROPRIUM_AUTHORING_PLUGIN_IDS: value }, encoding: 'utf8',
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /must contain unique, nonempty official plugin IDs/u);
+  }
+});
+test('authoring selection accepts valid subsets but is rejected for example builds', () => {
+  const env = { PATH: process.env.PATH, PROPRIUM_AUTHORING_PLUGIN_IDS: ' proprium.semantic , proprium.research ' };
+  const valid = spawnSync(process.execPath, ['scripts/build-plugin-registry.mjs', 'authoring'], { cwd: root, env, encoding: 'utf8' });
+  assert.match(valid.stderr, /Set PROPRIUM_PLUGIN_REGISTRY_VERSION/u);
+  const invalidMode = spawnSync(process.execPath, ['scripts/build-plugin-registry.mjs', 'example'], { cwd: root, env, encoding: 'utf8' });
+  assert.match(invalidMode.stderr, /only valid for authoring builds/u);
+});
