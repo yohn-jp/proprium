@@ -10,6 +10,7 @@ export default defineConfig(shared, {
   testIgnore: [],
   globalSetup: "./authoring-official.setup.ts",
   timeout: 180_000,
+  use: { ...shared.use, actionTimeout: 15_000 },
   webServer: [
     { command: `node node_modules/typescript/bin/tsc -p packages/contracts/tsconfig.json && node app/node_modules/vite/bin/vite.js app --config app/vite.proprium.config.ts --host 127.0.0.1 --port ${port} --strictPort`, cwd: source, url: `http://127.0.0.1:${port}/`, reuseExistingServer: false, timeout: 120_000 },
   ],

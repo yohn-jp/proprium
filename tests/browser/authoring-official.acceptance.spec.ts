@@ -44,10 +44,14 @@ test("signed Narrative installs and navigates a large work in the real Host", as
   }
   await plugin.getByRole("button", { name: "Enable" }).click();
   await expect(manager.getByRole("status")).toContainText("proprium.narrative@0.1.0 is enabled");
-  const desktop = page.getByRole("button", { name: "パネル：Work outline", exact: true });
-  if (await desktop.isVisible()) await desktop.click();
-  else await page.getByRole("tab", { name: "Work outline", exact: true }).click();
-  await expect(page.getByText("Volume One", { exact: true })).toBeVisible();
+  await page.locator(".st-workspace-configuration > summary").click();
+  await page.locator(".st-workspace-panel-menu > summary").click();
+  await page.getByRole("button", { name: "Work outlineを表示する", exact: true }).click();
+  await page.locator(".st-workspace-configuration > summary").click();
+  const tab = page.getByRole("tab", { name: "Work outline", exact: true });
+  if (await tab.isVisible() && await tab.getAttribute("aria-selected") !== "true") await tab.click();
+  await page.getByRole("button", { name: "読み込む", exact: true }).click();
+  await expect(page.getByText("Volume One", { exact: true })).toBeVisible({ timeout: 120_000 });
   await page.getByText("Volume One", { exact: true }).click();
   await expect(page.getByText("Chapter One", { exact: true })).toBeVisible();
   await page.getByText("Chapter One", { exact: true }).click();
