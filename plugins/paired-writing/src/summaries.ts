@@ -35,7 +35,7 @@ export function isFreshSummary(value: unknown, sourceHash: string, promptVersion
     Array.isArray(value.summaryLines) && value.summaryLines.length === 3 && value.summaryLines.every(line => typeof line === "string" && !!line.trim());
 }
 function summaryPath(metadataPath: string, id: string): string {
-  if (!/^[A-Za-z0-9_-]{1,256}$/u.test(id) || !/\/scenes\/[^/]+\.ya?ml$/iu.test(metadataPath)) throw new PairedError("invalid_path", "Scene summary path cannot be derived safely");
+  if (!id || id.length > 256 || id === "." || id === ".." || /[\/\\\0]/u.test(id) || !/\/scenes\/[^/]+\.ya?ml$/iu.test(metadataPath)) throw new PairedError("invalid_path", "Scene summary path cannot be derived safely");
   return metadataPath.replace(/\/scenes\/[^/]+\.ya?ml$/iu, `/scene-summaries/${id}.yaml`);
 }
 function* optionalYaml(host: GuestHost, request: ActionRequest, path: string): Generator<HostCall, { revision: string | null; raw: Record<string, unknown> | null; text: string | null }, unknown> {
@@ -119,12 +119,13 @@ function sceneSummaryCurrent(source: SummarySource): boolean {
   try { parseSummaryOutput(JSON.stringify(source.existing), "scene"); return true; } catch { return false; }
 }
 function sceneBody(text: string): string { return text.replace(/^---\s*\r?\n[\s\S]*?\r?\n---\s*\r?\n/u, "").trim(); }
+const boundedPrompt = (value: string): string => { if (new TextEncoder().encode(value).byteLength > 768 * 1024) throw new PairedError("capacity", "Summary prompt exceeds the bounded output size"); return value; };
 const common = "あなたは小説執筆支援アシスタントです。\n主張には根拠の引用を付けてください。引用できない内容は断言しないでください。\n出力は日本語で行ってください。";
 export function sceneSummaryPrompt(source: SummarySource): string {
-  return `${common}\n\n次の小説シーンを日本語で要約してください。\n要約は必ず3行、加えて登場人物とシーン内の状態変化を抽出してください。\nscene_id: ${source.id}\n既知の登場人物: ${source.known_characters.join("、") || "なし"}\n本文:\n${sceneBody(source.text)}\n\nJSONのみを返してください。スキーマ: {"summaryLines":["...","...","..."],"characters":["..."],"stateChanges":["..."]}`;
+  return boundedPrompt(`${common}\n\n次の小説シーンを日本語で要約してください。\n要約は必ず3行、加えて登場人物とシーン内の状態変化を抽出してください。\nscene_id: ${source.id}\n既知の登場人物: ${source.known_characters.join("、") || "なし"}\n本文:\n${sceneBody(source.text)}\n\nJSONのみを返してください。スキーマ: {"summaryLines":["...","...","..."],"characters":["..."],"stateChanges":["..."]}`);
 }
 export function chapterSummaryPrompt(id: string, children: Array<{ id: string; summaryLines: string[] }>): string {
-  return `${common}\n\n次のシーン要約群から章のあらすじを日本語で3行にまとめてください。\nchapter_id: ${id}\nシーン要約:\n${children.map(child => `## ${child.id}\n${child.summaryLines.join("\n")}`).join("\n\n")}\n\nJSONのみを返してください。スキーマ: {"summaryLines":["...","...","..."]}`;
+  return boundedPrompt(`${common}\n\n次のシーン要約群から章のあらすじを日本語で3行にまとめてください。\nchapter_id: ${id}\nシーン要約:\n${children.map(child => `## ${child.id}\n${child.summaryLines.join("\n")}`).join("\n\n")}\n\nJSONのみを返してください。スキーマ: {"summaryLines":["...","...","..."]}`);
 }
 export function expectedSummaryRevisions(prepared: SummaryPreparation): Array<{ path: string; revision: string | null }> {
   const values = new Map<string, string | null>();
@@ -141,9 +142,12 @@ export function* previewSummary(input: unknown, host: GuestHost, request: Action
     cached: sceneSummaryCurrent(source),
     prompt: sceneSummaryPrompt(source) }));
   const cached = prepared.sources.every((source, i) => children[i]!.cached);
-  return { scope: prepared.scope, targetId: prepared.targetId, snapshot: request.snapshot, provider_invoked: false,
-    children, expectedFileRevisions: expectedSummaryRevisions(prepared),
+  const diagnostics = prepared.sources.filter(source => !source.knowledge_available).map(source => ({ code: "dependency_unavailable", severity: "warning", sceneId: source.id, message: "Knowledge character references were unavailable" }));
+  const result = { scope: prepared.scope, targetId: prepared.targetId, snapshot: request.snapshot, provider_invoked: false,
+    children, diagnostics, expectedFileRevisions: expectedSummaryRevisions(prepared),
     chapterPrompt: prepared.scope === "chapter" && cached ? chapterSummaryPrompt(prepared.targetId, prepared.sources.map(source => ({ id: source.id, summaryLines: parseSummaryOutput(JSON.stringify(source.existing), "scene").summaryLines }))) : null };
+  if (new TextEncoder().encode(JSON.stringify(result)).byteLength > 768 * 1024) throw new PairedError("capacity", "Summary preview exceeds the bounded output size");
+  return result;
 }
 
 export function* suggestSummary(input: unknown, host: GuestHost, request: ActionRequest, generate: GenerateProvider): Generator<HostCall, unknown, unknown> {
@@ -161,19 +165,20 @@ export function* suggestSummary(input: unknown, host: GuestHost, request: Action
     }
   }
   const expectedFileRevisions = expectedSummaryRevisions(prepared);
+  const diagnostics = prepared.sources.filter(source => !source.knowledge_available).map(source => ({ code: "dependency_unavailable", severity: "warning", sceneId: source.id, message: "Knowledge character references were unavailable" }));
   const citations = prepared.sources.map(source => ({ path: source.manuscript_path, revision: source.manuscript_revision, sceneId: source.id }));
   if (prepared.scope === "scene") return { scope: "scene", targetId: prepared.targetId, summary: children[0]!.summary,
-    sourceHash: children[0]!.sourceHash, cached: children[0]!.cached, citations, expectedFileRevisions, provenance: children[0]!.provenance };
+    sourceHash: children[0]!.sourceHash, cached: children[0]!.cached, citations, diagnostics, expectedFileRevisions, provenance: children[0]!.provenance };
   const sourceHash = chapterSummaryFingerprint(children);
   if (isFreshSummary(prepared.parent_existing, sourceHash, prepared.promptVersion) && prepared.parent_existing?.id === prepared.targetId &&
       JSON.stringify(prepared.parent_existing?.source_files) === JSON.stringify(prepared.sources.flatMap(source => [{ path: source.metadata_path, revision: source.metadata_revision }, { path: source.manuscript_path, revision: source.manuscript_revision }])) &&
       JSON.stringify(prepared.parent_existing?.context_files) === JSON.stringify([...new Map(prepared.sources.flatMap(source => source.context_files).map(file => [file.path, file])).values()]) &&
       prepared.parent_existing?.knowledge_available === prepared.sources.every(source => source.knowledge_available) && children.every(child => child.cached)) {
-    return { scope: "chapter", targetId: prepared.targetId, summary: parseSummaryOutput(JSON.stringify(prepared.parent_existing), "chapter"), sourceHash, children, cached: true, citations, expectedFileRevisions, provenance: prepared.parent_existing };
+    return { scope: "chapter", targetId: prepared.targetId, summary: parseSummaryOutput(JSON.stringify(prepared.parent_existing), "chapter"), sourceHash, children, cached: true, citations, diagnostics, expectedFileRevisions, provenance: prepared.parent_existing };
   }
   const generated = yield* generate(host, request, { feature: "chapter-summary", prompt: chapterSummaryPrompt(prepared.targetId, children.map(child => ({ id: child.id, summaryLines: child.summary.summaryLines }))),
     promptVersion: prepared.promptVersion, maxOutputTokens: 512, sourceManifest: citations });
-  return { scope: "chapter", targetId: prepared.targetId, summary: parseSummaryOutput(generated.text, "chapter"), sourceHash, children, cached: false, citations, expectedFileRevisions, provenance: generated.provenance };
+  return { scope: "chapter", targetId: prepared.targetId, summary: parseSummaryOutput(generated.text, "chapter"), sourceHash, children, cached: false, citations, diagnostics, expectedFileRevisions, provenance: generated.provenance };
 }
 
 /** Preserve unknown summary keys and comments; reject non-mapping input before proposing. */

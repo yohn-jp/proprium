@@ -70,7 +70,11 @@ function* prepareStateEvents(input: unknown, host: GuestHost, request: ActionReq
     "各 event は kind, target, operation, before, after, object, payload, evidenceQuote を返します。before/after はオブジェクトか null。evidenceQuote は本文中の連続した完全一致の引用です。人物の信念、読者への開示、将来予測は出力しません。",
     `sceneId: ${sceneId}`, `直前の確定状態: ${previous}`, `本文:\n${body}`,
     'JSONのみを返してください。スキーマ: {"events":[{"kind":"location|acquaintance|ownership|knowledge","target":"entity-id","operation":"...","before":{},"after":{},"object":"entity-id|null","payload":{},"evidenceQuote":"exact quote"}]}'].join("\n\n");
-  return { prompt, promptVersion: "state-event-draft.v1", provider_invoked: false,
+  if (new TextEncoder().encode(prompt).byteLength > 768 * 1024) throw new PairedError("capacity", "State-event prompt exceeds the bounded output size");
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < body.length; i++) { hash ^= body.charCodeAt(i); hash = Math.imul(hash, 0x01000193); }
+  const promptVersion = `state-event-extraction:v1:${(hash >>> 0).toString(16).padStart(8, "0")}`;
+  return { prompt, promptVersion, provider_invoked: false,
     sources: [{ path: scene.metadata_path, revision: scene.metadata_revision }, { path: manuscript.path, revision: manuscript.revision }],
     manuscript: { path: manuscript.path, revision: manuscript.revision, text: manuscript.text } };
 }
