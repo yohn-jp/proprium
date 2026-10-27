@@ -1077,7 +1077,7 @@ export class ChangeWriter {
     return this.dependencies.journal.transact(scope, currentValue => {
       const state = defaultState(currentValue);
       const prior = state.proposals[proposalId];
-      if (!prior || !sameScope(prior.record.scope, scope)) fail("storage_unknown", "Proposal disappeared while applying its receipt.");
+      if (!prior || !sameWorkspace(prior.record.scope, scope)) fail("storage_unknown", "Proposal disappeared while applying its receipt.");
       const units = prior.record.units.map(unit => unit.id === unitId ? Object.freeze({ ...unit, status, resulting_revisions: Object.freeze([...resulting]), ...(failure ? { failure: Object.freeze({ ...failure }) } : {}) }) : unit);
       if (!units.some(unit => unit.id === unitId)) fail("storage_unknown", "The write-ahead unit is not present in its proposal receipt.");
       const allApprovedDone = prior.record.approved_unit_ids.every(id => units.find(unit => unit.id === id)?.status === "applied");
