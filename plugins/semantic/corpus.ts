@@ -29,7 +29,7 @@ export function* collectSemanticCorpus(host: GuestHost, request: ActionRequest):
   } while (cursor !== null);
   const entities: SemanticSourceEntity[] = []; const ids = new Set<string>(); const links = new Map<string, string>();
   function* read(path: string): Generator<HostCall, string, unknown> {
-    const entry = entries.get(path); if (!entry) throw failure('snapshot_stale', `Linked source is missing: ${path}`);
+    const entry = entries.get(path); if (!entry) throw failure('file_not_found', `Linked source is missing: ${path}`);
     totalBytes += entry.byte_length; if (totalBytes > MAX_BYTES) throw failure('capacity', 'Semantic source bytes exceed the limit');
     const file = yield* readFileVersioned(host, request.snapshot, path, entry.revision);
     if (file.bytes.length !== entry.byte_length) throw failure('snapshot_stale', `Source length changed: ${path}`);

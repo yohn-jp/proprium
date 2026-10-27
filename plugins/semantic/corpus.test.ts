@@ -39,3 +39,6 @@ test('corpus can consume component sentence boundaries without browser Intl', as
     assert.equal(corpus.passages[0]?.evidence.quote, '星が見える。');
   } finally { Object.defineProperty(globalThis, 'Intl', { value: original, configurable: true, writable: true }); }
 });
+test('a missing explicitly linked manuscript reports its path', () => {
+  assert.throws(() => run({ 'plot/scenes/a.yaml': 'id: scene-a\ntype: scene\nmanuscript: manuscript/missing.md\n' }), (error: any) => error.code === 'file_not_found' && error.message.includes('manuscript/missing.md'));
+});
