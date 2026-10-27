@@ -24,6 +24,7 @@ import { AuthoringAssets } from "./authoring/AuthoringAssets.js";
 import { AuthoringCommandMenu } from "./authoring/AuthoringCommandMenu.js";
 import { NarrativeNavigation } from "./authoring/NarrativeNavigation.js";
 import { NarrativePortableResume } from "./authoring/NarrativePortableResume.js";
+import { NarrativeReadingMarkCapture, savedSelectionRange } from "./authoring/NarrativeReadingMarkCapture.js";
 import { SemanticTaskControls } from "./authoring/SemanticTaskControls.js";
 import { ResearchCandidateControls } from "../authoring/ResearchCandidateControls.js";
 import { useProviderConsent } from "./use-provider-consent.js";
@@ -1147,6 +1148,14 @@ export function HostApp(): ReactElement {
     </div></details>
   </div>;
   const editor = workspace && git && currentFile ? <section className="restored-editor">
+    {authoring && authoringRegistrations.some(row=>row.pluginId==="proprium.narrative"&&row.surface.id==="proprium.narrative.reading-marks"&&row.status==="ready") && <NarrativeReadingMarkCapture key={`mark:${workspaceGeneration}:${currentFile.path}`}
+      capture={()=>{
+        const file=currentFileRef.current,scene=selectedNarrativeScene.current,position=writingPosition.current;
+        if(composingRef.current||file?.dirty)throw new Error("日本語入力を確定し、ローカルへ保存してから読書マークを作成してください。");
+        if(!file||file.text===null||!file.data||!scene||!position?.selection||position.path!==file.path||scene.path!==file.path||scene.generation!==workspaceGenerationRef.current||scene.savedBytes!==file.data)throw new Error("作品構成から保存済みのシーンを開き、本文の範囲を選択してください。");
+        const raw=new TextDecoder("utf-8",{fatal:true,ignoreBOM:true}).decode(file.data);
+        return {scene_id:scene.id,...savedSelectionRange(raw,file.text,position.selection.anchor,position.selection.head),expected_metadata_revision:scene.metadataRevision,expected_manuscript_revision:scene.manuscriptRevision};
+      }} propose={async(event,input)=>{const result=await invokeAuthoring(event,"proprium.narrative","proprium.narrative.reading-marks.create-ui",{...input});if(!result.action_result.ok)throw new Error(result.action_result.error.message);}} />}
     {authoring && selectedNarrativeScene.current?.path===currentFile.path && selectedNarrativeScene.current.generation===workspaceGeneration && authoringRegistrations.some(row=>row.pluginId==="proprium.narrative"&&row.status==="ready") && <NarrativeNavigation
       sceneId={selectedNarrativeScene.current.id} scopeKey={JSON.stringify([workspaceGeneration,status.head,status.entries.map(entry=>[entry.path,entry.worktree,entry.stage]),currentFile.dirty,authoringRegistrations.filter(row=>row.pluginId==="proprium.narrative").map(row=>row.manifestDigest)])}
       read={async(actionId,input,signal)=>{const result=await authoring.invokeRead("proprium.narrative",actionId,input,signal);if(!result.ok)throw new Error(`${result.error.code}: ${result.error.message}`);return result.value;}}
