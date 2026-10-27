@@ -27,6 +27,7 @@ import { NarrativePortableResume } from "./authoring/NarrativePortableResume.js"
 import { NarrativeReadingMarkCapture, savedSelectionRange } from "./authoring/NarrativeReadingMarkCapture.js";
 import { SemanticTaskControls } from "./authoring/SemanticTaskControls.js";
 import { ResearchCandidateControls } from "../authoring/ResearchCandidateControls.js";
+import { sourceTextDecoder } from "../authoring/source-text.js";
 import { useProviderConsent } from "./use-provider-consent.js";
 import { ProviderSettingsStore } from "../authoring/provider-settings.js";
 import { ProviderSettingsPanel } from "../authoring/provider-settings-panel.js";
@@ -141,7 +142,7 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The operation could not be completed.";
 }
 function asText(data: Uint8Array): string | null {
-  try { return new TextDecoder("utf-8", { fatal: true }).decode(data); }
+  try { return sourceTextDecoder().decode(data); }
   catch { return null; }
 }
 

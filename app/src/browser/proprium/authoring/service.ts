@@ -24,6 +24,7 @@ import { ProviderRequestBroker, type ProviderBrokerOptions, type ProviderConsent
 import { ProviderUsageHistory } from "./provider-usage.js";
 import { AuthoringTaskRegistry, SEMANTIC_PROGRESS_KEY } from "./tasks.js";
 import { assertValue } from "./schema.js";
+import { sourceTextDecoder } from "./source-text.js";
 
 export interface AuthoringWorkspaceSelection {
   readonly git: BrowserLocalGit;
@@ -718,7 +719,7 @@ export class BrowserAuthoringService {
   private async readUtf16Span(context: AuthoringSnapshotContext, path: string, start: number, end: number): Promise<string> {
     const stat = await this.snapshotStat(context, path);
     if (!stat) throw Object.assign(new Error("Evidence file is missing"), { code: "file_not_found" });
-    const decoder = new TextDecoder("utf-8", { fatal: true });
+    const decoder = sourceTextDecoder();
     let text = "";
     for (let offset = 0; offset < stat.byte_length;) {
       const length = Math.min(65_536, stat.byte_length - offset);
