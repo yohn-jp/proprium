@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { createGuest } from "../shared/guest.js";
 import type { ActionRequest, ChangeSet, Snapshot } from "../../app/src/browser/proprium/authoring/types.js";
 import type { Handler, HostCall, GuestHost } from "../shared/guest.js";
 import type { CacheKey, FileEntry, FilePage } from "../shared/operations.js";
@@ -119,6 +122,33 @@ async function invoke(
   }
   return state.value;
 }
+
+test("search values match the signed schema with and without envelope warnings", async () => {
+  const schemaPath = process.env.PROPRIUM_AUTHORING_SCHEMA ?? fileURLToPath(new URL("../../app/src/browser/proprium/authoring/schema.ts", import.meta.url));
+  const { assertValue } = await import(pathToFileURL(schemaPath).href);
+  const metadata = JSON.parse(readFileSync(new URL("./plugin.json", import.meta.url), "utf8"));
+  const outputSchema = metadata.actions.find((row: any) => row.action_id === "research.query").output_schema;
+  for (const morphologyHints of [false, true]) {
+    const host = new ResearchHostFixture();
+    const item = file("manuscript/scene.md", "青い灯台で待つ。\n"); host.files.set(item.path, item);
+    const guest = createGuest("proprium.research", createResearchHandlers());
+    guest.initialize({ pluginId: "proprium.research", version: "1.0.0", workspaceId: scope.workspace_id });
+    try {
+      const request = { schema_version: 1, request_id: `query-${morphologyHints}`, plugin_id: "proprium.research", action_id: "research.query", scope, snapshot,
+        input: { query: "灯台", mode: "lexical", morphologyHints }, deadline_ms: 30000 };
+      let output = JSON.parse(guest.invoke(JSON.stringify(request)));
+      while (output.kind === "host_call") {
+        const value = host.respond(output.operation, output.payload);
+        output = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: output.call_id, ok: true, value })));
+      }
+      assert.equal(output.ok, true);
+      assertValue(outputSchema, output.value, "Research query output");
+      assert.equal(output.value.hits[0].path, item.path);
+      assert.deepEqual(output.warnings, morphologyHints ? ["tokenizer_unavailable"] : []);
+      assert.equal(Object.hasOwn(output.value, "warnings"), false);
+    } finally { guest.dispose(); }
+  }
+});
 
 test("Research guest pages a 300-file Host snapshot and binds cursors to its exact revision", async () => {
   const host = new ResearchHostFixture();

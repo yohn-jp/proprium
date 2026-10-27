@@ -252,7 +252,6 @@
           "nextCursor",
           "indexSnapshot",
           "coverage",
-          "warnings",
           "query",
           "mode"
         ],
