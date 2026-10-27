@@ -4,6 +4,7 @@ import { BrowserGitSnapshotPort } from "./authoring-snapshot-port.js";
 import { AuthoringSnapshotReader, type AuthoringScope } from "../authoring/snapshots.js";
 import { ChangeWriter, ChangeWriterError, type WriterScope } from "../authoring/writer.js";
 import { IndexedDbWriterJournalStore } from "../authoring/store.js";
+import { IndexedDbPluginStore } from "../plugins/store.js";
 import { BrowserGitWriterWorkspace } from "../authoring/writer-browser.js";
 
 declare global {
@@ -15,12 +16,13 @@ declare global {
         reader: AuthoringSnapshotReader;
         scope: AuthoringScope;
       };
-      openWriterSession(localWorkspaceId: string, databaseName?: string): {
+      openWriterSession(localWorkspaceId: string, databaseName?: string, generation?: string): {
         git: BrowserLocalGit;
         writer: ChangeWriter;
         writer_workspace: BrowserGitWriterWorkspace;
         scope: WriterScope;
       };
+      openRegistryStore(): IndexedDbPluginStore;
       holdLock(localWorkspaceId: string): Promise<boolean>;
       releaseLock(): void;
     };
@@ -58,7 +60,7 @@ window.browserGitTest = {
     };
     return { git, reader: new AuthoringSnapshotReader(new BrowserGitSnapshotPort(git, workspace)), scope };
   },
-  openWriterSession(localWorkspaceId, databaseName = "proprium-authoring-writer-browser-test") {
+  openWriterSession(localWorkspaceId, databaseName = "proprium-authoring-writer-browser-test", generation = "browser-git-test-generation") {
     const workspace: WorkspaceIdentity = {
       origin: window.location.origin,
       repositoryId: 923456789,
@@ -72,7 +74,7 @@ window.browserGitTest = {
       workspace_id: localWorkspaceId,
       repository_id: workspace.repositoryId,
       branch: workspace.branch,
-      generation: "browser-git-test-generation",
+      generation,
     };
     const writer_workspace = new BrowserGitWriterWorkspace(git, workspace, {
       selected_scope: () => scope,
@@ -92,6 +94,9 @@ window.browserGitTest = {
       },
     });
     return { git, writer, writer_workspace, scope };
+  },
+  openRegistryStore() {
+    return new IndexedDbPluginStore();
   },
   async holdLock(localWorkspaceId) {
     const input = new TextEncoder().encode(localWorkspaceId);

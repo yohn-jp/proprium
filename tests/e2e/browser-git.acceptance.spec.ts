@@ -6,6 +6,7 @@ declare global {
   interface Window {
     browserGitTest: {
       open(localWorkspaceId: string, changes?: Partial<WorkspaceIdentity>): BrowserLocalGit;
+      openRegistryStore(): import("../../app/src/browser/proprium/plugins/store.js").IndexedDbPluginStore;
       holdLock(localWorkspaceId: string): Promise<boolean>;
       releaseLock(): void;
     };
@@ -13,6 +14,46 @@ declare global {
 }
 
 const workspaceId = () => `pw-${crypto.randomUUID()}`;
+
+test("separate browser tabs cannot roll back an observed signed registry pointer", async ({ page, context }) => {
+  const second = await context.newPage();
+  try {
+    await Promise.all([page.goto("/browser-git-test.html"), second.goto("/browser-git-test.html")]);
+    await Promise.all([expect(page.locator("#ready")).toHaveText("ready"), expect(second.locator("#ready")).toHaveText("ready")]);
+    const id = crypto.randomUUID();
+    const url = `https://registry.example.test/${id}/registry.json`;
+    const stateKey = `latest-observed-${id}`;
+    // This exercises the real IndexedDB transaction after signed admission.
+    // Signature admission itself is covered by manager tests, not mocked here.
+    const advance = (target: typeof page, version: string, key: string) =>
+      target.evaluate(async ({ url, version, key }) => {
+        const store = window.browserGitTest.openRegistryStore();
+        const document = { schema: "proprium.registry/v1" as const, id: "fixture.registry", version,
+          artifactBase: "https://assets.example.test/", plugins: [] };
+        const bytes = new TextEncoder().encode(JSON.stringify(document));
+        const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+        const digest = Array.from(hash, byte => byte.toString(16).padStart(2, "0")).join("");
+        await store.advanceRegistry({ url, bytes, signature: new Uint8Array(64), digest, document }, key);
+        return digest;
+      }, { url, version, key });
+    const latest = await advance(page, "1.0.2", stateKey);
+    await expect(advance(second, "1.0.1", stateKey)).rejects.toThrow(/rollback/i);
+    const observed = await second.evaluate(async key => window.browserGitTest.openRegistryStore().getState(key), stateKey);
+    expect(observed).toBe(latest);
+
+    const concurrentKey = `${stateKey}-concurrent`;
+    const [older, newer] = await Promise.allSettled([
+      advance(page, "1.0.1", concurrentKey),
+      advance(second, "1.0.2", concurrentKey),
+    ]);
+    expect(newer.status).toBe("fulfilled");
+    expect(older.status === "fulfilled" || older.reason instanceof Error).toBe(true);
+    const raced = await page.evaluate(async key => window.browserGitTest.openRegistryStore().getState(key), concurrentKey);
+    expect(raced).toBe(latest);
+  } finally {
+    await second.close();
+  }
+});
 
 test("Worker Git commits preserve exact SHAs and binary bytes across a page restart", async ({ page }) => {
   const id = workspaceId();
@@ -360,3 +401,102 @@ for (const mutation of ["edit", "add", "delete", "head"] as const) {
     await other.close();
   });
 }
+
+test("two tabs cannot commit competing Scratch checkpoints from one unreviewed workspace", async ({ page, context }) => {
+  const other = await context.newPage();
+  const id = workspaceId();
+  const author = { name: "Scratch Acceptance", email: "scratch@example.test" };
+  try {
+    await Promise.all([page.goto("/browser-git-test.html"), other.goto("/browser-git-test.html")]);
+    await page.evaluate(async id => { const git = window.browserGitTest.open(id); await git.init(); git.close(); }, id);
+    await other.evaluate(async id => { const git = window.browserGitTest.open(id); await git.init(); git.close(); }, id);
+    const checkpoint = (tab: typeof page, path: string) => tab.evaluate(async ({ id, path, author }) => {
+      const git = window.browserGitTest.open(id);
+      try {
+        const written = await git.checkpointScratch([{
+          path, expectedRevision: { oid: null }, content: new TextEncoder().encode(path),
+        }], null, "Atomic Scratch", author);
+        return { ok: true as const, path, head: written.head, code: "none" };
+      } catch (error) {
+        return { ok: false as const, path, head: null, code: (error as { code?: string }).code ?? "unknown" };
+      } finally { git.close(); }
+    }, { id, path, author });
+    const results = await Promise.all([
+      checkpoint(page, "meta/scratch/from-a.md"), checkpoint(other, "meta/scratch/from-b.md"),
+    ]);
+    const winner = results.find(item => item.ok);
+    const loser = results.find(item => !item.ok);
+    expect(winner).toBeDefined();
+    expect(loser).toBeDefined();
+    expect(["workspace_busy", "revision_conflict"]).toContain(loser!.code);
+    const observed = await page.evaluate(async id => {
+      const git = window.browserGitTest.open(id);
+      try {
+        const verified = await git.verifyStorage();
+        const log = await git.log();
+        const files = await git.listFiles();
+        const diff = await git.commitDiff(log[0]!.oid);
+        return { verified: verified.verified, head: log[0]!.oid, paths: diff.changes.map(change => change.path),
+          files: files.map(file => file.path), status: (await git.status()).entries };
+      } finally { git.close(); }
+    }, id);
+    expect(observed.verified).toBe(true);
+    expect(observed.head).toBe(winner!.head);
+    expect(observed.paths).toEqual([winner!.path]);
+    expect(observed.files).toEqual([winner!.path]);
+    expect(observed.status).toEqual([]);
+  } finally { await other.close(); }
+});
+
+test("a foreign tab cannot contaminate Scratch bytes between review and commit", async ({ page, context }) => {
+  const other = await context.newPage();
+  const id = workspaceId();
+  const scratchPath = "meta/scratch/owned.md";
+  const unrelatedPath = "notes/unrelated.md";
+  try {
+    await Promise.all([page.goto("/browser-git-test.html"), other.goto("/browser-git-test.html")]);
+    await page.evaluate(async id => { const git = window.browserGitTest.open(id); await git.init(); git.close(); }, id);
+    await other.evaluate(async id => { const git = window.browserGitTest.open(id); await git.init(); git.close(); }, id);
+    const [checkpoint, unrelated] = await Promise.all([
+      page.evaluate(async ({ id, scratchPath }) => {
+        const git = window.browserGitTest.open(id);
+        try {
+          const result = await git.checkpointScratch([{ path: scratchPath, expectedRevision: { oid: null },
+            content: new TextEncoder().encode("reviewed scratch") }], null, "Scratch", { name: "Reviewer", email: "reviewer@example.test" });
+          return { ok: true as const, head: result.head, code: "none" };
+        } catch (error) { return { ok: false as const, head: null, code: (error as { code?: string }).code ?? "unknown" }; }
+        finally { git.close(); }
+      }, { id, scratchPath }),
+      other.evaluate(async ({ id, unrelatedPath }) => {
+        const git = window.browserGitTest.open(id);
+        try {
+          await git.write(unrelatedPath, new TextEncoder().encode("foreign edit"), { oid: null });
+          return { ok: true as const, code: "none" };
+        } catch (error) { return { ok: false as const, code: (error as { code?: string }).code ?? "unknown" }; }
+        finally { git.close(); }
+      }, { id, unrelatedPath }),
+    ]);
+    expect(checkpoint.ok || unrelated.ok).toBe(true);
+    if (!checkpoint.ok) expect(["workspace_busy", "revision_conflict"]).toContain(checkpoint.code);
+    if (!unrelated.ok) expect(unrelated.code).toBe("workspace_busy");
+    const observed = await page.evaluate(async id => {
+      const git = window.browserGitTest.open(id);
+      try {
+        await git.verifyStorage();
+        const log = await git.log();
+        return { commits: log.length,
+          committedPaths: log.length ? (await git.commitDiff(log[0]!.oid)).changes.map(change => change.path) : [],
+          files: (await git.listFiles()).map(file => file.path) };
+      } finally { git.close(); }
+    }, id);
+    if (checkpoint.ok) {
+      expect(observed.commits).toBe(1);
+      expect(observed.committedPaths).toEqual([scratchPath]);
+    } else {
+      expect(observed.commits).toBe(0);
+      expect(observed.files).not.toContain(scratchPath);
+    }
+    expect(observed.committedPaths).not.toContain(unrelatedPath);
+  } finally { await other.close(); }
+});
+

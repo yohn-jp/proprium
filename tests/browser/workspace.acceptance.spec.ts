@@ -99,7 +99,11 @@ test("local start creates and reopens a generic browser-only workspace without c
   await page.getByLabel("New file path", { exact: true }).fill("notes.md");
   await page.getByRole("button", { name: "Create new file", exact: true }).click();
   const editor = page.getByRole("textbox", { name: "原稿 Markdown" });
-  await editor.fill("A generic local workspace.\n");
+  await editor.fill("A generic local workspace.");
+  await editor.press("End");
+  await editor.press("Enter");
+  // Prove the trailing LF was actually entered, not merely requested via fill().
+  await expectEditorText(page, "A generic local workspace.\n");
   await page.getByRole("button", { name: "端末に保存", exact: true }).click();
   await expect(page.locator(".host-message[role='status']")).toContainText("saved to this browser's local Git worktree");
 
