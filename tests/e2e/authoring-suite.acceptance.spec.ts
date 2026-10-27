@@ -142,7 +142,7 @@ test("normal Host installs and enables all independently signed authoring Compon
 
   // Exercise a real leaf package through disable, uninstall and verified reinstall.
   const leaf = release.plugins.find(plugin => plugin.id === "proprium.publishing")!;
-  const leafCard = enabledPanel.getByRole("listitem").filter({ has: page.locator(".plugin-card-head strong", { hasText: /^proprium\.publishing$/ }) });
+  const leafCard = enabledPanel.getByRole("listitem").filter({ has: page.locator(".plugin-card-head strong", { hasText: /^proprium\.publishing$/ }) }).filter({ hasText: `v${leaf.version} ·` });
   await leafCard.getByRole("button", { name: "Disable", exact: true }).click();
   await expect(leafCard).toContainText("installed, disabled");
   page.once("dialog", dialog => void dialog.accept());
@@ -153,20 +153,21 @@ test("normal Host installs and enables all independently signed authoring Compon
   await page.getByRole("button", { name: "ダウンロードして無効状態でインストール", exact: true }).click();
   await expect(leafCard).toContainText("installed, disabled");
 
-  // Metadata-only patch versions reuse the exact previously verified 2e components.
+  // Metadata-only patch versions reuse the exact previously verified source components.
   // A newer root-signed snapshot retains the old entries and delegates new manifests.
   const fixtureDir = process.env.PROPRIUM_VERSION_FIXTURE_DIR;
   if (fixtureDir) {
     const registryUrl = process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_URL!;
     const origin = new URL(registryUrl).origin;
+    const artifactBase = new URL(release.registry.artifactBase);
     const next = await readFile(join(fixtureDir, "next.json"));
     const signature = await readFile(join(fixtureDir, "next.json.sig"));
     await page.route("**/*", async route => {
       const url = new URL(route.request().url());
       if (url.href === registryUrl) return route.fulfill({status:200, contentType:"application/json",body:next,headers:{"cache-control":"no-store"}});
       if (url.href === `${registryUrl}.sig`) return route.fulfill({status:200,contentType:"application/octet-stream",body:signature,headers:{"cache-control":"no-store"}});
-      if (url.origin === "https://authoring-build.invalid" && url.pathname.startsWith("/plugins/")) {
-        const relative = decodeURIComponent(url.pathname.slice("/plugins/".length));
+      if (url.origin === artifactBase.origin && url.pathname.startsWith(artifactBase.pathname)) {
+        const relative = decodeURIComponent(url.pathname.slice(artifactBase.pathname.length));
         if (!/^[A-Za-z0-9._/-]+$/u.test(relative) || relative.split("/").some(part => part === "." || part === ".." || !part)) return route.fulfill({status:400});
         try { const body = await readFile(join(fixtureDir, relative)); return route.fulfill({status:200,body,contentType:relative.endsWith(".json") ? "application/json" : relative.endsWith(".wasm") ? "application/wasm" : "application/octet-stream",headers:{"access-control-allow-origin":origin,"cache-control":"no-store"}}); }
         catch { return route.fulfill({status:404}); }
