@@ -113,3 +113,12 @@ test("settings read tolerates and omits future nested sampling fields", async ()
   assert.equal(result.ok, true);
   assert.deepEqual(result.value.effective.presets[0].sampling, { temperature: 0.5 });
 });
+
+test("settings reject credential-looking model values and arbitrary URLs", async () => {
+  for (const model of ["github_pat_abcdefghijklmnopqrstuv", "ftp://example.test/model"]) {
+    const result = await invoke(JSON.stringify({ defaultPresetId: "a", presets: [{ id: "a", label: "A", model }], featurePresetIds: {} }));
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, "unsupported_format");
+    assert.equal(JSON.stringify(result).includes(model), false);
+  }
+});

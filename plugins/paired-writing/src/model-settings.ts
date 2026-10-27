@@ -76,9 +76,9 @@ function isSafeModelId(value: string): boolean {
   const normalized = value.trim();
   if (!normalized) return true;
   return normalized.length <= 512 &&
-    !/^https?:\/\//iu.test(normalized) &&
+    !/^[a-z][a-z0-9+.-]*:\/\//iu.test(normalized) &&
     !/(?:api[_-]?key|access[_-]?token|secret)\s*[:=]/iu.test(normalized) &&
-    !/^(?:sk|pk|ghp|gho|github_pat|xox[baprs])-[-A-Za-z0-9_]{16,}$/iu.test(normalized) &&
+    !/^(?:(?:sk|pk|ghp|gho|xox[baprs])-|github_pat_)[-A-Za-z0-9_]{16,}$/iu.test(normalized) &&
     !/[\x00-\x1f\x7f]/u.test(normalized);
 }
 
