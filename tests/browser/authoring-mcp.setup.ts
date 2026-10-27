@@ -2,14 +2,14 @@ import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sig
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import officialSetup from "./authoring-official.setup.js";
 
 // Signs the actual built Narrative artifacts with test-only publisher and registry keys.
 export default async function setup(): Promise<() => void> {
   const source = process.env.PROPRIUM_NARRATIVE_FAST;
   const manifestPath = process.env.PROPRIUM_NARRATIVE_MANIFEST;
   if (!source && !manifestPath) {
-    const official = await import("./authoring-official.setup.js");
-    return official.default();
+    return officialSetup();
   }
   const registryKey = process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY;
   const origin = process.env.VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS;
