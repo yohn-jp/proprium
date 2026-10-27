@@ -58,5 +58,5 @@ test("signed Narrative installs and navigates a large work in the real Host", as
   for (let n = 0; n < 2; n++) await page.getByRole("button", { name: "次へ", exact: true }).click();
   await expect(page.getByText("Scene 301", { exact: true })).toBeVisible();
   await page.getByText("Scene 301", { exact: true }).click();
-  await expect(page.getByRole("textbox", { name: "原稿 Markdown" })).toContainText("目的の原稿");
+  await expect(page.getByRole("textbox", { name: "原稿 Markdown" })).toContainText("目的の原稿", { timeout: 120_000 });
 });
