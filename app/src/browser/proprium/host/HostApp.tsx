@@ -864,9 +864,17 @@ export function HostApp(): ReactElement {
   }, []);
   const executeLivePlugin = useCallback(async (args: Record<string, unknown>, signal: AbortSignal): Promise<unknown> => {
     if (authoring && typeof args.pluginId === "string" && typeof args.operation === "string" && args.operation !== "run") {
-      if (!args.input || typeof args.input !== "object" || Array.isArray(args.input)) throw new Error("invalid_input: typed action input must be an object");
       if (signal.aborted) throw new DOMException("Cancelled", "AbortError");
-      const result = await authoring.invokeMcp(args.pluginId, args.operation, args.input as Record<string, unknown>, "live-mcp", undefined, undefined, signal);
+      if (args.operation === "actions.list") {
+        const input = args.input ?? {};
+        if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(key => key !== "cursor" && key !== "limit")) throw new Error("invalid_input: action discovery accepts cursor and limit only");
+        const { cursor, limit } = input as Record<string, unknown>;
+        if ((cursor !== undefined && typeof cursor !== "string") || (limit !== undefined && (!Number.isInteger(limit) || (limit as number) < 1 || (limit as number) > 100))) throw new Error("invalid_input: invalid action discovery page");
+        return authoring.actions(args.pluginId, "mcp", cursor as string | undefined, limit as number | undefined);
+      }
+      if (!args.input || typeof args.input !== "object" || Array.isArray(args.input)) throw new Error("invalid_input: typed action input must be an object");
+      if (args.idempotency_key !== undefined && (typeof args.idempotency_key !== "string" || !args.idempotency_key || args.idempotency_key.length > 256)) throw new Error("invalid_input: invalid action envelope idempotency key");
+      const result = await authoring.invokeMcp(args.pluginId, args.operation, args.input as Record<string, unknown>, "live-mcp", undefined, args.idempotency_key as string | undefined, signal);
       refreshAuthoring();
       return result;
     }

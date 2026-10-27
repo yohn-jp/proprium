@@ -592,7 +592,7 @@ function WidgetRenderer({ node, data, invoke, navigate, busy, load, cancelRead, 
   navigate(binding: AuthoringNavigationTemplate, event: Event, context?: AuthoringJson): void;
   readonly busy: boolean;
   load(node: AuthoringWidget): void;
-  cancelRead(): void;
+  cancelRead(next?: AuthoringWidget): void;
   readonly nested?: boolean;
 }): ReactElement {
   return <>{nested && (node.load_action || node.load_actions?.length) && <button type="button" className="authoring-load-action" disabled={busy} onClick={() => load(node)}>{node.title || "情報"}を読み込む</button>}<WidgetBody node={node} data={data} invoke={invoke} navigate={navigate} busy={busy} load={load} cancelRead={cancelRead} /></>;
@@ -605,7 +605,7 @@ function WidgetBody({ node, data, invoke, navigate, busy, load, cancelRead }: {
   navigate(binding: AuthoringNavigationTemplate, event: Event, context?: AuthoringJson): void;
   readonly busy: boolean;
   load(node: AuthoringWidget): void;
-  cancelRead(): void;
+  cancelRead(next?: AuthoringWidget): void;
 }): ReactElement {
   if (node.type === "outline") return <OutlineWidget node={node} data={data} invoke={invoke} navigate={navigate} busy={busy} />;
   if (node.type === "form") return <FormWidget node={node} data={data} invoke={invoke} busy={busy} />;
@@ -704,12 +704,12 @@ function TabsWidget({ node, data, invoke, navigate, busy, load, cancelRead }: {
   navigate(binding: AuthoringNavigationTemplate, event: Event, context?: AuthoringJson): void;
   readonly busy: boolean;
   load(node: AuthoringWidget): void;
-  cancelRead(): void;
+  cancelRead(next?: AuthoringWidget): void;
   readonly nested?: boolean;
 }): ReactElement {
   const [activeId, setActiveId] = useState(node.tabs[0]?.id ?? "");
   const active = node.tabs.find(tab => tab.id === activeId) ?? node.tabs[0];
-  return <section className="authoring-widget" aria-label={node.title || "詳細"}><div className="authoring-tabs" role="tablist" aria-label={node.title || "詳細"}>{node.tabs.map(tab => <button type="button" role="tab" id={`authoring-tab-${tab.id}`} aria-selected={active?.id === tab.id} aria-controls={`authoring-tabpanel-${tab.id}`} tabIndex={active?.id === tab.id ? 0 : -1} key={tab.id} onClick={() => { cancelRead(); setActiveId(tab.id); }}>{tab.title}</button>)}</div>{active && <div role="tabpanel" id={`authoring-tabpanel-${active.id}`} aria-labelledby={`authoring-tab-${active.id}`}><WidgetRenderer key={active.id} node={active.body} data={data} invoke={invoke} navigate={navigate} busy={busy} load={load} cancelRead={cancelRead} nested /></div>}</section>;
+  return <section className="authoring-widget" aria-label={node.title || "詳細"}><div className="authoring-tabs" role="tablist" aria-label={node.title || "詳細"}>{node.tabs.map(tab => <button type="button" role="tab" id={`authoring-tab-${tab.id}`} aria-selected={active?.id === tab.id} aria-controls={`authoring-tabpanel-${tab.id}`} tabIndex={active?.id === tab.id ? 0 : -1} key={tab.id} onClick={() => { cancelRead(tab.body); setActiveId(tab.id); }}>{tab.title}</button>)}</div>{active && <div role="tabpanel" id={`authoring-tabpanel-${active.id}`} aria-labelledby={`authoring-tab-${active.id}`}><WidgetRenderer key={active.id} node={active.body} data={data} invoke={invoke} navigate={navigate} busy={busy} load={load} cancelRead={cancelRead} nested /></div>}</section>;
 }
 
 export function AuthoringSurface({ surface, data: initialData = EMPTY_DATA, status = "ready", message, onInvoke, onRead, onNavigate, onClose, className = "" }: AuthoringSurfaceProps): ReactElement {
@@ -761,8 +761,11 @@ export function AuthoringSurface({ surface, data: initialData = EMPTY_DATA, stat
   const loadActions = surface.body.load_actions?.length
     ? surface.body.load_actions
     : surface.body.load_action ? [{ key: "", ...surface.body.load_action }] : [];
-  const cancelRead = useCallback(() => {
+  const cancelRead = useCallback((next?: AuthoringWidget) => {
     if (readController.current) { readController.current.abort(); readController.current = null; setBusy(false); }
+    // Independently loaded tabs must not show another tab's records or cursor.
+    // Forms without a read intentionally share the selected action result.
+    if (next && (next.load_action || next.load_actions?.length)) setLastActionResult(undefined);
   }, []);
   const load = useCallback(async (node: AuthoringWidget = surface.body) => {
     const requestedActions = node.load_actions?.length ? node.load_actions

@@ -258,7 +258,7 @@ export class BrowserAuthoringService {
       let idempotencyKey = typeof input.idempotency_key === "string" ? input.idempotency_key : undefined;
       let retryIdentity: string | undefined;
       const descriptor = (await this.options.manager.verifiedActionSet(pluginId))?.descriptors.find(item => item.action_id === actionId);
-      if (!idempotencyKey && descriptor?.effect === "propose") {
+      if (!idempotencyKey && descriptor) {
         retryIdentity = canonicalJson({ pluginId, actionId, input });
         idempotencyKey = this.uiProposalRetryKeys.get(retryIdentity) ?? this.nextRequestId();
         this.uiProposalRetryKeys.set(retryIdentity, idempotencyKey);
