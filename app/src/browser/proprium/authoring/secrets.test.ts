@@ -28,7 +28,7 @@ const config: ShareProviderConfiguration = {
 const scope = { workspace_id: "local-workspace", repository_id: 42, branch: "main", generation: "generation-4" };
 const grant_scope = { kind: "chapter" as const, id: "chapter-3" };
 const remote_commit = "a".repeat(64);
-const now = Date.parse("2026-10-26T00:00:00.000Z");
+const now = Date.now();
 
 class GestureTestAuthority {
   private readonly tokens = new WeakSet<object>();

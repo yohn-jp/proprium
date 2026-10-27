@@ -8,6 +8,13 @@ import type { BrowserLocalGit } from "../git/index.js";
 const HOST_CAPABILITIES: readonly PluginCapability[] = [
   "workspace.snapshot.read", "workspace.change.propose", "workspace.ui.contribute",
 ];
+const AUTHORING_HOST_CAPABILITIES = new Set([
+  "workspace.identity.read", "workspace.file.read", "workspace.change.propose", "workspace.change.timestamp",
+  "workspace.plugin.invoke", "workspace.derived.cache", "workspace.asset.read", "plugin.preferences.read",
+  "workspace.ui.contribute", "workspace.change.stage", "workspace.change.list", "workspace.change.status",
+  "workspace.change.observations", "workspace.change.inspect", "workspace.change.content.read",
+  "workspace.capabilities.query", "artifact.create", "artifact.append", "artifact.seal", "artifact.discard",
+]);
 const MAX_SNAPSHOT_FILES = 256;
 const MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024;
 type InstallIntent = "install" | "update";
@@ -113,6 +120,7 @@ export function PluginPanel({ manager, workspaceId, git, revisionKey, canApplyCh
       if (typeof args.pluginId !== "string" || !/^[A-Za-z0-9._-]{1,128}$/u.test(args.pluginId) || args.operation !== "run") {
         throw new Error("plugin_call requires an installed pluginId and operation 'run'.");
       }
+      if ((await manager.installed()).find(item => item.id === args.pluginId)?.actions.length) throw new Error("invalid_input: authoring plugins require a qualified typed action");
       const input = typeof args.input === "string" ? args.input : isPlainRecord(args.input) && typeof args.input.request === "string" ? args.input.request : "";
       if (!input || input.length > 256 * 1024) throw new Error("plugin_call input must contain a request up to 256 KiB.");
       const plugin = (await manager.installed()).find(item => item.id === args.pluginId && (item.state === "active" || item.state === "enabled-idle"));
@@ -215,7 +223,7 @@ export function PluginPanel({ manager, workspaceId, git, revisionKey, canApplyCh
     const selected = grants[grantKey] ?? [];
     setOwnBusy(true); onBusyChange(true); setNotice("");
     try {
-      await manager.enable({ pluginId: plugin.id, version: plugin.version, workspaceId, grants: selected, hostAllowed: HOST_CAPABILITIES });
+      await manager.enable({ pluginId: plugin.id, version: plugin.version, workspaceId, grants: selected, hostAllowed: plugin.capabilities.filter(value => plugin.actions.length ? AUTHORING_HOST_CAPABILITIES.has(value) : HOST_CAPABILITIES.includes(value as PluginCapability)) });
       await refreshPlugins();
       setNotice(`${plugin.id}@${plugin.version} is enabled with these grants. No Worker starts until you choose Run.`);
     } catch (error) { setNotice(error instanceof Error ? error.message : "Plugin could not be enabled."); }
@@ -358,7 +366,7 @@ export function PluginPanel({ manager, workspaceId, git, revisionKey, canApplyCh
         const inputHelpId = `${inputId}-help`;
         const isComputeSumSample = plugin.id === "proprium.compute-sum";
         const request = requests[pluginKey] ?? (isComputeSumSample ? '{"left":20,"right":22}' : "");
-        const canRun = plugin.state === "active" || plugin.state === "enabled-idle";
+        const canRun = !plugin.actions.length && (plugin.state === "active" || plugin.state === "enabled-idle");
         return <li key={pluginKey}>
           <div className="plugin-card-head"><div><strong>{plugin.id}</strong><small>v{plugin.version} · {plugin.state === "active" ? "active" : plugin.state === "enabled-idle" ? "enabled, idle" : plugin.state === "revoked" ? "publisher revoked" : "installed, disabled"}</small></div><code>{plugin.activeVersion ? `pinned ${plugin.activeVersion}` : "not pinned"}</code></div>
           <fieldset disabled={busy || plugin.state !== "installed"}>
@@ -370,7 +378,7 @@ export function PluginPanel({ manager, workspaceId, git, revisionKey, canApplyCh
               return <label key={value} className="capability-choice"><input type="checkbox" checked={selected.includes(value as PluginCapability)} onChange={event => setGrants(current => ({ ...current, [grantKey]: event.target.checked ? [...selected, value as PluginCapability] : selected.filter(item => item !== value) }))} /> <span>{value}</span></label>;
             })}
           </fieldset>
-          <div className="plugin-actions">{plugin.state === "active" ? <><button type="button" onClick={() => void invoke(plugin, request)} disabled={busy}>Run</button><button type="button" onClick={() => void disable(plugin)} disabled={busy}>Stop</button></> : plugin.state === "enabled-idle" ? <><button type="button" onClick={() => void invoke(plugin, request)} disabled={busy}>Run</button><button type="button" onClick={() => void disable(plugin)} disabled={busy}>Disable</button></> : <button type="button" onClick={() => void enable(plugin)} disabled={busy || plugin.state === "revoked"}>{plugin.state === "revoked" ? "Revoked" : "Enable"}</button>}<button type="button" onClick={() => void update(plugin)} disabled={busy}>Update version</button>{plugin.activeVersion && <button type="button" onClick={() => void rollback(plugin)} disabled={busy}>Rollback</button>}<button type="button" className="plugin-remove" onClick={() => void uninstall(plugin)} disabled={busy}>Uninstall</button></div>
+          <div className="plugin-actions">{plugin.state === "active" ? <>{!plugin.actions.length && <button type="button" onClick={() => void invoke(plugin, request)} disabled={busy}>Run</button>}<button type="button" onClick={() => void disable(plugin)} disabled={busy}>Stop</button></> : plugin.state === "enabled-idle" ? <>{!plugin.actions.length && <button type="button" onClick={() => void invoke(plugin, request)} disabled={busy}>Run</button>}<button type="button" onClick={() => void disable(plugin)} disabled={busy}>Disable</button></> : <button type="button" onClick={() => void enable(plugin)} disabled={busy || plugin.state === "revoked"}>{plugin.state === "revoked" ? "Revoked" : "Enable"}</button>}<button type="button" onClick={() => void update(plugin)} disabled={busy}>Update version</button>{plugin.activeVersion && <button type="button" onClick={() => void rollback(plugin)} disabled={busy}>Rollback</button>}<button type="button" className="plugin-remove" onClick={() => void uninstall(plugin)} disabled={busy}>Uninstall</button></div>
           {canRun && <label className="plugin-request" htmlFor={inputId}><span>プラグイン入力（テキスト）</span><small id={inputHelpId}>Hostは内容を1本の文字列として渡します。現在のABIは入力スキーマを定義せず、この画面も形式を検証しません。各プラグインの説明に従って入力してください。</small>{isComputeSumSample && <small id={`${inputId}-sample`}>計算サンプルは left と right の2つの有限な数値だけを含むJSONを受け取ります。例: <code>{'{"left":20,"right":22}'}</code></small>}<textarea id={inputId} aria-describedby={`${inputHelpId}${isComputeSumSample ? ` ${inputId}-sample` : ""}`} value={request} onChange={event => setRequests(current => ({ ...current, [pluginKey]: event.target.value }))} maxLength={256 * 1024} placeholder={isComputeSumSample ? '{"left":20,"right":22}' : "プラグインの指定形式を入力"} /></label>}
           {plugin.dependencies.length > 0 && <p className="plugin-metadata">Dependencies: {plugin.dependencies.map(item => `${item.id}@${item.version}`).join(", ")}</p>}
           {plugin.contributions.length > 0 && <section className="plugin-contributions" aria-label="Host-rendered plugin contributions"><strong>Plugin surfaces</strong>{plugin.contributions.map(item => <article key={`${item.kind}:${item.id}`}><small>{item.kind}</small><span>{item.title}</span></article>)}</section>}

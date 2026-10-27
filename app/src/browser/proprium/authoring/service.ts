@@ -214,6 +214,7 @@ export class BrowserAuthoringService {
   private readonly controllers = new Map<string, AbortController>();
   private readonly abortListeners = new Map<string, { signal: AbortSignal; listener: () => void }>();
   private disposed = false;
+  private retainedActionSnapshot: AuthoringSnapshotContext | null = null;
 
   constructor(private readonly options: BrowserAuthoringServiceOptions) {
     this.nextRequestId = options.createRequestId ?? ID;
@@ -244,18 +245,31 @@ export class BrowserAuthoringService {
   }
 
   /** Captures the browser's real trusted event before any asynchronous work. */
-  async invokeUi(event: Event, pluginId: string, actionId: string, input: Record<string, unknown>): Promise<ActionResult> {
+  async invokeUi(event: Event, pluginId: string, actionId: string, input: Record<string, unknown>, followNavigation = false): Promise<ActionResult> {
     const principal = this.makePrincipal("ui", event);
+    if (followNavigation && !principal.user_gesture_token) throw deniedGesture();
     try {
-      return await this.dispatcher.invoke({ plugin_id: pluginId, action_id: actionId, input,
+      const result = await this.dispatcher.invoke({ plugin_id: pluginId, action_id: actionId, input,
         ...(typeof input.idempotency_key === "string" ? { idempotency_key: input.idempotency_key } : {}) }, principal);
+      if (followNavigation && result.ok && isRecord(result.value) && isRecord(result.value.navigation)) {
+        const navigation = result.value.navigation;
+        const expected = navigation.expected_context;
+        if (!isRecord(expected) || !sameScope(expected.scope as unknown as Scope, result.scope) ||
+            !sameJson(expected.snapshot, result.snapshot) || !isRecord(navigation.target) ||
+            typeof navigation.target.path !== "string" || !["open", "reveal"].includes(String(navigation.intent))) throw invalid("Navigation intent has no matching action snapshot");
+        await this.navigateHost(navigation.target as unknown as AuthoringNavigationTarget, navigation.intent as "open" | "reveal", {
+          schema_version: 1, request_id: result.request_id, plugin_id: pluginId, action_id: actionId,
+          scope: result.scope, snapshot: result.snapshot, input, deadline_ms: 30_000,
+        });
+      }
+      return result;
     } finally { await this.releaseRequest(principal.request_id); this.preferenceGestures.delete(principal.request_id); }
   }
 
   /** Runs the normal UI action through the same dispatcher as MCP and admits a host-owned result artifact. */
   async invokeUiWithArtifacts(event: Event, pluginId: string, actionId: string,
     input: Record<string, unknown>): Promise<UiActionWithArtifact> {
-    const action_result = await this.invokeUi(event, pluginId, actionId, input);
+    const action_result = await this.invokeUi(event, pluginId, actionId, input, true);
     if (!action_result.ok || !isRecord(action_result.value) || typeof action_result.value.artifact_id !== "string" ||
         !this.options.artifactHandle) return { action_result };
     try {
@@ -285,9 +299,17 @@ export class BrowserAuthoringService {
 
   /** Gateway code passes an authenticated Host principal created at the Access boundary. */
   async invokeMcp(pluginId: string, actionId: string, input: Record<string, unknown>, actorId: string,
-    requestId = this.nextRequestId(), idempotencyKey?: string): Promise<ActionResult> {
+    requestId = this.nextRequestId(), idempotencyKey?: string, signal?: AbortSignal): Promise<ActionResult> {
     const principal: AuthoringPrincipal = { caller: "mcp", actor_id: actorId, request_id: requestId,
       selected_scope: this.scope(this.requireSelection()) };
+    if (signal) {
+      const controller = new AbortController();
+      this.controllers.set(requestId, controller);
+      const listener = () => controller.abort(signal.reason);
+      this.abortListeners.set(requestId, { signal, listener });
+      signal.addEventListener("abort", listener, { once: true });
+      if (signal.aborted) listener();
+    }
     try { return await this.dispatcher.invoke({ plugin_id: pluginId, action_id: actionId, input,
       ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}) }, principal); }
     finally { await this.releaseRequest(principal.request_id); }
@@ -309,6 +331,10 @@ export class BrowserAuthoringService {
 
   async inspectProposal(proposalId: string, cursor?: string, limit = 20, includeSource = false): Promise<ProposalInspection> {
     return this.requireWriter().inspect(this.scope(this.requireSelection()), proposalId, cursor, limit, includeSource);
+  }
+
+  async readProposalContent(proposalId: string, ref: string, offset = 0, length = 65_536) {
+    return this.requireWriter().read_content(this.scope(this.requireSelection()), proposalId, ref, offset, length);
   }
 
   async applyProposal(event: Event, proposalId: string, unitIds: readonly string[]): Promise<WriterProposalRecord> {
@@ -691,7 +717,17 @@ export class BrowserAuthoringService {
       if (!principal.selected_scope || !sameScope(principal.selected_scope, scope)) throw staleScope();
       const installed = await this.options.manager.verifiedActionSet(plugin_id);
       if (!installed?.activation_epoch) throw Object.assign(new Error("Plugin is unavailable or disabled"), { code: "plugin_unavailable" });
-      const pinned = await this.pin(selected);
+      let pinned = this.retainedActionSnapshot;
+      if (pinned) {
+        try { await this.assertCurrent(pinned); }
+        catch (error) {
+          if ((error as { code?: string }).code !== "snapshot_stale") throw error;
+          this.retainedActionSnapshot = null;
+          if (![...this.requestLeases.values()].includes(pinned)) await this.release(pinned);
+          pinned = null;
+        }
+      }
+      if (!pinned) { pinned = await this.pin(selected); this.retainedActionSnapshot = pinned; }
       this.requestLeases.set(principal.request_id, pinned);
       const controller = this.controllers.get(principal.request_id) ?? new AbortController();
       this.controllers.set(principal.request_id, controller);
@@ -725,7 +761,7 @@ export class BrowserAuthoringService {
     if (listener) listener.signal.removeEventListener("abort", listener.listener);
     this.abortListeners.delete(requestId);
     this.requestLeases.delete(requestId);
-    if (context) await this.release(context);
+    if (context && context !== this.retainedActionSnapshot && ![...this.requestLeases.values()].includes(context)) await this.release(context);
   }
   private requireBackend<K extends keyof AuthoringServiceBackends>(operation: string,
     handler: AuthoringServiceBackends[K]): (...args: unknown[]) => Promise<unknown> {

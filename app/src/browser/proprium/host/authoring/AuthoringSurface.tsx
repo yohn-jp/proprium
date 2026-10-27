@@ -578,7 +578,7 @@ function OutlineWidget({ node, data, invoke, navigate, busy }: {
     else { const action = item.action ?? node.activate; if (action) invoke(action, event, context); }
   };
   const render = (rows: readonly AuthoringOutlineRow[]): ReactElement => <ul role="group">{rows.map(item => <li role="treeitem" aria-expanded={item.children?.length ? expanded.has(item.id) : undefined} aria-selected={selectedId === item.id} key={item.id}>
-    <button type="button" className="authoring-tree-row" data-authoring-tree-id={item.id} tabIndex={activeId === item.id ? 0 : -1} onFocus={() => setActiveId(item.id)} onKeyDown={event => handleKey(event, item)} onClick={event => { setSelectedId(item.id); activate(item, event.nativeEvent); }} disabled={busy}>
+    <button type="button" className="authoring-tree-row" data-authoring-tree-id={item.id} tabIndex={(visible.some(row => row.id === activeId) ? activeId : visible[0]?.id) === item.id ? 0 : -1} onFocus={() => setActiveId(item.id)} onKeyDown={event => handleKey(event, item)} onClick={event => { setSelectedId(item.id); activate(item, event.nativeEvent); }} disabled={busy}>
       {item.children?.length ? <span aria-hidden="true">{expanded.has(item.id) ? "▾" : "▸"}</span> : <span aria-hidden="true">·</span>}<span>{item.title}</span>{item.path && <small>{item.path}</small>}
     </button>{item.children?.length && expanded.has(item.id) ? render(item.children) : null}
   </li>)}</ul>;
@@ -678,7 +678,9 @@ export function AuthoringSurface({ surface, data: initialData = EMPTY_DATA, stat
     try {
       const output = await runAction(binding, context, event);
       if (!output.action_result.ok) throw new Error(`${output.action_result.error.code}: ${output.action_result.error.message}`);
-      setLastActionResult(cloneJson(output.action_result.value, 0));
+      // Navigation-only results leave the current outline page and its scroll position mounted.
+      const resultValue = output.action_result.value;
+      if (!(isRecord(resultValue) && isRecord(resultValue.navigation))) setLastActionResult(cloneJson(resultValue, 0));
       setArtifact(output.artifact);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "操作を完了できませんでした。"); }
     finally { setBusy(false); }

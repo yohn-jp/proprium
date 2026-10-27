@@ -17,6 +17,10 @@ import { ChangedFilesReview } from "./ChangedFilesReview.js";
 import { createHostPluginManager, PluginPanel } from "./PluginPanel.js";
 import { LiveMcpPanel } from "./LiveMcpPanel.js";
 import "./authoring/authoring-surface.css";
+import { createBrowserAuthoringService, type BrowserAuthoringService } from "../authoring/service.js";
+import { createAuthoringWorkspacePanels, validateAuthoringSurfaceRegistrations, type AuthoringSurfaceRegistration } from "./authoring/WorkspaceAuthoringPanels.js";
+import { AuthoringReview } from "./authoring/AuthoringReview.js";
+import { AuthoringCommandMenu } from "./authoring/AuthoringCommandMenu.js";
 
 import { DesktopShell } from "../../../shells/desktop/DesktopShell.js";
 import { ThemeControl } from "../../../components/ThemeControl.js";
@@ -208,6 +212,75 @@ export function HostApp(): ReactElement {
   useEffect(() => () => { void pluginManager.dispose(); }, [pluginManager]);
   workspaceRef.current = workspace;
   workspaceGenerationRef.current = workspaceGeneration;
+  const [authoring, setAuthoring] = useState<BrowserAuthoringService | null>(null);
+  const [authoringRegistrations, setAuthoringRegistrations] = useState<AuthoringSurfaceRegistration[]>([]);
+  const [authoringEpoch, setAuthoringEpoch] = useState(0);
+  const refreshAuthoring = useCallback(() => setAuthoringEpoch(value => value + 1), []);
+  useEffect(() => {
+    if (!git || !workspace) { setAuthoring(null); setAuthoringRegistrations([]); return; }
+    const service = createBrowserAuthoringService({ manager: pluginManager, git, workspace: workspace.identity,
+      generation: workspaceGeneration,
+      getEditorState: () => ({ path: currentFileRef.current?.path ?? null, dirty: currentFileRef.current?.dirty ?? false,
+        draft_generation: null, composing: Boolean(document.querySelector(".cm-editor.cm-composing")) }),
+      onNavigate: async (target, _intent, expected) => {
+        if (gitRef.current !== git || workspaceGenerationRef.current !== workspaceGeneration) throw new Error("snapshot_stale");
+        if (currentFileRef.current?.dirty) throw new Error("dirty_draft: save the current document before navigation");
+        if (target.path) {
+          const initial = currentFileRef.current;
+          const read = await git.read(target.path);
+          await git.assertAuthoringSnapshot(expected.snapshot.id);
+          if (gitRef.current !== git || workspaceGenerationRef.current !== workspaceGeneration) throw new Error("snapshot_stale");
+          if (currentFileRef.current !== initial || currentFileRef.current?.dirty) throw new Error("dirty_draft");
+          if (read.data === null) throw new Error("file_not_found");
+          const text = asText(read.data);
+          const opened: OpenFile = { path: target.path, data: read.data, revision: read.revision, text, binary: text === null, dirty: false };
+          currentFileRef.current = opened; setCurrentFile(opened);
+          setRequestedPanel(value => ({ id: "editor", sequence: value.sequence + 1 }));
+        }
+        if (target.panel_id) setRequestedPanel(value => ({ id: target.panel_id!, sequence: value.sequence + 1 }));
+      }, onMutationBusy: setFileOperationBusy });
+    setAuthoring(service);
+    void service.recoverProposal().catch(error => setMessage({ tone: "error", text: errorMessage(error) }));
+    return () => { void service.dispose(); };
+  }, [git, workspaceGeneration, pluginManager]);
+  useEffect(() => {
+    let cancelled = false;
+    if (authoring) void authoring.listSurfaces().then(values => { if (!cancelled) setAuthoringRegistrations(validateAuthoringSurfaceRegistrations(values)); })
+      .catch(error => { if (!cancelled) setMessage({ tone: "error", text: errorMessage(error) }); });
+    return () => { cancelled = true; };
+  }, [authoring, authoringEpoch]);
+  const invokeAuthoring = async (event: Event, pluginId: string, actionId: string, input: Readonly<Record<string, import("./authoring/types.js").AuthoringJson>>) => {
+    if (!authoring) throw new Error("repository_unavailable");
+    const output = await authoring.invokeUiWithArtifacts(event, pluginId, actionId, input);
+    refreshAuthoring();
+    const source = output.artifact;
+    if (!source) return { action_result: output.action_result };
+    return { action_result: output.action_result, artifact: {
+      metadata: { filename: source.metadata.filename, media_type: source.metadata.media_type, bytes: source.metadata.total_bytes, sha256: source.metadata.sha256 },
+      text_preview_available: source.metadata.media_type.startsWith("text/"),
+      previewText: (maxChars: number) => source.previewText(maxChars),
+      download: async (downloadEvent: Event) => { const blob = await source.readAll(downloadEvent); const url = URL.createObjectURL(blob);
+        try { const link = document.createElement("a"); link.href = url; link.download = source.metadata.filename; link.click(); }
+        finally { setTimeout(() => URL.revokeObjectURL(url), 1000); } },
+      print: async (printEvent: Event, preset: import("./authoring/types.js").AuthoringPrintPreset) => {
+        const popup = window.open("", "_blank"); if (!popup) throw new Error("印刷ウィンドウを許可してください");
+        try { const blob = await source.readAll(printEvent); const text = await blob.text();
+          const pre = popup.document.createElement("pre"); pre.textContent = text;
+          pre.style.whiteSpace = "pre-wrap"; pre.style.fontFamily = "serif";
+          if (preset !== "web-novel") pre.style.writingMode = "vertical-rl";
+          popup.document.body.replaceChildren(pre); popup.opener = null; popup.print();
+        } catch (error) { popup.close(); throw error; }
+      },
+    } };
+  };
+  const readAuthoring = async (pluginId: string, actionId: string, input: Readonly<Record<string, import("./authoring/types.js").AuthoringJson>>, signal: AbortSignal) => {
+    if (!authoring) throw new Error("repository_unavailable");
+    return authoring.invokeRead(pluginId, actionId, input, signal);
+  };
+  const navigateAuthoring = async (event: Event, target: import("../authoring/service.js").AuthoringNavigationTarget, intent: "open" | "reveal") => {
+    if (!authoring) throw new Error("repository_unavailable");
+    await authoring.navigate(event, target, intent);
+  };
   const activeWorkspaceId = workspace?.identity.localWorkspaceId ?? null;
   const selectedRepositoryEntry = repositories.find(item => item.id === selectedRepository) ?? null;
   const changedPaths = useMemo(() => new Set(status.entries.map(entry => entry.path)), [status.entries]);
@@ -772,10 +845,17 @@ export function HostApp(): ReactElement {
     livePluginInvoker.current = invoker;
   }, []);
   const executeLivePlugin = useCallback(async (args: Record<string, unknown>, signal: AbortSignal): Promise<unknown> => {
+    if (authoring && typeof args.pluginId === "string" && typeof args.operation === "string" && args.operation !== "run") {
+      if (!args.input || typeof args.input !== "object" || Array.isArray(args.input)) throw new Error("invalid_input: typed action input must be an object");
+      if (signal.aborted) throw new DOMException("Cancelled", "AbortError");
+      const result = await authoring.invokeMcp(args.pluginId, args.operation, args.input as Record<string, unknown>, "live-mcp", undefined, undefined, signal);
+      refreshAuthoring();
+      return result;
+    }
     const invoke = livePluginInvoker.current;
     if (!invoke) throw new Error("Open the Plugins panel and enable a WASM plugin before calling plugin_call.");
     return invoke(args, signal);
-  }, []);
+  }, [authoring, refreshAuthoring]);
   const updateGateway = useCallback((value: string): void => {
     setGatewayDraft(value);
     persistGateway(value);
@@ -868,7 +948,7 @@ export function HostApp(): ReactElement {
               : <p className="sidebar-empty">このWorkspaceはこのブラウザー内だけに保存されます。GitHub同期は設定されていません。</p>}
           </section>
 </div> : mode === "desktop" ? <div className="host-controls">{recentCard}</div> : picker;
-  const tools = <div className="host-controls">{git && workspace && <PluginPanel
+  const tools = <div className="host-controls">{authoring && <AuthoringReview key={workspaceGeneration} service={authoring} epoch={authoringEpoch} onApplied={refreshAfterPlugin} />}<AuthoringCommandMenu registrations={authoringRegistrations} invoke={invokeAuthoring} read={readAuthoring} navigate={navigateAuthoring} />{git && workspace && <PluginPanel
             manager={pluginManager}
             workspaceId={activeWorkspaceId!}
             git={git}
@@ -878,6 +958,7 @@ export function HostApp(): ReactElement {
             onBusyChange={setBusy}
             onWorkspaceChanged={refreshAfterPlugin}
             onRegisterLiveInvoker={registerLivePluginInvoker}
+            onAuthoringSurfacesChanged={refreshAuthoring}
           />}
           {git && workspace && isGitHubWorkspaceIdentity(workspace.identity) && <LiveMcpPanel
             key={`${workspaceGeneration}:${gatewayDraft}`}
@@ -926,6 +1007,7 @@ export function HostApp(): ReactElement {
       onHistory={() => revealPanel("history")} onRegisterFlush={registerEditorFlush} onScratchApplied={refreshAfterPlugin} />}
   </section> : workspace ? syncState === "syncing" ? <section className="host-controls" role="status"><h2>Workspaceを取得しています</h2><p>GitHubからGit履歴とファイルを読み込んでいます。完了後にファイル一覧を表示します。</p></section> : <p>文書を選ぶか、新しい文書を作成してください。</p> : mode === "desktop" ? picker : <p>作品ライブラリからWorkspaceを開いてください。</p>;
   const panels: WorkspacePanel[] = [
+    ...createAuthoringWorkspacePanels(authoringRegistrations, invokeAuthoring, readAuthoring, undefined, navigateAuthoring),
     { id: "editor", title: "原稿", render: () => <RetainedPanelSlot node={editorNode} /> },
     { id: "outline", title: "作品と構成", render: () => library },
     { id: "inspector", title: "文書と保存状態", render: () => inspector },
