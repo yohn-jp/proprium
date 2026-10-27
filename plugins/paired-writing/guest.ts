@@ -3,10 +3,11 @@ import { createGuest } from "../shared/guest.js";
 import { captureContext, readContextManifest } from "./src/context.js";
 import { proposeRewrite, suggestRewrite } from "./src/rewrite.js";
 import { changeSetObservations, changeSetStatus, inspectChangeSet, listChangeSets, readProposalContent } from "./src/receipts.js";
-import { readWorkspaceSettings } from "./src/settings.js";
+import { proposeWorkspaceSettings, readWorkspaceSettings } from "./src/settings.js";
 import { proposeChangeSet, validateChangeSet } from "./src/changeset-workflow.js";
 
 export const guest = createGuest("proprium.paired-writing", {
+  "paired.workspace-settings.propose": (input, context, host) => proposeWorkspaceSettings(input, host, context as ActionRequest),
   "paired.workspace-settings.read": (input, context, host) => readWorkspaceSettings(input, host, context as ActionRequest),
   "paired.context.capture": (input, context, host) => captureContext(input, host, context as ActionRequest),
   "paired.context.manifest": (input, context, host) => readContextManifest(input, host, context as ActionRequest),

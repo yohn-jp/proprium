@@ -55,3 +55,53 @@ test("absent settings use declared defaults with default provenance", async () =
   assert.equal(result.value.effective.defaultPresetId, "quality-flash");
   assert.equal(result.value.provenance.defaultPresetId, "default");
 });
+
+test("settings proposal keeps unknown source bytes and submits a revision-guarded change", async () => {
+  const source = '{\n  "defaultPresetId": "a",\n  "presets": [{"id":"a","label":"A","model":"vendor/model","future":true}],\n  "featurePresetIds": {},\n  "futureField"  : { "untouched" : [ 1, 2 ] }\n}\n';
+  const revision = "b".repeat(64);
+  guest.initialize({ pluginId: "proprium.paired-writing", version: "0.1.0", workspaceId: scope.workspace_id });
+  let result = JSON.parse(guest.invoke(JSON.stringify({ schema_version: 1, request_id: "settings-propose", plugin_id: "proprium.paired-writing", action_id: "paired.workspace-settings.propose", scope, snapshot, input: { patch: { totalCuBudget: 7 }, expectedRevision: revision }, idempotency_key: "change-1", deadline_ms: 30000 })));
+  let changeset: any;
+  while (result.kind === "host_call") {
+    let value: unknown;
+    if (result.operation === "workspace.file.read") { const bytes = [...new TextEncoder().encode(source)]; value = { revision, total_bytes: bytes.length, offset: 0, bytes, next_offset: null }; }
+    else if (result.operation === "workspace.change.propose") { changeset = result.payload.changeset; value = { proposal_id: "proposal-1" }; }
+    else throw new Error(`Unexpected ${result.operation}`);
+    result = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: result.call_id, ok: true, value })));
+  }
+  guest.dispose();
+  assert.equal(result.ok, true);
+  assert.equal(result.value.proposal_id, "proposal-1");
+  const { readFile } = await import("node:fs/promises");
+  const schemaPath: string = "../../../app/src/browser/proprium/authoring/schema.js";
+  const { assertValue } = await import(schemaPath);
+  const manifest = JSON.parse(await readFile(new URL("../plugin.json", import.meta.url), "utf8"));
+  assertValue(manifest.actions.find((action: { action_id: string }) => action.action_id === "paired.workspace-settings.propose").output_schema, result.value);
+  assert.deepEqual(changeset.read_set, [{ path: "meta/scriptorium/modules/assistant/model-settings.json", revision }]);
+  const operation = changeset.units[0].operations[0];
+  const output = new TextDecoder().decode(Uint8Array.from(operation.content));
+  assert.equal(operation.expected_revision, revision);
+  assert.match(output, /"futureField"  : \{ "untouched" : \[ 1, 2 \] \}/u);
+  assert.match(output, /"future":true/u);
+  assert.equal(JSON.parse(output).totalCuBudget, 7);
+});
+
+test("settings proposal rejects secret fields before any Host operation", () => {
+  guest.initialize({ pluginId: "proprium.paired-writing", version: "0.1.0", workspaceId: scope.workspace_id });
+  const result = JSON.parse(guest.invoke(JSON.stringify({ schema_version: 1, request_id: "settings-secret", plugin_id: "proprium.paired-writing", action_id: "paired.workspace-settings.propose", scope, snapshot, input: { patch: { presets: [{ id: "a", label: "A", model: "safe", apiKey: "secret" }] }, expectedRevision: null }, idempotency_key: "secret-attempt", deadline_ms: 30000 })));
+  guest.dispose();
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, "invalid_input");
+});
+
+test("settings proposal stops on a stale revision without registering a change", () => {
+  guest.initialize({ pluginId: "proprium.paired-writing", version: "0.1.0", workspaceId: scope.workspace_id });
+  let result = JSON.parse(guest.invoke(JSON.stringify({ schema_version: 1, request_id: "settings-stale", plugin_id: "proprium.paired-writing", action_id: "paired.workspace-settings.propose", scope, snapshot, input: { patch: { totalCuBudget: 3 }, expectedRevision: "old" }, idempotency_key: "stale", deadline_ms: 30000 })));
+  const source = JSON.stringify({ defaultPresetId: "a", presets: [{ id: "a", label: "A", model: "safe" }], featurePresetIds: {} });
+  const bytes = [...new TextEncoder().encode(source)];
+  assert.equal(result.operation, "workspace.file.read");
+  result = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: result.call_id, ok: true, value: { revision: "c".repeat(64), total_bytes: bytes.length, offset: 0, bytes, next_offset: null } })));
+  guest.dispose();
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, "snapshot_stale");
+});
