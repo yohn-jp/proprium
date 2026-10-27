@@ -10,7 +10,7 @@ const HOST_CAPABILITIES: readonly PluginCapability[] = [
 ];
 const AUTHORING_HOST_CAPABILITIES = new Set([
   "workspace.identity.read", "workspace.file.read", "workspace.change.propose", "workspace.change.timestamp",
-  "workspace.plugin.invoke", "workspace.derived.cache", "workspace.asset.read", "plugin.preferences.read",
+  "workspace.plugin.invoke", "workspace.derived.cache", "workspace.asset.read", "plugin.preferences", "plugin.preferences.read",
   "workspace.ui.contribute", "workspace.change.stage", "workspace.change.list", "workspace.change.status",
   "workspace.change.observations", "workspace.change.inspect", "workspace.change.content.read",
   "workspace.capabilities.query", "artifact.create", "artifact.append", "artifact.seal", "artifact.discard",
@@ -225,7 +225,7 @@ export function PluginPanel({ manager, workspaceId, git, revisionKey, canApplyCh
     try {
       await manager.enable({ pluginId: plugin.id, version: plugin.version, workspaceId, grants: selected, hostAllowed: plugin.capabilities.filter(value => plugin.actions.length ? AUTHORING_HOST_CAPABILITIES.has(value) : HOST_CAPABILITIES.includes(value as PluginCapability)) });
       await refreshPlugins();
-      setNotice(`${plugin.id}@${plugin.version} is enabled with these grants. No Worker starts until you choose Run.`);
+      setNotice(`${plugin.id}@${plugin.version} is enabled with these grants. ${plugin.actions.length ? "パネル・コマンドから利用できます。" : "No Worker starts until you choose Run."}`);
     } catch (error) { setNotice(error instanceof Error ? error.message : "Plugin could not be enabled."); }
     finally { setOwnBusy(false); onBusyChange(false); }
   }

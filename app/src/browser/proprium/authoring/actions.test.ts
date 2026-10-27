@@ -142,6 +142,27 @@ test("artifact creation accepts its declared bound context and rejects a foreign
   assert.equal(created, 1);
 });
 
+test("the declared preference read grant reaches only the Host-bound plugin/user partition", async () => {
+  const preference = "plugin.preferences";
+  const h = createHarness({
+    authority: { issue: async p => context(p, { grants: [preference], host_capabilities: [preference] }),
+      issueChild: async () => { throw new Error("unused"); }, assertCurrent: async () => {}, isSnapshotCurrent: () => true },
+    runtime: { invoke: async options => {
+      const value = await options.resolve_host_call({ call_id: "preferences:1", operation: "plugin.preferences.read",
+        payload: { key: "settings", schema_version: 1 } });
+      return { request_id: options.request.request_id, scope: options.request.scope, snapshot: options.request.snapshot, ok: true, value, warnings: [] };
+    } },
+    capabilities: { preferencesRead: async payload => {
+      assert.equal(payload.plugin_id, plugin_id); assert.equal(payload.user_partition, "author");
+      return { hits: 1 };
+    } },
+  });
+  h.entries.set(plugin_id, installed({ descriptors: [descriptor({ required_capabilities: [preference] })],
+    grants: [preference], host_capabilities: [preference] }));
+  const result = await h.dispatcher.invoke({ plugin_id, action_id, input: { query: "x" } }, principal());
+  assert.equal(result.ok, true);
+});
+
 test("metadata paging returns signed action descriptors without invoking a plugin Worker", async () => {
   const { dispatcher, executed } = createHarness({
     installed: async () => installed({ descriptors: [

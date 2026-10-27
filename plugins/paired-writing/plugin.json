@@ -19,7 +19,7 @@
     "artifact.append",
     "artifact.seal",
     "artifact.discard",
-    "plugin.preferences.read"
+    "plugin.preferences"
   ],
   "dependencies": [
     {
@@ -14262,7 +14262,7 @@
       },
       "required_capabilities": [
         "workspace.file.read",
-        "plugin.preferences.read"
+        "plugin.preferences"
       ],
       "callers": [
         "ui",
@@ -14588,7 +14588,7 @@
       },
       "required_capabilities": [
         "workspace.file.read",
-        "plugin.preferences.read"
+        "plugin.preferences"
       ],
       "callers": [
         "ui",
