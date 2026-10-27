@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { BrowserAuthoringService } from "../../authoring/service.js";
 import type { ProposalInspection, WriterProposalRecord } from "../../authoring/writer.js";
 import { TextDiff } from "../TextDiff.js";
+import { selectReviewUnit } from "./review-selection.js";
 
 /** Only the active Browser Host owns review gestures and the single writer. */
 export function AuthoringReview({ service, epoch, onApplied }: {
@@ -44,8 +45,13 @@ export function AuthoringReview({ service, epoch, onApplied }: {
     <ul>{proposals.map(p => <li key={p.proposal_id}><button disabled={busy} onClick={() => void inspect(p.proposal_id)}>{p.producer_plugin_id} · {p.status} · {p.proposal_id}</button></li>)}</ul>
     {nextCursor && <button disabled={busy} onClick={() => void more()}>提案をさらに表示</button>}
     {inspection && <article><h3>{inspection.title}</h3><p>{inspection.reason}</p><p>{inspection.status}</p>
-      {inspection.units.map(unit => <section key={unit.id}><label><input type="checkbox" checked={selected.includes(unit.id)} onChange={e => setSelected(ids => e.target.checked ? [...ids, unit.id] : ids.filter(id => id !== unit.id))} />{unit.label}</label>
-        <p>依存: {unit.depends_on.join(", ") || "なし"}</p>
+      <p>変更を選ぶと、その変更に必要な単位も選択されます。必要な単位の選択を外すと、それに依存する変更も外れます。適用前に選択内容を確認してください。</p>
+      <p role="status">{selected.length} / {inspection.units.length} 単位を選択</p>
+      {inspection.units.map(unit => <section key={unit.id}><label><input type="checkbox" disabled={busy} checked={selected.includes(unit.id)} onChange={e => {
+        try { setSelected(selectReviewUnit(inspection.units,selected,unit.id,e.target.checked)); setError(""); }
+        catch(cause) { setError(cause instanceof Error?cause.message:"選択を更新できませんでした。"); }
+      }} />{unit.label}</label>
+        <p>必要な変更: {unit.depends_on.map(id=>inspection.units.find(item=>item.id===id)?.label??id).join(", ") || "なし"}</p>
         {unit.operations.map(op => <div key={op.id}><h4>{op.kind}: {op.path}</h4><TextDiff before={contents[op.before_content_ref ?? ""] ?? ""} after={contents[op.content_ref ?? ""] ?? ""} /></div>)}
       </section>)}
       {inspection.evidence.map((item, i) => <pre key={i}>{JSON.stringify(item, null, 2)}</pre>)}
