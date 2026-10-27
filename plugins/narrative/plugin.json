@@ -5206,27 +5206,83 @@
         "workspace": true
       },
       "body": {
-        "id": "narrative-continue-writing",
-        "type": "status",
-        "title": "Continue writing",
-        "description": "Validate this workspace’s local resume position before the Host offers to open it.",
-        "load_action": {
-          "action_id": "proprium.narrative.scene.continue",
-          "input_template": {
-            "resume_position": {
-              "data_key": "writing_resume.position"
+        "id": "continue-writing-tabs",
+        "type": "tabs",
+        "title": "Resume writing",
+        "tabs": [
+          {
+            "id": "resume-status-tab",
+            "title": "Resume status",
+            "body": {
+              "id": "resume-status",
+              "type": "status",
+              "title": "Check saved position",
+              "description": "Validate this workspace’s local resume position before the Host offers to open it.",
+              "load_action": {
+                "action_id": "proprium.narrative.scene.continue",
+                "input_template": {}
+              },
+              "state": {
+                "data_key": "last_action_result.status"
+              },
+              "messages": {
+                "ready": "A current resume position is available for Host navigation review.",
+                "no_position": "There is no saved local scene position.",
+                "stale_position": "The saved position needs a manual scene choice.",
+                "unavailable": "The saved scene or manuscript is unavailable."
+              }
+            }
+          },
+          {
+            "id": "resume-details-tab",
+            "title": "Saved scene details",
+            "body": {
+              "id": "resume-details",
+              "type": "detail",
+              "title": "Validated scene",
+              "value": {
+                "data_key": "last_action_result.candidate"
+              },
+              "fields": [
+                {
+                  "key": "title",
+                  "label": "Scene"
+                },
+                {
+                  "key": "manuscript_path",
+                  "label": "Manuscript"
+                },
+                {
+                  "key": "sentence_index",
+                  "label": "Sentence"
+                }
+              ]
+            }
+          },
+          {
+            "id": "resume-open-tab",
+            "title": "Open saved scene",
+            "body": {
+              "id": "resume-open-form",
+              "type": "form",
+              "title": "Open validated resume candidate",
+              "description": "Open the saved scene only after its current path and body revision have been verified. The Host restores this browser’s position after opening the exact document.",
+              "fields": [],
+              "submit": {
+                "action_id": "proprium.narrative.scene.open",
+                "input_template": {
+                  "scene_id": {
+                    "data_key": "last_action_result.candidate.scene_id"
+                  }
+                }
+              },
+              "submit_when": {
+                "data_key": "last_action_result.candidate"
+              },
+              "unavailable_message": "Read the resume status first. A stale or missing position needs a manual scene choice."
             }
           }
-        },
-        "state": {
-          "data_key": "last_action_result.status"
-        },
-        "messages": {
-          "ready": "A current resume position is available for Host navigation review.",
-          "no_position": "There is no saved local scene position.",
-          "stale_position": "The saved position needs a manual scene choice.",
-          "unavailable": "The saved scene or manuscript is unavailable."
-        }
+        ]
       }
     },
     {

@@ -36,7 +36,7 @@ export function validateAuthoringSurfaceRegistrations(values: readonly unknown[]
 }
 
 export type AuthoringActionInvoker = (event: Event, pluginId: string, actionId: string,
-  input: Readonly<Record<string, AuthoringJson>>) => Promise<AuthoringInvocationOutput>;
+  input: Readonly<Record<string, AuthoringJson>>, source?: { readonly surfaceId: string }) => Promise<AuthoringInvocationOutput>;
 export type AuthoringReadInvoker = (pluginId: string, actionId: string,
   input: Readonly<Record<string, AuthoringJson>>, signal: AbortSignal) => Promise<ActionResult>;
 export type AuthoringNavigationHandler = (event: Event,

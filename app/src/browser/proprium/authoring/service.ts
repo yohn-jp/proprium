@@ -33,6 +33,8 @@ export interface AuthoringEditorState {
   readonly dirty: boolean;
   readonly draft_generation: string | null;
   readonly composing: boolean;
+  readonly resume_position?: { readonly scene_id: string; readonly manuscript_path: string;
+    readonly manuscript_revision: string; readonly sentence_index: number | null; readonly scroll_top: number } | null;
 }
 export type AuthoringPrincipal = TrustedActionPrincipal;
 export interface AuthoringGesturePort {
@@ -231,7 +233,16 @@ export class BrowserAuthoringService {
     this.dispatcher = new AuthoringActionDispatcher({
       installed: pluginId => options.manager.verifiedActionSet(pluginId),
       authority: this.authority,
-      runtime: { invoke: invoke => options.manager.authoringRuntime(invoke.request.plugin_id).invoke(invoke) },
+      runtime: { invoke: invoke => {
+        if (invoke.request.plugin_id === "proprium.narrative" && invoke.request.action_id === "proprium.narrative.resume.mark.propose") {
+          const editor = options.editorState(), position = editor.resume_position, input = invoke.request.input;
+          if (editor.dirty || editor.composing) throw Object.assign(new Error("Save locally and finish composition before capturing a portable position"), { code: "dirty_draft" });
+          if (invoke.caller !== "ui" || !position || editor.path !== position.manuscript_path) throw Object.assign(new Error("Host has no current saved editor position"), { code: "capability_denied" });
+          if (input.scene_id !== position.scene_id || input.expected_manuscript_revision !== position.manuscript_revision) throw Object.assign(new Error("Portable position belongs to another scene or body revision"), { code: "snapshot_stale" });
+          if (input.sentence_index !== position.sentence_index || input.scroll_top !== position.scroll_top) throw invalid("Portable position differs from the Host-captured cursor");
+        }
+        return options.manager.authoringRuntime(invoke.request.plugin_id).invoke(invoke);
+      } },
       capabilities: this.capabilityPorts(),
       idempotency: options.idempotency,
     });

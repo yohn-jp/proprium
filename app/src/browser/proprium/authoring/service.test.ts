@@ -21,13 +21,13 @@ function action(requiresGesture = false): ActionDescriptor {
   };
 }
 
-function makeService(descriptor = action()) {
+function makeService(descriptor = action(), editorState: ConstructorParameters<typeof BrowserAuthoringService>[0]["editorState"] = () => ({ path: null, dirty: false, draft_generation: null, composing: false })) {
   const calls: Array<{ caller: string; request: ActionRequest }> = [];
   const hostReads: Array<{ scope: Scope; snapshot: Snapshot }> = [];
   let sequence = 0;
   let pins = 0;
   const admitted: VerifiedActionSet = {
-    plugin_id: pluginId, version: "1.0.0", manifest_digest: "c".repeat(64), enabled: true,
+    plugin_id: descriptor.plugin_id, version: "1.0.0", manifest_digest: "c".repeat(64), enabled: true,
     activation_epoch: 1, descriptors: [descriptor], dependencies: [], grants: ["workspace.identity.read"],
     host_capabilities: ["workspace.identity.read"],
   };
@@ -44,7 +44,7 @@ function makeService(descriptor = action()) {
   };
   const manager = {
     installed: async () => [],
-    verifiedActionSet: async (id: string) => id === pluginId ? admitted : undefined,
+    verifiedActionSet: async (id: string) => id === descriptor.plugin_id ? admitted : undefined,
     authoringRuntime: () => runtime,
   } as unknown as ConstructorParameters<typeof BrowserAuthoringService>[0]["manager"];
   const git = {
@@ -56,7 +56,7 @@ function makeService(descriptor = action()) {
   } as unknown as BrowserLocalGit;
   const service = new BrowserAuthoringService({
     selectWorkspace: () => ({ git, identity, generation: scope.generation }),
-    editorState: () => ({ path: null, dirty: false, draft_generation: null, composing: false }),
+    editorState,
     manager,
     idempotency: {
       claim: async () => ({ kind: "owner" }), complete: async () => {}, failBeforeEffects: async () => {},
@@ -97,6 +97,27 @@ test("a synthetic UI event never satisfies a signed action gesture requirement",
   if (!result.ok) assert.equal(result.error.code, "capability_denied");
   assert.equal(calls.length, 0);
   await service.dispose();
+});
+
+test("portable resume proposals cannot invent a position or capture a dirty editor",async()=>{
+  const markerPlugin="proprium.narrative",markerAction="proprium.narrative.resume.mark.propose";
+  const descriptor={...action(),plugin_id:markerPlugin,action_id:markerAction,effect:"propose" as const,
+    input_schema:{type:"object",additionalProperties:false,properties:{scene_id:{type:"string",maxLength:256},expected_manuscript_revision:{type:"string",maxLength:256},
+      expected_marker_revision:{type:["string","null"],maxLength:256},sentence_index:{type:["integer","null"]},scroll_top:{type:"number"}}}};
+  let dirty=true;
+  const h=makeService(descriptor,()=>({path:"manuscript/a.md",dirty,draft_generation:null,composing:false,
+    resume_position:{scene_id:"a",manuscript_path:"manuscript/a.md",manuscript_revision:"b".repeat(64),sentence_index:2,scroll_top:123}}));
+  const input={scene_id:"a",expected_manuscript_revision:"b".repeat(64),expected_marker_revision:null,sentence_index:2,scroll_top:123};
+  const blocked=await h.service.invokeUi(new Event("click"),markerPlugin,markerAction,input);
+  assert.equal(blocked.ok,false);if(!blocked.ok)assert.equal(blocked.error.code,"dirty_draft",JSON.stringify(blocked));
+  assert.equal(h.calls.length,0);
+  dirty=false;
+  const invented=await h.service.invokeUi(new Event("click"),markerPlugin,markerAction,{...input,scroll_top:999});
+  assert.equal(invented.ok,false);if(!invented.ok)assert.equal(invented.error.code,"invalid_input");
+  assert.equal(h.calls.length,0);
+  const captured=await h.service.invokeUi(new Event("click"),markerPlugin,markerAction,input);
+  assert.equal(captured.ok,true);assert.equal(h.calls.length,1);
+  await h.service.dispose();
 });
 
 test("production action idempotency fails closed when durable IndexedDB is unavailable", async () => {
