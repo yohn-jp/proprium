@@ -73,7 +73,7 @@ test("normal Host installs and enables all independently signed authoring Compon
     for (const capability of plugin.capabilities) expect(permissions).toContain(capability);
     await page.getByRole("button", { name: "ダウンロードして無効状態でインストール", exact: true }).click();
     await expect(panel.getByRole("status")).toContainText("署名とダイジェストを検証し、無効状態でインストールしました");
-    const card = panel.getByRole("listitem").filter({ hasText: plugin.id }).filter({ hasText: `v${plugin.version}` });
+    const card = panel.getByRole("listitem").filter({ has: page.locator(".plugin-card-head strong", { hasText: new RegExp(`^${plugin.id.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}$`) }) }).filter({ hasText: `v${plugin.version}` });
     await expect(card).toBeVisible();
     await expect(card).toContainText("installed, disabled");
     installInputs.push({ plugin_id: plugin.id, version: plugin.version,
@@ -98,7 +98,7 @@ test("normal Host installs and enables all independently signed authoring Compon
   if (await reloadedPanel.getAttribute("open") === null) await reloadedPanel.locator("summary").click();
   const reloadStates = [];
   for (const plugin of release.plugins) {
-    const card = reloadedPanel.getByRole("listitem").filter({ hasText: plugin.id }).filter({ hasText: `v${plugin.version}` });
+    const card = reloadedPanel.getByRole("listitem").filter({ has: page.locator(".plugin-card-head strong", { hasText: new RegExp(`^${plugin.id.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}$`) }) }).filter({ hasText: `v${plugin.version}` });
     await expect(card).toBeVisible();
     await expect(card).toContainText("installed, disabled");
     for (const capability of plugin.capabilities) {
@@ -107,23 +107,23 @@ test("normal Host installs and enables all independently signed authoring Compon
       await checkbox.check();
     }
     await card.getByRole("button", { name: "Enable", exact: true }).click();
-    await expect(card).toContainText(`${plugin.id}@${plugin.version} is enabled`);
+    await expect(card).toContainText("enabled, idle");
     reloadStates.push({ plugin_id: plugin.id, state: "enabled-idle", granted_capabilities: [...plugin.capabilities] });
   }
 
   const exposedPanels: Array<{ plugin_id: string; surface_id: string; title: string }> = [];
   const workspaceConfiguration = page.locator("details.st-workspace-configuration");
   await expect(workspaceConfiguration).toBeVisible();
-  if (await workspaceConfiguration.getAttribute("open") === null) await workspaceConfiguration.locator("summary").click();
+  if (await workspaceConfiguration.getAttribute("open") === null) await workspaceConfiguration.locator(":scope > summary").click();
   const panelMenu = workspaceConfiguration.locator("details.st-workspace-panel-menu");
-  if (await panelMenu.getAttribute("open") === null) await panelMenu.locator("summary").click();
+  if (await panelMenu.getAttribute("open") === null) await panelMenu.locator(":scope > summary").click();
   for (const plugin of release.plugins) for (const surface of plugin.surfaces.filter(item => item.kind === "panel")) {
     const show = panelMenu.getByRole("button", { name: `${surface.title}を表示する`, exact: true });
     if (await show.count()) await show.click();
     else await expect(panelMenu.getByRole("button", { name: `${surface.title}を閉じる`, exact: true })).toBeVisible();
     const surfaceTab = page.getByRole("tab", { name: surface.title, exact: true }).first();
     if (await surfaceTab.count() && await surfaceTab.getAttribute("aria-selected") !== "true") await surfaceTab.click();
-    await expect(page.getByRole("heading", { name: surface.title, level: 2, exact: true })).toBeVisible();
+    await expect(page.locator(".authoring-surface").getByRole("heading", { name: surface.title, level: 2, exact: true })).toBeVisible();
     exposedPanels.push({ plugin_id: plugin.id, surface_id: surface.id, title: surface.title });
   }
 
@@ -133,7 +133,7 @@ test("normal Host installs and enables all independently signed authoring Compon
   const enabledPanel = page.locator("details.plugin-manager-panel");
   if (await enabledPanel.getAttribute("open") === null) await enabledPanel.locator("summary").click();
   for (const plugin of release.plugins) {
-    const card = enabledPanel.getByRole("listitem").filter({ hasText: plugin.id }).filter({ hasText: `v${plugin.version}` });
+    const card = enabledPanel.getByRole("listitem").filter({ has: page.locator(".plugin-card-head strong", { hasText: new RegExp(`^${plugin.id.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}$`) }) }).filter({ hasText: `v${plugin.version}` });
     await expect(card).toBeVisible();
     await expect(card).toContainText("enabled, idle");
   }
