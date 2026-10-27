@@ -76,7 +76,7 @@ function validateMarker(value: unknown): Marker {
       !Number.isSafeInteger(row.repositoryId) || Number(row.repositoryId) < 1 ||
       typeof row.branch !== "string" || !row.branch || row.branch.length > 256 ||
       typeof row.sceneId !== "string" || !row.sceneId || row.sceneId.length > 256 ||
-      typeof row.manuscriptRevision !== "string" || !row.manuscriptRevision ||
+      typeof row.manuscriptRevision !== "string" || !/^[a-f0-9]{64}$/u.test(row.manuscriptRevision) ||
       !(row.sentenceIndex === null || Number.isSafeInteger(row.sentenceIndex) && Number(row.sentenceIndex) > 0) ||
       typeof row.scrollTop !== "number" || !Number.isFinite(row.scrollTop) || row.scrollTop < 0 || !validUtc(row.updatedAt)) {
     fail("unsupported_format", "Resume marker fields are invalid");

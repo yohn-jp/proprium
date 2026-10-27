@@ -190,17 +190,17 @@ test("index status reads Host metadata and a new guest verifies cached source re
   assert.equal(host.calls.slice(queryCallsStart).some(({ operation }) => operation === "workspace.file.read"), false);
 });
 
-test("token counting labels its fallback and rejects URL-like or server-selected model IDs", async () => {
+test("token counting labels an explicitly selected approximation and rejects unavailable or unsafe models", async () => {
   const handler = createResearchHandlers()["research.nlp.countTokens"]!;
-  const approximate = await invoke(handler, new ResearchHostFixture(), "research.nlp.countTokens", { texts: ["青剣 ABC"] }) as {
+  const approximate = await invoke(handler, new ResearchHostFixture(), "research.nlp.countTokens", { texts: ["青剣 ABC"], modelId: "approx" }) as {
     identity: { method: string; modelId: string }; fallbackReason: string;
   };
   assert.deepEqual(approximate, {
     counts: [4], identity: { modelId: "approx", version: "source-approx-v1", digest: "205e2370155900abcc923065a85072f74eb706f1bcec68fbaa93eb15883d4b88", method: "approx" },
-    fallbackReason: "tokenizer_unavailable",
+    fallbackReason: "user_selected_approximation",
   });
   await assert.rejects(() => invoke(handler, new ResearchHostFixture(), "research.nlp.countTokens", { texts: ["text"], modelId: "https://hosted.invalid/model" }), /approved local tokenizer/u);
-  await assert.rejects(() => invoke(handler, new ResearchHostFixture(), "research.nlp.countTokens", { texts: ["text"], modelId: "owner/model" }), /unavailable/u);
+  await assert.rejects(() => invoke(handler, new ResearchHostFixture(), "research.nlp.countTokens", { texts: ["text"], modelId: "owner/model" }), { code: "dependency_unavailable" });
   await assert.rejects(() => invoke(createResearchHandlers()["research.query"]!, new ResearchHostFixture(), "research.query", { query: "term", limit: "100" as unknown as number }), /limit must be between/u);
 });
 

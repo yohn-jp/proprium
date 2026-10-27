@@ -65,6 +65,8 @@ test("manifest action inventory and closed output schemas match the guest contra
         for (const [key, value] of Object.entries(row)) checkClosedObjects(value, `${path}.${key}`);
       }
     };
+    assert.equal(action.input_schema.type, "object");
+    assert.equal(action.input_schema.additionalProperties, false);
     checkClosedObjects(action.input_schema, `${action.action_id}.input`);
     checkClosedObjects(action.output_schema, `${action.action_id}.output`);
   }
@@ -551,7 +553,7 @@ test("resume.marks.list pages scoped markers, checks linked body revisions and r
     "    branch: main",
     "    sceneId: scene-1",
     "    manuscriptPath: manuscript/custom/scene-1.md",
-    `    manuscriptRevision: stale-${bodyRevision}`,
+    `    manuscriptRevision: ${"a".repeat(64)}`,
     "    sentenceIndex: null",
     "    scrollTop: 0",
     "    updatedAt: '2026-10-26T01:30:00Z'",
@@ -588,6 +590,17 @@ test("resume.marks.list pages scoped markers, checks linked body revisions and r
   };
   assert.deepEqual(second.items.map((item) => [item.device_id, item.availability, item.publication]), [["device-b", "stale", "remote_confirmed"]]);
   assert.equal(second.next_cursor, null);
+});
+
+test("resume markers reject malformed manuscript revisions", () => {
+  const host = new MemoryHost();
+  host.add("meta/proprium/plugins/proprium.narrative/resume.v1.yaml", [
+    "schemaVersion: 1", "positions:", "  - deviceId: device-a", "    repositoryId: 42",
+    "    branch: main", "    sceneId: scene-1", "    manuscriptPath: manuscript/a.md",
+    "    manuscriptRevision: invalid", "    sentenceIndex: null", "    scrollTop: 0",
+    "    updatedAt: '2026-10-26T01:00:00Z'", "",
+  ].join("\n"));
+  assert.throws(() => run(host, request("proprium.narrative.resume.marks.list", {})), { code: "unsupported_format" });
 });
 
 test("resume.mark.propose updates only this device marker and preserves unknown YAML with exact preconditions", () => {

@@ -950,6 +950,18 @@
       "schema_version": 1,
       "effect": "propose",
       "input_schema": {
+        "type": "object",
+        "properties": {
+          "kind": {},
+          "title": {},
+          "id": {},
+          "order": {},
+          "expected_tree_revision": {},
+          "volume_id": {},
+          "chapter_id": {},
+          "position": {}
+        },
+        "additionalProperties": false,
         "oneOf": [
           {
             "type": "object",

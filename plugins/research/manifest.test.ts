@@ -12,7 +12,13 @@ test("Research official manifest declares every implemented action and only acti
   assert.equal(metadata.schema, "proprium.plugin/v2");
   assert.equal(metadata.id, "proprium.research");
   assert.equal(metadata.abi, "proprium.component/v2");
-  assert.deepEqual(metadata.asset_groups, []);
+  assert.equal(metadata.asset_groups.length, 1);
+  assert.deepEqual(metadata.asset_groups[0], {
+    id: "proprium.research.ipadic",
+    manifest_path: "proprium/research/assets/manifests/66601c7e3f8ed946df567a97644135bfec786d79f5b28f2b5adbb54258fe5d07/assets.json",
+    sha256: "66601c7e3f8ed946df567a97644135bfec786d79f5b28f2b5adbb54258fe5d07",
+    bytes: 3761, role: "dictionary",
+  });
   assert.deepEqual(metadata.dependencies, []);
 
   const handlers = createResearchHandlers();
