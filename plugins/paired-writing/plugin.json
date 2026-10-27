@@ -14596,6 +14596,187 @@
         "plugin"
       ],
       "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.paired-writing",
+      "action_id": "paired.qa.preview",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 8000,
+            "minLength": 1
+          },
+          "sceneId": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1
+          },
+          "messages": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "role": {
+                  "enum": [
+                    "user",
+                    "assistant"
+                  ]
+                },
+                "content": {
+                  "type": "string",
+                  "maxLength": 8000
+                }
+              },
+              "required": [
+                "role",
+                "content"
+              ]
+            }
+          }
+        },
+        "required": [],
+        "anyOf": [
+          {
+            "required": [
+              "question"
+            ]
+          },
+          {
+            "required": [
+              "messages"
+            ]
+          }
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 786432
+          },
+          "system": {
+            "type": "string",
+            "maxLength": 786432
+          },
+          "messages": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 21,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "role": {
+                  "enum": [
+                    "user",
+                    "assistant"
+                  ]
+                },
+                "content": {
+                  "type": "string",
+                  "maxLength": 8000
+                }
+              },
+              "required": [
+                "role",
+                "content"
+              ]
+            }
+          },
+          "promptVersion": {
+            "const": "setting-qa.v1"
+          },
+          "provider_invoked": {
+            "const": false
+          },
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "maxLength": 256,
+                "minLength": 1
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "worktree_generation": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              }
+            },
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ]
+          },
+          "sources": {
+            "type": "array",
+            "maxItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "maxLength": 1024
+                },
+                "revision": {
+                  "type": "string",
+                  "maxLength": 256
+                }
+              },
+              "required": [
+                "path",
+                "revision"
+              ]
+            }
+          }
+        },
+        "required": [
+          "prompt",
+          "system",
+          "messages",
+          "promptVersion",
+          "provider_invoked",
+          "snapshot",
+          "sources"
+        ]
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.plugin.invoke"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
     }
   ],
   "ui": [
@@ -14869,11 +15050,26 @@
                 "data_key": "last_action_result"
               },
               "fields": [
-                { "key": "effective.defaultPresetId", "label": "Effective default preset" },
-                { "key": "effective.totalCuBudget", "label": "Effective compute budget" },
-                { "key": "effective.maxConcurrentModels", "label": "Maximum concurrent models" },
-                { "key": "provenance.defaultPresetId", "label": "Preset source" },
-                { "key": "provenance.totalCuBudget", "label": "Budget source" }
+                {
+                  "key": "effective.defaultPresetId",
+                  "label": "Effective default preset"
+                },
+                {
+                  "key": "effective.totalCuBudget",
+                  "label": "Effective compute budget"
+                },
+                {
+                  "key": "effective.maxConcurrentModels",
+                  "label": "Maximum concurrent models"
+                },
+                {
+                  "key": "provenance.defaultPresetId",
+                  "label": "Preset source"
+                },
+                {
+                  "key": "provenance.totalCuBudget",
+                  "label": "Budget source"
+                }
               ]
             }
           },
@@ -14959,6 +15155,69 @@
               "value": {
                 "data_key": "last_action_result"
               }
+            }
+          },
+          {
+            "id": "qa-preview-tab",
+            "title": "QA prompt",
+            "body": {
+              "id": "qa-preview-form",
+              "type": "form",
+              "title": "Preview setting question",
+              "description": "Review the exact conversation and saved scene context locally. This does not send a provider request.",
+              "fields": [
+                {
+                  "id": "question",
+                  "type": "string",
+                  "label": "Question",
+                  "required": true,
+                  "max_length": 8000
+                },
+                {
+                  "id": "scene_id",
+                  "type": "string",
+                  "label": "Scene ID (optional)",
+                  "required": false,
+                  "max_length": 256
+                }
+              ],
+              "submit": {
+                "action_id": "paired.qa.preview",
+                "input_template": {
+                  "question": {
+                    "data_key": "form.question"
+                  },
+                  "sceneId": {
+                    "data_key": "form.scene_id"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "qa-preview-result-tab",
+            "title": "QA prompt result",
+            "body": {
+              "id": "qa-preview-result",
+              "type": "detail",
+              "title": "Exact local question preview",
+              "value": {
+                "data_key": "last_action_result"
+              },
+              "fields": [
+                {
+                  "key": "prompt",
+                  "label": "Prompt and conversation"
+                },
+                {
+                  "key": "promptVersion",
+                  "label": "Prompt version"
+                },
+                {
+                  "key": "provider_invoked",
+                  "label": "Provider invoked"
+                }
+              ]
             }
           }
         ]

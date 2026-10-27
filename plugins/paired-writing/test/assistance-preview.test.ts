@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { previewQa } from "../src/assistance-preview.js";
+import { guest } from "../guest.js";
+import { readFile } from "node:fs/promises";
+import { assertValue } from "../../../app/src/browser/proprium/authoring/schema.js";
 import type { ActionRequest } from "../../../app/src/browser/proprium/authoring/types.js";
 import type { GuestHost, HostCall } from "../../shared/guest.js";
 
@@ -8,6 +11,19 @@ const scope = {workspace_id:"w",repository_id:1,branch:"main",generation:"g"};
 const snapshot = {id:"s",local_commit:null,worktree_generation:"v",draft_generation:null};
 const request = {schema_version:1,request_id:"r",plugin_id:"proprium.paired-writing",action_id:"paired.qa.preview",scope,snapshot,input:{},deadline_ms:30000} as ActionRequest;
 const host: GuestHost = { request(operation, payload) { return (function* () { return yield {operation,payload}; })() as never; } };
+test("the signed QA preview action reaches the guest and returns its declared closed output", async () => {
+  guest.initialize({pluginId:request.plugin_id,version:"0.1.0",workspaceId:scope.workspace_id});
+  try {
+    const result=JSON.parse(guest.invoke(JSON.stringify({...request,input:{question:"誰が駅にいる？"}})));
+    assert.equal(result.ok,true);
+    const manifest=JSON.parse(await readFile(new URL("../plugin.json",import.meta.url),"utf8"));
+    const action=manifest.actions.find((a:{action_id:string})=>a.action_id==="paired.qa.preview");
+    assert.ok(action);
+    assertValue(action.output_schema,result.value);
+    assert.match(result.value.prompt,/誰が駅にいる？/u);
+    assert.equal(result.value.provider_invoked,false);
+  } finally { guest.dispose(); }
+});
 function run(generator: Generator<HostCall, unknown, unknown>): {value:any;calls:string[]} {
   let next = generator.next(); const calls:string[]=[];
   while (!next.done) {
