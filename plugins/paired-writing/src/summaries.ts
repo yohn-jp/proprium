@@ -180,7 +180,7 @@ export function* suggestSummary(input: unknown, host: GuestHost, request: Action
     return { scope: "chapter", targetId: prepared.targetId, summary: parseSummaryOutput(JSON.stringify(prepared.parent_existing), "chapter"), sourceHash, children, cached: true, citations, diagnostics, expectedFileRevisions, provenance: prepared.parent_existing };
   }
   const generated = yield* generate(host, request, { feature: "chapter-summary", prompt: chapterSummaryPrompt(prepared.targetId, children.map(child => ({ id: child.id, summaryLines: child.summary.summaryLines }))),
-    promptVersion: prepared.promptVersion, maxOutputTokens: 512, sourceManifest: citations });
+    promptVersion: prepared.promptVersion, maxOutputTokens: 512, sourceManifest: expectedFileRevisions.filter(item => item.revision !== null) });
   return { scope: "chapter", targetId: prepared.targetId, summary: parseSummaryOutput(generated.text, "chapter"), sourceHash, children, cached: false, citations, diagnostics, expectedFileRevisions, provenance: generated.provenance };
 }
 

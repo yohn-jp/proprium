@@ -60,3 +60,30 @@ test("selected state event delegates exact body-relative evidence to Knowledge",
 test("state-event generation accepts fenced JSON from a provider", () => {
   assert.deepEqual(parseStateEventCandidates('```json\n{"events":[]}\n```', { path: "m.md", revision: "a".repeat(64), text: "本文" }).events, []);
 });
+
+test("state-event preview keeps pinned Knowledge provenance without provider calls", async () => {
+  const { previewStateEvents } = await import("../src/state-events.js");
+  const scope = { workspace_id: "w", repository_id: 7, branch: "main", generation: "g" };
+  const snapshot = { id: "s", local_commit: null, worktree_generation: "g", draft_generation: null };
+  const request = { schema_version: 1 as const, request_id: "r", plugin_id: "proprium.paired-writing", action_id: "paired.state-events.preview", scope, snapshot, input: {}, deadline_ms: 30000 };
+  const meta = "scene.yaml", body = "manuscript/s.md", mr = "a".repeat(64), br = "b".repeat(64), extra = "c".repeat(64);
+  const host = { request(operation: string, payload: Record<string, unknown>) { return (function* () { return yield { kind: "host_call", call_id: "", operation, payload }; })(); } };
+  const iter = previewStateEvents({ sceneId: "s1" }, host as any, request); let current = iter.next();
+  while (!current.done) {
+    const call = current.value; let response: any;
+    if (call.operation === "workspace.plugin.invoke") {
+      const action = call.payload.action_id;
+      const value = action === "knowledge.world-state.at-scene" ? { sourceFiles: [{ path: meta, revision: mr }, { path: "bible/c.yaml", revision: extra }], characters: [] }
+        : action === "proprium.narrative.scene.open" ? { scene: { id: "s1", metadata_path: meta, metadata_revision: mr }, manuscript_path: body, manuscript_revision: br }
+          : { scene_id: "s1", metadata_revision: mr, manuscript_path: body, manuscript_revision: br };
+      response = { ok: true, scope, snapshot, request_id: "child", warnings: [], value };
+    } else if (call.operation === "workspace.file.read") {
+      const bytes = [...new TextEncoder().encode("本文")]; response = { revision: br, total_bytes: bytes.length, offset: 0, bytes, next_offset: null };
+    } else throw new Error(`Unexpected provider or write call ${call.operation}`);
+    current = iter.next(response);
+  }
+  const result = current.value as any;
+  assert.equal(result.provider_invoked, false);
+  assert.ok(result.sources.some((row: any) => row.path === "bible/c.yaml" && row.revision === extra));
+  assert.equal(Object.hasOwn(result, "manuscript"), false);
+});

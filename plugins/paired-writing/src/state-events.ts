@@ -66,6 +66,20 @@ function* prepareStateEvents(input: unknown, host: GuestHost, request: ActionReq
   if (manuscript.revision !== scene.manuscript_revision) throw new PairedError("snapshot_stale", "Manuscript changed");
   const state = yield* invokeAction<unknown>(host, request, "proprium.knowledge", "knowledge.world-state.at-scene", { sceneId });
   const previous = JSON.stringify(state, null, 2).slice(0, 8000);
+  const stateRecord = record(state, "Knowledge world state");
+  if (!Array.isArray(stateRecord.sourceFiles)) throw new PairedError("dependency_unavailable", "Knowledge did not provide world-state source provenance");
+  const stateSources: Array<{ path: string; revision: string }> = [];
+  for (const raw of stateRecord.sourceFiles) {
+    const item = record(raw, "Knowledge world-state source");
+    if (typeof item.path !== "string" || !item.path || typeof item.revision !== "string" || !/^[a-f0-9]{64}$/u.test(item.revision)) throw new PairedError("snapshot_stale", "Knowledge world-state source has no exact revision");
+    const existing = stateSources.find(source => source.path === item.path);
+    if (existing && existing.revision !== item.revision) throw new PairedError("snapshot_stale", "Knowledge world-state source revisions conflict");
+    if (!existing) stateSources.push({ path: item.path, revision: item.revision });
+  }
+  for (const source of stateSources) {
+    if ((source.path === scene.metadata_path && source.revision !== scene.metadata_revision) ||
+        (source.path === manuscript.path && source.revision !== manuscript.revision)) throw new PairedError("snapshot_stale", "Knowledge and Narrative source revisions disagree");
+  }
   const front = /^---\s*\r?\n[\s\S]*?\r?\n---\s*\r?\n/u.exec(manuscript.text);
   const body = manuscript.text.slice(front?.[0].length ?? 0).trim();
   const prompt = ["あなたは小説執筆支援アシスタントです。\n主張には根拠の引用を付けてください。引用できない内容は断言しないでください。\n出力は日本語で行ってください。",
@@ -78,7 +92,7 @@ function* prepareStateEvents(input: unknown, host: GuestHost, request: ActionReq
   for (let i = 0; i < body.length; i++) { hash ^= body.charCodeAt(i); hash = Math.imul(hash, 0x01000193); }
   const promptVersion = `state-event-extraction:v1:${(hash >>> 0).toString(16).padStart(8, "0")}`;
   return { prompt, promptVersion, provider_invoked: false,
-    sources: [{ path: scene.metadata_path, revision: scene.metadata_revision }, { path: manuscript.path, revision: manuscript.revision }],
+    sources: [...new Map([{ path: scene.metadata_path, revision: scene.metadata_revision }, { path: manuscript.path, revision: manuscript.revision }, ...stateSources].map(source => [source.path, source])).values()],
     manuscript: { path: manuscript.path, revision: manuscript.revision, text: manuscript.text } };
 }
 
