@@ -42,8 +42,9 @@ export function parseSummaryOutput(raw: string, scope: SummaryScope): Summary {
   if (summaryLines.length !== 3 || summaryLines.some(line => !line.trim())) throw new PairedError("invalid_input", "Summary requires three nonempty lines");
   return scope === "scene" ? { summaryLines, characters: list(value.characters, "characters", 100), stateChanges: list(value.stateChanges, "stateChanges", 100) } : { summaryLines };
 }
-export function chapterSummaryFingerprint(children: readonly { id: string; sourceHash: string }[]): string {
-  return hashText(JSON.stringify(children.map(child => [child.id, child.sourceHash])));
+export function chapterSummaryFingerprint(children: readonly { id: string; sourceHash: string; summaryRevision?: string }[]): string {
+  if (children.some(child => child.summaryRevision !== undefined) && children.some(child => child.summaryRevision === undefined)) throw new PairedError("invalid_input", "Chapter summary fingerprints must include every child summary revision");
+  return hashText(JSON.stringify(children.map(child => child.summaryRevision === undefined ? [child.id, child.sourceHash] : [child.id, child.sourceHash, child.summaryRevision])));
 }
 export function isFreshSummary(value: unknown, sourceHash: string, promptVersion: string): boolean {
   return isObj(value) && value.sourceHash === sourceHash && value.promptVersion === promptVersion && typeof value.model === "string" && !!value.model &&
@@ -185,8 +186,10 @@ export function* suggestSummary(input: unknown, host: GuestHost, request: Action
   if (prepared.scope === "scene") return { scope: "scene", targetId: prepared.targetId, summary: children[0]!.summary,
     sourceHash: children[0]!.sourceHash, cached: children[0]!.cached, citations, diagnostics, expectedFileRevisions, provenance: children[0]!.provenance };
   const sourceHash = chapterSummaryFingerprint(children);
-  if (isFreshSummary(prepared.parent_existing, sourceHash, prepared.promptVersion) && prepared.parent_existing?.id === prepared.targetId &&
-      JSON.stringify(prepared.parent_existing?.source_files) === JSON.stringify(prepared.sources.flatMap(source => [{ path: source.metadata_path, revision: source.metadata_revision }, { path: source.manuscript_path, revision: source.manuscript_revision }])) &&
+  const acceptedHash = prepared.sources.every(source => source.summary_revision !== null)
+    ? chapterSummaryFingerprint(prepared.sources.map(source => ({ id: source.id, sourceHash: source.manuscript_revision, summaryRevision: source.summary_revision! }))) : null;
+  if (acceptedHash !== null && isFreshSummary(prepared.parent_existing, acceptedHash, prepared.promptVersion) && prepared.parent_existing?.id === prepared.targetId &&
+      JSON.stringify(prepared.parent_existing?.source_files) === JSON.stringify(prepared.sources.flatMap(source => [{ path: source.metadata_path, revision: source.metadata_revision }, { path: source.manuscript_path, revision: source.manuscript_revision }, { path: source.summary_path, revision: source.summary_revision }])) &&
       JSON.stringify(prepared.parent_existing?.context_files) === JSON.stringify([...new Map(prepared.sources.flatMap(source => source.context_files).map(file => [file.path, file])).values()]) &&
       prepared.parent_existing?.knowledge_available === prepared.sources.every(source => source.knowledge_available) &&
       JSON.stringify(prepared.parent_existing?.children) === JSON.stringify(prepared.sources.map(source => ({ id: source.id, metadata_path: source.metadata_path, metadata_revision: source.metadata_revision,
@@ -259,7 +262,8 @@ export function* proposeSummary(input: unknown, host: GuestHost, request: Action
   for (const [path, revision] of readMap) if (!expected.has(path) || expected.get(path) !== revision) throw new PairedError("snapshot_stale", `Summary source revision changed: ${path}`, { path });
   const timestamp = yield* host.request<{ timestamp: string }>("workspace.change.timestamp", {});
   if (!timestamp || typeof timestamp.timestamp !== "string" || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/u.test(timestamp.timestamp) || !Number.isFinite(Date.parse(timestamp.timestamp))) throw new PairedError("invalid_input", "Host returned invalid summary timestamp");
-  const sourceFiles = prepared.sources.flatMap(source => [{ path: source.metadata_path, revision: source.metadata_revision }, { path: source.manuscript_path, revision: source.manuscript_revision }]);
+  let sourceFiles = prepared.sources.flatMap(source => [{ path: source.metadata_path, revision: source.metadata_revision }, { path: source.manuscript_path, revision: source.manuscript_revision }]);
+  let acceptedSourceHash = expectedHash;
   const orderedChildren = prepared.sources.map(source => ({ id: source.id, metadata_path: source.metadata_path, metadata_revision: source.metadata_revision,
     manuscript_path: source.manuscript_path, manuscript_revision: source.manuscript_revision, summary_path: source.summary_path,
     summary_revision: source.summary_revision }));
@@ -296,8 +300,13 @@ export function* proposeSummary(input: unknown, host: GuestHost, request: Action
       if (!revision) throw new PairedError("snapshot_stale", "Child summary has no exact resulting revision");
       orderedChildren[i]!.summary_revision = revision;
     }
+    sourceFiles = orderedChildren.flatMap(child => [
+      { path: child.metadata_path, revision: child.metadata_revision }, { path: child.manuscript_path, revision: child.manuscript_revision },
+      { path: child.summary_path, revision: child.summary_revision! },
+    ]);
+    acceptedSourceHash = chapterSummaryFingerprint(orderedChildren.map(child => ({ id: child.id, sourceHash: child.manuscript_revision, summaryRevision: child.summary_revision! })));
     writes.push({ path: prepared.parent_path!, revision: prepared.parent_revision, text: updateSummaryYaml(prepared.parent_existing_text, {
-      scope: "chapter", id: prepared.targetId, ...summary, sourceHash: expectedHash, generatedAt: timestamp.timestamp,
+      scope: "chapter", id: prepared.targetId, ...summary, sourceHash: acceptedSourceHash, generatedAt: timestamp.timestamp,
       provider: provenance.provider, model: provenance.model, promptVersion: prepared.promptVersion, snapshot: request.snapshot,
       source_files: sourceFiles, context_files: [...new Map(prepared.sources.flatMap(source => source.context_files).map(file => [file.path, file])).values()], knowledge_available: prepared.sources.every(source => source.knowledge_available), children: orderedChildren,
     }) });
@@ -310,5 +319,5 @@ export function* proposeSummary(input: unknown, host: GuestHost, request: Action
       kind: write.revision === null ? "create" : "replace", path: write.path, expected_revision: write.revision, content: [...new TextEncoder().encode(write.text)] })) }], evidence: [] };
   const receipt = yield* host.request<{ proposal_id: string }>("workspace.change.propose", { changeset });
   if (!receipt || typeof receipt.proposal_id !== "string" || !receipt.proposal_id) throw new PairedError("storage_unknown", "Host did not return a summary proposal receipt");
-  return { proposal_id: receipt.proposal_id, change_set_id: changeId, status: "proposed", paths: writes.map(write => write.path) };
+  return { proposal_id: receipt.proposal_id, change_set_id: changeId, status: "proposed", paths: writes.map(write => write.path), sourceHash: acceptedSourceHash };
 }

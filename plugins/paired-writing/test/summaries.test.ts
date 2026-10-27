@@ -100,7 +100,8 @@ test("chapter summary proposes ordered children and parent in one guarded unit",
     assert.equal(stored.children[i].summary_path, change.units[0].operations[i].path);
     assert.equal(stored.children[i].summary_revision, sha256(Uint8Array.from(change.units[0].operations[i].content)));
   }
-  assert.deepEqual(stored.source_files, children.flatMap(c => [{ path: c.meta, revision: c.metaRevision }, { path: c.body, revision: c.bodyRevision }]));
+  assert.deepEqual(stored.source_files, children.flatMap((c, i) => [{ path: c.meta, revision: c.metaRevision }, { path: c.body, revision: c.bodyRevision }, { path: c.summary, revision: stored.children[i].summary_revision }]));
+  assert.equal(stored.sourceHash, chapterSummaryFingerprint(stored.children.map((c: any) => ({ id: c.id, sourceHash: c.manuscript_revision, summaryRevision: c.summary_revision }))));
 });
 
 test("summary update retains unrelated CRLF bytes around block sequences", async () => {
