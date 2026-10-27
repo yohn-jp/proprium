@@ -464,6 +464,7 @@ async function buildAuthoringSuite() {
         const cargoHome = process.env.CARGO_HOME ?? (process.env.HOME ? resolve(process.env.HOME, '.cargo') : undefined);
         const customBuildEnvironment = {
           ...componentizeEnvironment,
+          ...Object.fromEntries(['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy', 'NODE_USE_ENV_PROXY', 'NODE_EXTRA_CA_CERTS'].filter(name => process.env[name] !== undefined).map(name => [name, process.env[name]])),
           PATH: [cargoHome ? resolve(cargoHome, 'bin') : '', process.env.PATH ?? ''].filter(Boolean).join(delimiter),
           ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
           ...(process.env.CARGO_HOME ? { CARGO_HOME: process.env.CARGO_HOME } : {}),
