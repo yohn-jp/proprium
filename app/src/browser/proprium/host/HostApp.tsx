@@ -25,6 +25,7 @@ import { AuthoringCommandMenu } from "./authoring/AuthoringCommandMenu.js";
 import { NarrativeNavigation } from "./authoring/NarrativeNavigation.js";
 import { NarrativePortableResume } from "./authoring/NarrativePortableResume.js";
 import { SemanticTaskControls } from "./authoring/SemanticTaskControls.js";
+import { ResearchCandidateControls } from "../authoring/ResearchCandidateControls.js";
 import { useProviderConsent } from "./use-provider-consent.js";
 import { ProviderSettingsStore } from "../authoring/provider-settings.js";
 import { ProviderSettingsPanel } from "../authoring/provider-settings-panel.js";
@@ -985,6 +986,9 @@ export function HostApp(): ReactElement {
     currentFile?.dirty ?? false,
     currentFile?.dirty ? currentFile.text : null,
   ]);
+  const researchScopeKey=JSON.stringify([workspaceGeneration,status.head,status.entries.map(entry=>[entry.path,entry.worktree,entry.stage]),preferences.email,
+    authoringRegistrations.filter(row=>row.pluginId==="proprium.research").map(row=>[row.manifestDigest,row.status])]);
+  const researchScopeRef=useRef(researchScopeKey);researchScopeRef.current=researchScopeKey;
 
   const revealPanel = (id: string): void => setRequestedPanel(value => ({ id, sequence: value.sequence + 1 }));
   const beforeLayoutChange = async (): Promise<boolean> => {
@@ -1066,6 +1070,8 @@ export function HostApp(): ReactElement {
           </section>
 </div> : mode === "desktop" ? <div className="host-controls">{recentCard}</div> : picker;
   const tools = <div className="host-controls">{authoring && <>
+    {authoringRegistrations.some(row=>row.pluginId==="proprium.research"&&row.status==="ready") && <details><summary>文章から用語候補を抽出</summary><ResearchCandidateControls key={`research:${workspaceGeneration}`} scopeKey={researchScopeKey}
+      invokeRead={async(expectedScope,actionId,input,signal)=>{if(expectedScope!==researchScopeRef.current)throw new Error("snapshot_stale");const result=await authoring.invokeRead("proprium.research",actionId,input,signal);if(expectedScope!==researchScopeRef.current)throw new Error("snapshot_stale");return result;}} /></details>}
     {authoringRegistrations.some(row=>row.pluginId==="proprium.narrative"&&row.status==="ready") && <NarrativePortableResume key={`portable:${workspaceGeneration}`} scopeKey={JSON.stringify([workspaceGeneration,status.head,status.entries.map(entry=>[entry.path,entry.worktree,entry.stage]),preferences.email,authoringRegistrations.filter(row=>row.pluginId==="proprium.narrative").map(row=>row.manifestDigest)])} localSceneId={loadLocalResume()?.position.scene_id}
       read={async(actionId,input,signal)=>{const result=await authoring.invokeRead("proprium.narrative",actionId,input,signal);if(!result.ok)throw new Error(`${result.error.code}: ${result.error.message}`);return result.value;}}
       open={async(event,position)=>{const result=await invokeAuthoring(event,"proprium.narrative","proprium.narrative.scene.open",{scene_id:position.scene_id},{surfaceId:"proprium.narrative.portable-resume",resume:{position,selection:null}});if(!result.action_result.ok)throw new Error(result.action_result.error.message);}} />}
