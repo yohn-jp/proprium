@@ -20,8 +20,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
-      PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR: ${{ runner.temp }}/signed-authoring-registry
-      PROPRIUM_E2E_PLUGIN_REGISTRY_KEY_FILE: ${{ runner.temp }}/authoring-test-registry-key.pem
+      PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR: /tmp/proprium-authoring-registry-${{ github.run_id }}-${{ github.run_attempt }}
+      PROPRIUM_E2E_PLUGIN_REGISTRY_KEY_FILE: /tmp/proprium-authoring-key-${{ github.run_id }}-${{ github.run_attempt }}.pem
       PROPRIUM_AUTHORING_TEST_ARTIFACT_BASE: http://127.0.0.1:4173/plugin-fixture/
     steps:
       - uses: actions/checkout@v4
@@ -105,6 +105,9 @@ jobs:
       - name: Exercise Knowledge and Research authoring surfaces
         if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         run: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts
+      - name: Exercise signed Publishing downloads and print
+        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
+        run: pnpm exec playwright test --config tests/browser/authoring-publishing.playwright.config.ts
       - name: Exercise official typed actions through the live Gateway
         if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         run: pnpm exec playwright test --config tests/browser/authoring-mcp.playwright.config.ts
