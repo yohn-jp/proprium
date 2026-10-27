@@ -25,6 +25,7 @@ function makeService(descriptor = action()) {
   const calls: Array<{ caller: string; request: ActionRequest }> = [];
   const hostReads: Array<{ scope: Scope; snapshot: Snapshot }> = [];
   let sequence = 0;
+  let pins = 0;
   const admitted: VerifiedActionSet = {
     plugin_id: pluginId, version: "1.0.0", manifest_digest: "c".repeat(64), enabled: true,
     activation_epoch: 1, descriptors: [descriptor], dependencies: [], grants: ["workspace.identity.read"],
@@ -47,8 +48,8 @@ function makeService(descriptor = action()) {
     authoringRuntime: () => runtime,
   } as unknown as ConstructorParameters<typeof BrowserAuthoringService>[0]["manager"];
   const git = {
-    pinAuthoringSnapshot: async () => ({ snapshot_id: snapshot.id, local_commit: snapshot.local_commit,
-      worktree_generation: snapshot.worktree_generation }),
+    pinAuthoringSnapshot: async () => { pins++; return { snapshot_id: snapshot.id, local_commit: snapshot.local_commit,
+      worktree_generation: snapshot.worktree_generation }; },
     assertAuthoringSnapshot: async (id: string) => { assert.equal(id, snapshot.id); },
     listAuthoringSnapshot: async () => ({ items: [], next_cursor: null }),
     releaseAuthoringSnapshot: async () => {},
@@ -68,11 +69,11 @@ function makeService(descriptor = action()) {
         publication: { remote_commit: null, files: [] } };
     } },
   });
-  return { service, calls, hostReads };
+  return { service, calls, hostReads, pinCount: () => pins };
 }
 
 test("UI background reads and MCP use the same typed Host dispatcher and selected snapshot", async () => {
-  const { service, calls, hostReads } = makeService();
+  const { service, calls, hostReads, pinCount } = makeService();
   const ui = await service.invokeRead(pluginId, actionId, {});
   const mcp = await service.invokeMcp(pluginId, actionId, {}, "gateway-test", "request-mcp");
 
@@ -83,8 +84,10 @@ test("UI background reads and MCP use the same typed Host dispatcher and selecte
   assert.deepEqual(calls.map(item => item.request.snapshot), [snapshot, snapshot]);
   assert.deepEqual(hostReads.map(item => item.scope), [scope, scope]);
   assert.deepEqual(hostReads.map(item => item.snapshot), [snapshot, snapshot]);
-  assert.equal(service.authority.isSnapshotCurrent({ scope, snapshot } as never), false);
+  assert.equal(pinCount(), 1, "unchanged UI/MCP paging retains the exact same snapshot lease");
+  assert.equal(service.authority.isSnapshotCurrent({ scope, snapshot } as never), true);
   await service.dispose();
+  assert.equal(service.authority.isSnapshotCurrent({ scope, snapshot } as never), false);
 });
 
 test("a synthetic UI event never satisfies a signed action gesture requirement", async () => {
@@ -102,4 +105,12 @@ test("production action idempotency fails closed when durable IndexedDB is unava
   await assert.rejects(store.claim({ workspace_id: scope.workspace_id, plugin_id: pluginId,
     action_id: actionId, key: "stable-key" }, "d".repeat(64)), error =>
     (error as { code?: string }).code === "storage_unknown");
+});
+
+ test("navigation continuation rejects a synthetic gesture before guest execution", async () => {
+  const { service, calls } = makeService();
+  await assert.rejects(service.invokeUi(new Event("click"), pluginId, actionId, {}, true),
+    error => (error as { code?: string }).code === "capability_denied");
+  assert.equal(calls.length, 0);
+  await service.dispose();
 });

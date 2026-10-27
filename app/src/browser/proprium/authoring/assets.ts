@@ -224,7 +224,7 @@ export class FetchAssetArtifactSource implements AssetArtifactSource {
     }
     let response: Response;
     try {
-      response = await this.fetcher(target, { method: "GET", credentials: "omit", cache: "no-store", redirect: "error", signal });
+      response = await this.fetcher(target, { method: "GET", credentials: "omit", cache: "no-store", redirect: "error", ...(signal ? { signal } : {}) });
     } catch (error) {
       if (signal?.aborted) throw cancelled();
       throw unavailable("Asset artifact could not be fetched", { reason: "fetch_failed" });

@@ -1,4 +1,4 @@
-import Ajv2020 from "ajv/dist/2020.js";
+import { Ajv2020 } from "ajv/dist/2020.js";
 import type { ActionDescriptor, ActionRequest, ActionResult, JsonSchema } from "./types.js";
 import { AuthoringError } from "./types.js";
 

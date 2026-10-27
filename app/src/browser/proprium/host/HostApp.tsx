@@ -183,6 +183,8 @@ export function HostApp(): ReactElement {
   const [theme, setTheme] = useState(loadThemeMode);
   const [requestedPanel, setRequestedPanel] = useState({ id: "editor", sequence: 0 });
   const [recoveryTarget, setRecoveryTarget] = useState<RecentWorkspace | null>(null);
+  const composingRef = useRef(false);
+  const [navigationSelection, setNavigationSelection] = useState<{ requestId: string; start: number; end: number }>();
   const editorFlush = useRef<(() => Promise<string | null>) | null>(null);
   const workspaceAuthDialog = useRef<HTMLDialogElement | null>(null);
   const workspaceAuthTarget = useRef<WorkspaceAuthTarget | null>(null);
@@ -221,7 +223,7 @@ export function HostApp(): ReactElement {
     const service = createBrowserAuthoringService({ manager: pluginManager, git, workspace: workspace.identity,
       generation: workspaceGeneration,
       getEditorState: () => ({ path: currentFileRef.current?.path ?? null, dirty: currentFileRef.current?.dirty ?? false,
-        draft_generation: null, composing: Boolean(document.querySelector(".cm-editor.cm-composing")) }),
+        draft_generation: null, composing: composingRef.current }),
       onNavigate: async (target, _intent, expected) => {
         if (gitRef.current !== git || workspaceGenerationRef.current !== workspaceGeneration) throw new Error("snapshot_stale");
         if (currentFileRef.current?.dirty) throw new Error("dirty_draft: save the current document before navigation");
@@ -230,11 +232,12 @@ export function HostApp(): ReactElement {
           const read = await git.read(target.path);
           await git.assertAuthoringSnapshot(expected.snapshot.id);
           if (gitRef.current !== git || workspaceGenerationRef.current !== workspaceGeneration) throw new Error("snapshot_stale");
-          if (currentFileRef.current !== initial || currentFileRef.current?.dirty) throw new Error("dirty_draft");
+          if (composingRef.current || currentFileRef.current !== initial || currentFileRef.current?.dirty) throw new Error("dirty_draft");
           if (read.data === null) throw new Error("file_not_found");
           const text = asText(read.data);
           const opened: OpenFile = { path: target.path, data: read.data, revision: read.revision, text, binary: text === null, dirty: false };
           currentFileRef.current = opened; setCurrentFile(opened);
+          setNavigationSelection(target.span ? { requestId: crypto.randomUUID(), start: target.span.start, end: target.span.end } : undefined);
           setRequestedPanel(value => ({ id: "editor", sequence: value.sequence + 1 }));
         }
         if (target.panel_id) setRequestedPanel(value => ({ id: target.panel_id!, sequence: value.sequence + 1 }));
@@ -1001,7 +1004,7 @@ export function HostApp(): ReactElement {
       <strong aria-label="Current file">{currentFile.path}</strong>
       <p>Binary file · {currentFile.data?.byteLength ?? 0} bytes</p>
       {hostFileActions}
-    </> : <RestoredEditor key={`${workspace.identity.localWorkspaceId}:${currentFile.path}`} workspace={workspace.identity} file={currentFile} readOnly={fileMutationBusy} head={status.head} published={syncState === "published"} localCommitted={!!status.head && status.entries.length === 0} busy={busy} checkpointBusy={checkpointBusy} publishBusy={publishBusy} authorScope={preferences.email || "local"} author={preferences} git={git} hostFileActions={hostFileActions}
+    </> : <RestoredEditor key={`${workspace.identity.localWorkspaceId}:${currentFile.path}`} workspace={workspace.identity} file={currentFile} onCompositionChange={value => { composingRef.current = value; }} hostNavigationSelection={navigationSelection} onHostNavigationSelectionApplied={() => setNavigationSelection(undefined)} readOnly={fileMutationBusy} head={status.head} published={syncState === "published"} localCommitted={!!status.head && status.entries.length === 0} busy={busy} checkpointBusy={checkpointBusy} publishBusy={publishBusy} authorScope={preferences.email || "local"} author={preferences} git={git} hostFileActions={hostFileActions}
       onChange={text => { setCurrentFile(previous => previous ? { ...previous, text, dirty: true } : previous); setSyncState("editing"); }}
       onSave={() => void saveDraft()} onCommit={() => revealPanel("inspector")} onPublish={() => void publishRemote()} canPublish={!!syncClient && status.localState === "local-committed" && !currentFile.dirty}
       onHistory={() => revealPanel("history")} onRegisterFlush={registerEditorFlush} onScratchApplied={refreshAfterPlugin} />}

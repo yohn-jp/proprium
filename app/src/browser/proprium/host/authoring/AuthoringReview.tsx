@@ -13,8 +13,10 @@ export function AuthoringReview({ service, epoch, onApplied }: {
   const [contents, setContents] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const refresh = () => service.listProposals().then(page => setProposals(page.items));
-  useEffect(() => { let active = true; void service.listProposals().then(page => { if (active) setProposals(page.items); }).catch(e => { if (active) setError(String(e)); }); return () => { active = false; }; }, [service, epoch]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const refresh = () => service.listProposals().then(page => { setProposals(page.items); setNextCursor(page.next_cursor); });
+  async function more() { try { const page = await service.listProposals(nextCursor ?? undefined); setProposals(items => [...items, ...page.items]); setNextCursor(page.next_cursor); } catch (e) { setError(String(e)); } }
+  useEffect(() => { let active = true; void service.listProposals().then(page => { if (active) { setProposals(page.items); setNextCursor(page.next_cursor); } }).catch(e => { if (active) setError(String(e)); }); return () => { active = false; }; }, [service, epoch]);
   async function inspect(id: string) {
     setBusy(true); setError(""); setInspection(null); setContents({}); setSelected([]);
     try {
@@ -40,6 +42,7 @@ export function AuthoringReview({ service, epoch, onApplied }: {
   }
   return <section aria-label="Authoring proposals"><h2>変更提案</h2>{error && <p role="alert">{error}</p>}
     <ul>{proposals.map(p => <li key={p.proposal_id}><button disabled={busy} onClick={() => void inspect(p.proposal_id)}>{p.producer_plugin_id} · {p.status} · {p.proposal_id}</button></li>)}</ul>
+    {nextCursor && <button disabled={busy} onClick={() => void more()}>提案をさらに表示</button>}
     {inspection && <article><h3>{inspection.title}</h3><p>{inspection.reason}</p><p>{inspection.status}</p>
       {inspection.units.map(unit => <section key={unit.id}><label><input type="checkbox" checked={selected.includes(unit.id)} onChange={e => setSelected(ids => e.target.checked ? [...ids, unit.id] : ids.filter(id => id !== unit.id))} />{unit.label}</label>
         <p>依存: {unit.depends_on.join(", ") || "なし"}</p>
