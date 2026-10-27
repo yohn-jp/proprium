@@ -269,7 +269,8 @@ export class AuthoringSnapshotReader {
     for (const [token, cursor] of this.cursors) if (cursor.expires_at <= current) this.cursors.delete(token);
   }
 
-  private async assertCurrent(lease: SnapshotLease): Promise<void> {
+  /** Validate an existing lease without fetching an unrelated file-list page. */
+  async assertCurrent(lease: SnapshotLease): Promise<void> {
     try { await this.port.assert_current(lease); }
     catch (error) {
       if (error instanceof AuthoringSnapshotError) throw error;

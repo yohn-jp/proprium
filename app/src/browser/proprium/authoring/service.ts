@@ -673,7 +673,7 @@ export class BrowserAuthoringService {
       throw Object.assign(new Error("Workspace selection changed"), { code: "snapshot_stale" });
     }
     const saved = this.findLease(context.scope, context.snapshot);
-    await saved.reader.list(saved.lease, { prefix: "", limit: 1 });
+    await saved.reader.assertCurrent(saved.lease);
   }
   private findLease(scope: Scope, snapshot: Snapshot): AuthoringSnapshotContext {
     const direct = this.leases.get(snapshotKey(scope, snapshot));

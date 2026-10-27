@@ -51,7 +51,7 @@ function makeService(descriptor = action()) {
     pinAuthoringSnapshot: async () => { pins++; return { snapshot_id: snapshot.id, local_commit: snapshot.local_commit,
       worktree_generation: snapshot.worktree_generation }; },
     assertAuthoringSnapshot: async (id: string) => { assert.equal(id, snapshot.id); },
-    listAuthoringSnapshot: async () => ({ items: [], next_cursor: null }),
+    listAuthoringSnapshot: async () => { throw new Error("Lease validation must not fetch unrelated repository files"); },
     releaseAuthoringSnapshot: async () => {},
   } as unknown as BrowserLocalGit;
   const service = new BrowserAuthoringService({
