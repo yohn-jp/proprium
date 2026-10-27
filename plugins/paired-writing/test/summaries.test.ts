@@ -134,3 +134,27 @@ test("scene summary preview uses pinned known characters without invoking a prov
   assert.match(result.children[0].prompt, /既知の登場人物: 灯/u);
   assert.ok(result.expectedFileRevisions.some((row: any) => row.path === "bible/c.yaml" && row.revision === cr));
 });
+
+test("scene suggestion returns typed provider failure and never proposes on unavailable provider", async () => {
+  const { suggestSummary } = await import("../src/summaries.js");
+  const scope = { workspace_id: "w", repository_id: 7, branch: "main", generation: "g" };
+  const snapshot = { id: "s", local_commit: null, worktree_generation: "g", draft_generation: null };
+  const request = { schema_version: 1 as const, request_id: "r", plugin_id: "proprium.paired-writing", action_id: "paired.summary.suggest", scope, snapshot, input: {}, deadline_ms: 30000 };
+  const meta = "plot/volumes/v/chapters/c/scenes/s1.yaml", body = "manuscript/s1.md", mr = "a".repeat(64), br = "b".repeat(64);
+  const host = { request(operation: string, payload: Record<string, unknown>) { return (function* () { return yield { kind: "host_call", call_id: "", operation, payload }; })(); } };
+  const unavailable = function* () { throw Object.assign(new Error("No model"), { code: "provider_unavailable" }); };
+  const iter = suggestSummary({ scope: "scene", targetId: "s1", expectedSnapshot: "s" }, host as any, request, unavailable as any); let current = iter.next();
+  while (!current.done) {
+    const call = current.value; let response: any;
+    if (call.operation === "workspace.plugin.invoke") {
+      const action = call.payload.action_id;
+      const value = action === "knowledge.scene.references.get" ? { appears: [] } : action === "proprium.narrative.scene.open" ? { scene: { id: "s1", metadata_path: meta, metadata_revision: mr }, manuscript_path: body, manuscript_revision: br } : { scene_id: "s1", metadata_revision: mr, manuscript_path: body, manuscript_revision: br };
+      response = { ok: true, scope, snapshot, request_id: "child", warnings: [], value };
+    } else if (call.operation === "workspace.file.read" && call.payload.path === body) {
+      const bytes = [...new TextEncoder().encode("本文")]; response = { revision: br, total_bytes: bytes.length, offset: 0, bytes, next_offset: null };
+    } else if (call.operation === "workspace.file.read") { current = iter.throw(Object.assign(new Error("missing"), { code: "file_not_found" })); continue; }
+    else throw new Error(`Unexpected write or Host operation: ${call.operation}`);
+    try { current = iter.next(response); } catch (error) { assert.equal((error as any).code, "provider_unavailable"); return; }
+  }
+  assert.fail("Expected provider_unavailable");
+});
