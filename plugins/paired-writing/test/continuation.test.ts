@@ -18,3 +18,12 @@ test("generation uses the exact preview prompt and validates three provider opti
  assert.equal(result.done,true);assert.equal((calls[0] as any).prompt,renderContinuationPrompt(prepared.text));
  assert.equal((result.value as any).options.length,3);
 });
+import {previewContinuation} from "../src/continuation.js";
+test("continuation preview uses bounded Research evidence and the exact source prompt",()=>{
+ const scope={workspace_id:"w",repository_id:1,branch:"main",generation:"g"};const snapshot={id:"s",local_commit:null,worktree_generation:"v",draft_generation:null};
+ const request={scope,snapshot} as any;const host={request(operation:string,payload:any){return(function*(){return yield {operation,payload};})();}} as any;
+ const iter=previewContinuation({recentSentences:["駅に着いた。"]},host,request);let step=iter.next();
+ assert.equal(step.done,false);assert.equal((step.value as any).operation,"workspace.plugin.invoke");
+ step=iter.next({ok:true,scope,snapshot,value:{hits:[],indexSnapshot:"s",nextCursor:null}});
+ assert.equal(step.done,true);const result=step.value as any;assert.equal(result.provider_invoked,false);assert.match(result.prompt,/駅に着いた。/u);assert.equal(result.manifest.tokenCountMode,"approximate");
+});
