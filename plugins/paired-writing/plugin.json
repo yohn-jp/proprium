@@ -19,7 +19,8 @@
     "artifact.append",
     "artifact.seal",
     "artifact.discard",
-    "plugin.preferences"
+    "plugin.preferences",
+    "workspace.capabilities.query"
   ],
   "dependencies": [
     {
@@ -14725,6 +14726,13 @@
                   "null"
                 ],
                 "maxLength": 256
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
               }
             },
             "required": [
@@ -14770,6 +14778,87 @@
       "required_capabilities": [
         "workspace.file.read",
         "workspace.plugin.invoke"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.paired-writing",
+      "action_id": "paired.provider.status",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "available": {
+            "const": true
+          },
+          "provider_ids": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "queue": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "state": {
+                "const": "not_measured"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "local_features": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "context": {
+                "type": "boolean"
+              },
+              "rewrite": {
+                "type": "boolean"
+              },
+              "qa_preview": {
+                "type": "boolean"
+              },
+              "synonym_preview": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "context",
+              "rewrite",
+              "qa_preview",
+              "synonym_preview"
+            ]
+          }
+        },
+        "required": [
+          "available",
+          "provider_ids",
+          "queue",
+          "local_features"
+        ]
+      },
+      "required_capabilities": [
+        "workspace.capabilities.query"
       ],
       "callers": [
         "ui",
@@ -15216,6 +15305,41 @@
                 {
                   "key": "provider_invoked",
                   "label": "Provider invoked"
+                }
+              ]
+            }
+          },
+          {
+            "id": "provider-status-tab",
+            "title": "Provider availability",
+            "body": {
+              "id": "provider-status",
+              "type": "detail",
+              "title": "Optional provider availability",
+              "description": "Provider requests need a separate confirmation of their exact payload. Local tools remain available without a provider.",
+              "load_action": {
+                "action_id": "paired.provider.status",
+                "input_template": {}
+              },
+              "value": {
+                "data_key": "last_action_result"
+              },
+              "fields": [
+                {
+                  "key": "available",
+                  "label": "Provider configured"
+                },
+                {
+                  "key": "queue.state",
+                  "label": "Queue measurement"
+                },
+                {
+                  "key": "local_features.rewrite",
+                  "label": "Local rewrite"
+                },
+                {
+                  "key": "local_features.qa_preview",
+                  "label": "Local QA preview"
                 }
               ]
             }

@@ -14,7 +14,7 @@ const host: GuestHost = { request(operation, payload) { return (function* () { r
 test("the signed QA preview action reaches the guest and returns its declared closed output", async () => {
   guest.initialize({pluginId:request.plugin_id,version:"0.1.0",workspaceId:scope.workspace_id});
   try {
-    const result=JSON.parse(guest.invoke(JSON.stringify({...request,input:{question:"誰が駅にいる？"}})));
+    const result=JSON.parse(guest.invoke(JSON.stringify({...request,snapshot:{...snapshot,remote_commit:"c".repeat(40)},input:{question:"誰が駅にいる？"}})));
     assert.equal(result.ok,true);
     const manifest=JSON.parse(await readFile(new URL("../plugin.json",import.meta.url),"utf8"));
     const action=manifest.actions.find((a:{action_id:string})=>a.action_id==="paired.qa.preview");
