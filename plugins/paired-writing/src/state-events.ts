@@ -42,7 +42,7 @@ export function parseStateEventCandidates(output: string, source: { path: string
         !nonempty(value.target) || !nonempty(value.operation) || !(value.before === null || obj(value.before)) ||
         !(value.after === null || obj(value.after)) || !(value.object === null || nonempty(value.object)) ||
         !(value.payload === undefined || obj(value.payload)) || !nonempty(value.evidenceQuote)) {
-      throw new PairedError("invalid_input", `Provider state event ${index + 1} is malformed`);
+      diagnostics.push({ code: "unsupported_event", index, message: "Provider state event is malformed or unsupported" }); return;
     }
     const quote = value.evidenceQuote, start = source.text.indexOf(quote);
     if (start < bodyOffset || source.text.indexOf(quote, start + 1) >= 0) {
@@ -109,6 +109,7 @@ export function* proposeStateEvent(input: unknown, host: GuestHost, request: Act
   if (file.revision !== scene.manuscript_revision || evidence.path !== file.path || evidence.revision !== file.revision) throw new PairedError("snapshot_stale", "State evidence source changed");
   const verified = parseStateEventCandidates(JSON.stringify({ events: [{ ...candidate, evidence: undefined, confidence: undefined, evidenceQuote: evidence.quote }] }), file);
   const event = verified.events[0];
+  if (verified.diagnostics.some(item => item.code === "unsupported_event")) throw new PairedError("invalid_input", "Selected state event is malformed or unsupported");
   if (!event || verified.diagnostics.length || event.evidence.start !== evidence.start || event.evidence.end !== evidence.end) throw new PairedError("snapshot_stale", "State evidence no longer matches the unique manuscript span");
   const bodyOffset = manuscriptBodyOffset(file.text); const body = file.text.slice(bodyOffset);
   const manuscriptHash = sha256(new TextEncoder().encode(body));

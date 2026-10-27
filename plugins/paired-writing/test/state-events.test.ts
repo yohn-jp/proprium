@@ -15,9 +15,11 @@ test("state events keep only uniquely evidenced exact UTF-16 spans", () => {
   assert.equal(result.diagnostics.length, 2);
 });
 
-test("state event candidates reject invented types and more than 20 entries", () => {
+test("state event candidates diagnose unsupported types and reject more than 20 entries", () => {
   const source = { path: "manuscript/a.md", revision: "a".repeat(64), text: "確かな本文" };
-  assert.throws(() => parseStateEventCandidates(JSON.stringify({ events: [{ kind: "prediction" }] }), source), { code: "invalid_input" });
+  const unsupported = parseStateEventCandidates(JSON.stringify({ events: [{ kind: "prediction" }] }), source);
+  assert.deepEqual(unsupported.events, []);
+  assert.equal(unsupported.diagnostics[0]?.code, "unsupported_event");
   assert.throws(() => parseStateEventCandidates(JSON.stringify({ events: Array(21).fill({}) }), source), { code: "capacity" });
 });
 
