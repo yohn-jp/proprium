@@ -1546,6 +1546,39 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     })));
     return request.operation === "review-diff" ? { head: await currentHead(paths.dir), changes } : changes;
   }
+  if (request.operation === "scratch-checkpoint") {
+    // This entire sequence executes while holding the sole workspace Web Lock.
+    // No other tab can insert a worktree change between review, apply and commit.
+    await assertRevision(paths.dir, request.expectedHead);
+    if ((await status(paths.dir)).length) failure("revision_conflict", "Scratch checkpoint requires a clean repository.");
+    if (!Array.isArray(request.changes) || !request.changes.length || request.changes.length > MAX_WORKSPACE_CHANGE_COUNT ||
+        request.changes.some(change => !change.path.startsWith("meta/scratch/") || !(change.content instanceof Uint8Array))) {
+      failure("invalid_path", "Scratch checkpoint contains invalid changes.");
+    }
+    const pathsSeen = new Set<string>();
+    let size = 0;
+    for (const change of request.changes) {
+      validateGitPath(change.path);
+      if (pathsSeen.has(change.path)) failure("invalid_path", "Scratch checkpoint contains duplicate paths.");
+      pathsSeen.add(change.path);
+      size += change.content!.byteLength;
+      if (size > MAX_WORKSPACE_CHANGE_BYTES) failure("invalid_path", "Scratch checkpoint exceeds workspace limits.");
+    }
+    await operation({ ...request, operation: "apply-changes", readSet: [] });
+    const reviewed = new Map(request.changes.map(change => [change.path, change.content!] as const));
+    const current = await worktreeMatrix(paths.dir, request.workspace.branch);
+    if (current.length !== reviewed.size) failure("revision_conflict", "Unexpected worktree change during Scratch checkpoint.");
+    for (const entry of current) {
+      const expected = reviewed.get(entry.path);
+      if (!expected || !entry.worktreeFile ||
+          entry.worktreeFile.byteLength !== expected.byteLength ||
+          entry.worktreeFile.some((byte, index) => byte !== expected[index])) {
+        failure("revision_conflict", "Scratch bytes changed before checkpoint commit.");
+      }
+    }
+    await operation({ ...request, operation: "add", paths: [...reviewed.keys()], expectedHead: request.expectedHead });
+    return operation({ ...request, operation: "commit", expectedHead: request.expectedHead });
+  }
   if (request.operation === "commit-reviewed") {
     const snapshot = request.snapshot;
     if (!snapshot || !Array.isArray(snapshot.files) || !snapshot.files.length) failure("git_error", "A reviewed commit requires a complete review snapshot.");
@@ -1667,7 +1700,7 @@ scope.addEventListener("message", async (event: MessageEvent<LocalGitRequest>) =
   const workspaceId = request.workspace?.localWorkspaceId ?? "";
   try {
     if (!scope.navigator.locks) failure("lock_unavailable", "This browser does not provide Web Locks; local Git workspace access is disabled.");
-    const write = ["init", "write", "delete", "apply-changes", "add", "commit", "commit-reviewed", "create-branch", "verify", "remote-fetch", "remote-pull", "remote-publish"].includes(request.operation);
+    const write = ["init", "write", "delete", "apply-changes", "add", "commit", "commit-reviewed", "scratch-checkpoint", "create-branch", "verify", "remote-fetch", "remote-pull", "remote-publish"].includes(request.operation);
     const paths = await workspacePaths(request.workspace);
     const result = await operationQueue.run(paths.lock, () => scope.navigator.locks.request(paths.lock, { mode: write ? "exclusive" : "shared", ifAvailable: true }, async (lock) => {
       if (!lock) failure("workspace_busy", "Another tab is using this local workspace. Retry when its operation finishes.");
@@ -1675,7 +1708,7 @@ scope.addEventListener("message", async (event: MessageEvent<LocalGitRequest>) =
         failure("storage_unknown", "A previous local Git operation had an uncertain result; reopen and verify this workspace before continuing.");
       }
       const result = await operation(request);
-      if (["write", "delete", "apply-changes", "commit-reviewed", "remote-pull"].includes(request.operation)) {
+      if (["write", "delete", "apply-changes", "commit-reviewed", "scratch-checkpoint", "remote-pull"].includes(request.operation)) {
         authoringMutationGenerations.set(paths.lock, (authoringMutationGenerations.get(paths.lock) ?? 0) + 1);
       }
       return result;

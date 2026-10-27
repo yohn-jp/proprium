@@ -248,6 +248,18 @@ export class BrowserLocalGit {
     return this.call({ operation: "authoring-snapshot-release", snapshotId });
   }
 
+  /** Apply, stage and commit a clean Scratch as one exclusive workspace operation. */
+  checkpointScratch(changes: readonly WorkspaceChange[], expectedHead: string | null, message: string, author: CommitAuthor):
+    Promise<{ oid: string; head: string; localState: "draft" | "local-committed" }> {
+    if (!Array.isArray(changes) || !changes.length || changes.length > MAX_WORKSPACE_CHANGE_COUNT ||
+        changes.some(change => !change.path.startsWith("meta/scratch/") || !(change.content instanceof Uint8Array)) ||
+        changes.reduce((size, change) => size + (change.content?.byteLength ?? 0), 0) > MAX_WORKSPACE_CHANGE_BYTES) {
+      return Promise.reject(new BrowserLocalGitError("invalid_input", "Scratch checkpoint contains invalid paths or bytes."));
+    }
+    for (const change of changes) validateGitPath(change.path);
+    return this.call({ operation: "scratch-checkpoint", changes: [...changes], expectedHead, message, author });
+  }
+
   status(): Promise<LocalGitStatus> { return this.call({ operation: "status" }); }
 
   diff(): Promise<DiffChange[]> {
