@@ -10,7 +10,7 @@ process.env.VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS = `${origin},https://authoring
 process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_KEY = readFileSync(process.env.PROPRIUM_KNOWLEDGE_PUBLIC_KEY ?? "/tmp/proprium-2e210ba-public-key.txt", "utf8").trim();
 const { webServer: _unused, ...shared } = base;
 export default defineConfig({ ...shared,
-  testMatch: "authoring-knowledge.acceptance.spec.ts", testIgnore: [], timeout: 180_000,
+  testMatch: "authoring-knowledge.acceptance.ts", testIgnore: [], timeout: 180_000,
   outputDir: process.env.PROPRIUM_E2E_OUTPUT_DIR ?? "/tmp/proprium-knowledge-browser-results",
   projects: [shared.projects![0]!],
   use: { ...shared.use, baseURL: `${origin}/`, actionTimeout: 15_000 },
