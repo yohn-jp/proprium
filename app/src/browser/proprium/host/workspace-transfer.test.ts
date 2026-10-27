@@ -41,3 +41,20 @@ test("a workspace at the 64 MiB content limit can import its own exported ZIP", 
   assert.equal(restored!.data[0], 17);
   assert.equal(restored!.data[restored!.data.length - 1], 29);
 });
+
+test("ZIP rejects a forged smaller uncompressed size rather than importing truncated text", () => {
+  const zip = zipSync({ "chapter.md": new TextEncoder().encode("The remaining content must survive") }, { level: 0 });
+  const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  for (let i = 0; i < zip.length - 46; i++) if (view.getUint32(i, true) === 0x02014b50) {
+    view.setUint32(i + 24, 3, true);
+    break;
+  }
+  assert.throws(() => readWorkspaceArchive(zip), /破損/u);
+});
+
+test("ZIP preserves a literal __proto__ filename without prototype mutation", () => {
+  const file = { path: "__proto__", data: new TextEncoder().encode("literal file content") };
+  const archive = createWorkspaceArchive([file]);
+  assert.deepEqual(readWorkspaceArchive(archive), [file]);
+  assert.equal(Object.prototype.hasOwnProperty.call({}, "__proto__"), false);
+});
