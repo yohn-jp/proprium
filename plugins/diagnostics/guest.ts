@@ -813,7 +813,8 @@ const projectContinuity: Handler = function* (raw, context, host) {
   }
   const report = checkProjectContinuity(graph.entities, graph.links, manuscriptText, scope);
   const findings = report.findings.map((finding) => continuityFinding(finding, context, scope));
-  const from = Math.min(start, findings.length);
+  if (start > findings.length) throw new DiagnosticActionError("snapshot_stale", "Project cursor is outside this snapshot", true);
+  const from = start;
   const end = Math.min(findings.length, from + (pageSize as number));
   const identity = sha256(JSON.stringify(["continuity", context.snapshot.id, scope ?? null]));
   const nextCursor = end < findings.length ? `dcn1.${identity}.${end}` : null;
@@ -872,7 +873,8 @@ const projectConsistency: Handler = function* (raw, context, host) {
   validateScopeEntities(readProjectGraph(projectFiles).entities, scope);
   const report = checkProjectConsistency(projectFiles, scope);
   const findings = report.findings.map((finding) => projectFinding(finding, context, scope));
-  const from = Math.min(start, findings.length);
+  if (start > findings.length) throw new DiagnosticActionError("snapshot_stale", "Project cursor is outside this snapshot", true);
+  const from = start;
   const end = Math.min(findings.length, from + (pageSize as number));
   const nextCursor = end < findings.length ? `dcp1.${sha256(JSON.stringify([context.snapshot.id, scope ?? null]))}.${end}` : null;
   return {

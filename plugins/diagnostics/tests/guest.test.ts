@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { guest } from "../guest.js";
+import { sha256 } from "../src/core.js";
 
 const scope = { workspace_id: "workspace-a", repository_id: 7, branch: "main", generation: "generation-1" };
 const snapshot = { id: "snapshot-1", local_commit: "commit-1", worktree_generation: "tree-1", draft_generation: null };
@@ -113,5 +114,19 @@ test("project scans reject repeating cursors and duplicate file identities", () 
       assert.equal(result.error.code, "snapshot_stale");
       guest.dispose();
     }
+  }
+});
+
+
+test("project scans reject cursors beyond the computed result set", () => {
+  for (const kind of ["consistency", "continuity"]) {
+    guest.initialize({ pluginId: "proprium.diagnostics", version: "0.1.0", workspaceId: scope.workspace_id });
+    const digest = sha256(JSON.stringify(kind === "continuity" ? ["continuity", snapshot.id, null] : [snapshot.id, null]));
+    const cursor = `${kind === "continuity" ? "dcn1" : "dcp1"}.${digest}.1`;
+    let result = JSON.parse(guest.invoke(JSON.stringify(request(`proprium.diagnostics.project.${kind}.run.v1`, { cursor }))));
+    result = continueWith(result, { entries: [], next_cursor: null });
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, "snapshot_stale");
+    guest.dispose();
   }
 });
