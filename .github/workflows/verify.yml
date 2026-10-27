@@ -64,20 +64,23 @@ jobs:
           path: ${{ runner.temp }}/authoring-plugin-build-evidence.json
           if-no-files-found: ignore
           retention-days: 14
-      - name: Verify Unicode normalization in an actual WASM component
-        env:
-          PROPRIUM_UNICODE_NORMALIZATION_TEST: ${{ runner.temp }}/NormalizationTest.txt
-        run: |
-          curl --fail --location --silent --show-error https://www.unicode.org/Public/17.0.0/ucd/NormalizationTest.txt -o "$PROPRIUM_UNICODE_NORMALIZATION_TEST"
-          node --test plugins/shared/unicode.component.test.mjs
-      - name: Typecheck the Browser Host and adapters
-        run: pnpm typecheck:browser
-      - name: Test browser Git and plugin security units
-        run: pnpm test:browser:unit
-      - name: Test official authoring plugin domains
-        run: node scripts/test-authoring-plugin-units.mjs
-      - name: Test recovered editor, appearance and workspace layouts
-        run: pnpm test:ui:unit
+      # All five checks consume the completed component build but do not
+      # mutate one another's fixtures. Keep the artifact upload above them.
+      - parallel:
+          - name: Verify Unicode normalization in an actual WASM component
+            env:
+              PROPRIUM_UNICODE_NORMALIZATION_TEST: ${{ runner.temp }}/NormalizationTest.txt
+            run: |
+              curl --fail --location --silent --show-error https://www.unicode.org/Public/17.0.0/ucd/NormalizationTest.txt -o "$PROPRIUM_UNICODE_NORMALIZATION_TEST"
+              node --test plugins/shared/unicode.component.test.mjs
+          - name: Typecheck the Browser Host and adapters
+            run: pnpm typecheck:browser
+          - name: Test browser Git and plugin security units
+            run: pnpm test:browser:unit
+          - name: Test official authoring plugin domains
+            run: node scripts/test-authoring-plugin-units.mjs
+          - name: Test recovered editor, appearance and workspace layouts
+            run: pnpm test:ui:unit
       - name: Build the static Proprium Host
         run: pnpm build:browser
       - name: Validate Workers Static Assets packaging without deployment
@@ -85,14 +88,22 @@ jobs:
       - name: Install desktop and mobile browser engines
         id: browser_engines
         run: pnpm exec playwright install --with-deps chromium webkit
-      - name: Exercise browser acceptance scenarios
-        env:
-          PROPRIUM_E2E_GITHUB_TOKEN: ${{ secrets.PROPRIUM_E2E_GITHUB_TOKEN }}
-          PROPRIUM_E2E_GITHUB_OWNER: ${{ vars.PROPRIUM_E2E_GITHUB_OWNER }}
-          PROPRIUM_E2E_GITHUB_REPOSITORY: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY }}
-          PROPRIUM_E2E_GITHUB_REPOSITORY_ID: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY_ID }}
-          PROPRIUM_E2E_GITHUB_BRANCH: ${{ vars.PROPRIUM_E2E_GITHUB_BRANCH }}
-        run: pnpm test:browser:e2e
+      # Independent Playwright servers and output directories: core Host
+      # uses 4173, Knowledge 4237 and BOM 4282. Shared registry builds
+      # are complete before any of these suites starts.
+      - parallel:
+          - name: Exercise browser acceptance scenarios
+            env:
+              PROPRIUM_E2E_GITHUB_TOKEN: ${{ secrets.PROPRIUM_E2E_GITHUB_TOKEN }}
+              PROPRIUM_E2E_GITHUB_OWNER: ${{ vars.PROPRIUM_E2E_GITHUB_OWNER }}
+              PROPRIUM_E2E_GITHUB_REPOSITORY: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY }}
+              PROPRIUM_E2E_GITHUB_REPOSITORY_ID: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY_ID }}
+              PROPRIUM_E2E_GITHUB_BRANCH: ${{ vars.PROPRIUM_E2E_GITHUB_BRANCH }}
+            run: pnpm test:browser:e2e
+          - name: Exercise Knowledge and Research authoring surfaces
+            run: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts
+          - name: Preserve source BOM through Core editing and export
+            run: pnpm exec playwright test --config tests/browser/authoring-bom-core.playwright.config.ts
       - name: Exercise signed v2 transport with its fixture setup
         if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         run: pnpm exec playwright test --config tests/browser/plugin-runtime-v2.playwright.config.ts
@@ -102,21 +113,22 @@ jobs:
       - name: Exercise all eight signed installs and persisted activation
         if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         run: node scripts/authoring-evidence-e2e.mjs
-      - name: Exercise Knowledge and Research authoring surfaces
-        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
-        run: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts
-      - name: Exercise Narrative next scene and portable positions
-        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
-        run: pnpm exec playwright test --config tests/browser/authoring-navigation.playwright.config.ts
-      - name: Exercise repeated reading mark approval and source navigation
-        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
-        run: pnpm exec playwright test --config tests/browser/authoring-readingmarks.playwright.config.ts
-      - name: Preserve source BOM through Core editing and export
-        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
-        run: pnpm exec playwright test --config tests/browser/authoring-bom-core.playwright.config.ts
-      - name: Persist local Semantic preferences without model admission
-        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
-        run: pnpm exec playwright test --config tests/browser/semantic-preferences.playwright.config.ts
+      # These are separate Playwright processes. Set unique host ports:
+      # their default 4173 would otherwise collide; each fixture setup
+      # uses a unique temp directory and its own test-result directory.
+      - parallel:
+          - name: Exercise Narrative next scene and portable positions
+            env:
+              PROPRIUM_E2E_PORT: "4311"
+            run: pnpm exec playwright test --config tests/browser/authoring-navigation.playwright.config.ts
+          - name: Exercise repeated reading mark approval and source navigation
+            env:
+              PROPRIUM_E2E_PORT: "4312"
+            run: pnpm exec playwright test --config tests/browser/authoring-readingmarks.playwright.config.ts
+          - name: Persist local Semantic preferences without model admission
+            env:
+              PROPRIUM_E2E_PORT: "4313"
+            run: pnpm exec playwright test --config tests/browser/semantic-preferences.playwright.config.ts
       - name: Exercise signed update and rollback with retained actual components
         if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         env:
@@ -124,15 +136,19 @@ jobs:
         run: |
           node scripts/test-authoring-version-fixture.mjs "$PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR" "$PROPRIUM_VERSION_FIXTURE_DIR"
           PROPRIUM_AUTHORING_REGISTRY_DIR="$PROPRIUM_VERSION_FIXTURE_DIR" PROPRIUM_AUTHORING_REGISTRY_PUBLIC_KEY_FILE="$PROPRIUM_VERSION_FIXTURE_DIR/test-root-public-key.txt" node scripts/authoring-evidence-e2e.mjs
-      - name: Exercise signed Publishing downloads and print
-        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
-        run: pnpm exec playwright test --config tests/browser/authoring-publishing.playwright.config.ts
+      # Both suites use independent signed fixtures and different Vite ports.
+      - parallel:
+          - name: Exercise signed Publishing downloads and print
+            env:
+              PROPRIUM_E2E_PORT: "4314"
+            run: pnpm exec playwright test --config tests/browser/authoring-publishing.playwright.config.ts
+          - name: Exercise signed Diagnostics, Paired Writing and Speaker workflows
+            env:
+              PROPRIUM_E2E_PORT: "4315"
+            run: pnpm exec playwright test --config tests/browser/authoring-tools.playwright.config.ts
       - name: Exercise official typed actions through the live Gateway
         if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         run: pnpm exec playwright test --config tests/browser/authoring-mcp.playwright.config.ts
-      - name: Exercise signed Diagnostics, Paired Writing and Speaker workflows
-        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
-        run: pnpm exec playwright test --config tests/browser/authoring-tools.playwright.config.ts
       - name: Exercise the production static shell offline
         if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         env:
