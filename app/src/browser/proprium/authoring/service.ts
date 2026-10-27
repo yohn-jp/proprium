@@ -213,6 +213,7 @@ export class BrowserAuthoringService {
   private readonly invocationStageLeases = new Map<string, Set<string>>();
   private readonly controllers = new Map<string, AbortController>();
   private readonly abortListeners = new Map<string, { signal: AbortSignal; listener: () => void }>();
+  private readonly uiProposalRetryKeys = new Map<string, string>();
   private readonly verifiedUiContinuations = new Set<string>();
   private actionSnapshotQueue: Promise<unknown> = Promise.resolve();
   private disposed = false;
@@ -254,8 +255,17 @@ export class BrowserAuthoringService {
       this.verifiedUiContinuations.add(principal.request_id);
     }
     try {
+      let idempotencyKey = typeof input.idempotency_key === "string" ? input.idempotency_key : undefined;
+      let retryIdentity: string | undefined;
+      const descriptor = (await this.options.manager.verifiedActionSet(pluginId))?.descriptors.find(item => item.action_id === actionId);
+      if (!idempotencyKey && descriptor?.effect === "propose") {
+        retryIdentity = canonicalJson({ pluginId, actionId, input });
+        idempotencyKey = this.uiProposalRetryKeys.get(retryIdentity) ?? this.nextRequestId();
+        this.uiProposalRetryKeys.set(retryIdentity, idempotencyKey);
+      }
       const result = await this.dispatcher.invoke({ plugin_id: pluginId, action_id: actionId, input,
-        ...(typeof input.idempotency_key === "string" ? { idempotency_key: input.idempotency_key } : {}) }, principal);
+        ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}) }, principal);
+      if (result.ok && retryIdentity) this.uiProposalRetryKeys.delete(retryIdentity);
       if (followNavigation && result.ok && isRecord(result.value) && isRecord(result.value.navigation)) {
         const navigation = result.value.navigation;
         const expected = navigation.expected_context;

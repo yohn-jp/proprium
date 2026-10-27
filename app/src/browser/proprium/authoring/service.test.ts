@@ -126,3 +126,12 @@ test("concurrent first callers share one paging snapshot", async () => {
   assert.deepEqual(first.snapshot, second.snapshot);
   await service.dispose();
 });
+
+ test("UI proposal envelopes get a Host key without changing a closed action input", async () => {
+  const { service, calls } = makeService({ ...action(), effect: "propose" });
+  const result = await service.invokeUi(new Event("click"), pluginId, actionId, {});
+  assert.equal(result.ok, true);
+  assert.ok(calls[0]?.request.idempotency_key);
+  assert.deepEqual(calls[0]?.request.input, {});
+  await service.dispose();
+});
