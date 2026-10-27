@@ -774,15 +774,19 @@ const projectContinuity: Handler = function* (raw, context, host) {
   const start = continuityCursor(input.cursor, context.snapshot.id, scope);
   const entries: Array<{ path: string; revision: string; byte_length: number }> = [];
   let cursor: string | null = null;
+  const seenCursors = new Set<string>(), seenPaths = new Set<string>();
   do {
     const page: FilePage = yield* host.request<FilePage>(HOST_OPERATIONS.list, { snapshot: context.snapshot, limit: 256, ...(cursor ? { cursor } : {}) });
     if (!page || !Array.isArray(page.entries) || !(page.next_cursor === null || typeof page.next_cursor === "string")) throw new DiagnosticActionError("invalid_input", "Host returned an invalid file page");
     for (const entry of page.entries) {
       if (!entry || typeof entry.path !== "string" || typeof entry.revision !== "string" || !/^[a-f0-9]{64}$/u.test(entry.revision) || !Number.isSafeInteger(entry.byte_length) || entry.byte_length < 0) throw new DiagnosticActionError("snapshot_stale", "Host returned an invalid pinned file identity", true);
+      if (seenPaths.has(entry.path)) throw new DiagnosticActionError("snapshot_stale", "Host repeated a file identity", true);
+      seenPaths.add(entry.path);
       entries.push({ path: entry.path, revision: entry.revision, byte_length: entry.byte_length });
       if (entries.length > 100_000) throw new DiagnosticActionError("capacity", "Workspace contains too many files for a continuity scan", true);
     }
     cursor = page.next_cursor;
+    if (cursor !== null) { if (!cursor || seenCursors.has(cursor)) throw new DiagnosticActionError("snapshot_stale", "Host file cursor did not advance", true); seenCursors.add(cursor); if (seenCursors.size > 100_000) throw new DiagnosticActionError("capacity", "Too many file pages for a continuity scan", true); }
   } while (cursor !== null);
   const byPath = new Map(entries.map((entry) => [entry.path, entry]));
   const yamlFiles: ProjectFile[] = [];
@@ -835,6 +839,7 @@ const projectConsistency: Handler = function* (raw, context, host) {
 
   const entries: Array<{ path: string; revision: string }> = [];
   let listCursor: string | null = null;
+  const seenCursors = new Set<string>(), seenPaths = new Set<string>();
   do {
     const page: FilePage = yield* host.request<FilePage>(HOST_OPERATIONS.list, {
       snapshot: context.snapshot,
@@ -844,9 +849,13 @@ const projectConsistency: Handler = function* (raw, context, host) {
     if (!page || !Array.isArray(page.entries) || !(page.next_cursor === null || typeof page.next_cursor === "string")) throw new DiagnosticActionError("invalid_input", "Host returned an invalid file page");
     for (const entry of page.entries) {
       if (!entry || typeof entry.path !== "string" || typeof entry.revision !== "string" || !/^[a-f0-9]{64}$/u.test(entry.revision)) throw new DiagnosticActionError("snapshot_stale", "Host returned an invalid pinned file identity", true);
+      if (seenPaths.has(entry.path)) throw new DiagnosticActionError("snapshot_stale", "Host repeated a file identity", true);
+      seenPaths.add(entry.path);
       entries.push({ path: entry.path, revision: entry.revision });
+      if (entries.length > 100_000) throw new DiagnosticActionError("capacity", "Workspace contains too many files for a consistency scan", true);
     }
     listCursor = page.next_cursor;
+    if (listCursor !== null) { if (!listCursor || seenCursors.has(listCursor)) throw new DiagnosticActionError("snapshot_stale", "Host file cursor did not advance", true); seenCursors.add(listCursor); if (seenCursors.size > 100_000) throw new DiagnosticActionError("capacity", "Too many file pages for a consistency scan", true); }
   } while (listCursor !== null);
 
   const projectFiles: ProjectFile[] = entries.map(({ path, revision }) => ({ path, revision, text: "" }));

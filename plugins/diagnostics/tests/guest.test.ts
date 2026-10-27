@@ -99,3 +99,19 @@ test("lint output satisfies the signed schema for a local workspace", async () =
   assert.equal(result.value.warnings[0].ruleId, "ellipsis-single-piece");
   guest.dispose();
 });
+
+test("project scans reject repeating cursors and duplicate file identities", () => {
+  for (const action of ["proprium.diagnostics.project.consistency.run.v1", "proprium.diagnostics.project.continuity.run.v1"]) {
+    for (const duplicate of [false, true]) {
+      guest.initialize({ pluginId: "proprium.diagnostics", version: "0.1.0", workspaceId: scope.workspace_id });
+      let result = JSON.parse(guest.invoke(JSON.stringify(request(action, {}))));
+      const entry = { path: "manuscript/a.md", revision: "a".repeat(64), byte_length: 1, media_type: "text/markdown" };
+      result = continueWith(result, { entries: duplicate ? [entry] : [], next_cursor: "cursor-1" });
+      assert.equal(result.operation, "workspace.file.list");
+      result = continueWith(result, { entries: duplicate ? [entry] : [], next_cursor: duplicate ? null : "cursor-1" });
+      assert.equal(result.ok, false);
+      assert.equal(result.error.code, "snapshot_stale");
+      guest.dispose();
+    }
+  }
+});
