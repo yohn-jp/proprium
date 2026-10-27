@@ -18,3 +18,8 @@ test('contradiction candidate evidence is re-read and only exact current quotes 
 test('stale contradiction quote is rejected rather than presented as evidence',()=>{
  const iter=gatherContradictionEvidence(host,request,'id');iter.next();const rev='a'.repeat(64),e={sceneId:'s',sentenceIndex:0,quote:'南',path:'a.md',revision:rev,start:1,end:2};iter.next({ok:true,scope,snapshot,value:{candidates:[{id:'id',evidenceA:e,evidenceB:e}],nextCursor:null,complete:true}});const bytes=[...new TextEncoder().encode('駅北口')];assert.throws(()=>iter.next({revision:rev,offset:0,total_bytes:bytes.length,bytes,next_offset:null}),/evidence/i);
 });
+test('free-text contradiction evidence uses bounded Research and verifies its exact source', async()=>{
+ const { gatherTextEvidence }=await import('../src/assistance-adapters.js');const iter=gatherTextEvidence(host,request,'駅');let step=iter.next();assert.equal(step.value.payload.action_id,'research.query');const rev='a'.repeat(64);
+ step=iter.next({ok:true,scope,snapshot,value:{hits:[{kind:'document',path:'manuscript/a.md',title:'a',fileRevision:rev,matchRanges:[{start:0,end:1}]}],indexSnapshot:'s',nextCursor:null,query:'駅',mode:'lexical',coverage:{documents:1,bytes:9}}});
+ const bytes=[...new TextEncoder().encode('駅は北')];step=iter.next({revision:rev,offset:0,total_bytes:bytes.length,bytes,next_offset:null});assert.equal(step.done,true);assert.equal((step.value as any).citations[0].quote,'駅');
+});

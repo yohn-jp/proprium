@@ -2,6 +2,7 @@ import type { ActionRequest } from '../../../app/src/browser/proprium/authoring/
 import type { GuestHost, HostCall } from '../../shared/guest.js';
 import { invokeAction, readText } from './host.js';
 import { PairedError } from './types.js';
+import { answerQa } from './qa-answer.js';
 
 type Aspect = 'tempo' | 'pov-shift' | 'over-explain';
 export interface AspectRequest { chapterId: string; aspects?: Aspect[]; cursor?: string; limit?: number }
@@ -43,4 +44,11 @@ export function* gatherContradictionEvidence(host: GuestHost, request: ActionReq
     citations.push({ path:evidence.path,revision:evidence.revision,start:evidence.start,end:evidence.end,quote:evidence.quote,sceneId:evidence.sceneId,sentenceIndex:evidence.sentenceIndex });
   }
   return {candidate,citations};
+}
+
+/** Bounded lexical evidence for free-text review; no contradiction is asserted. */
+export function* gatherTextEvidence(host: GuestHost, request: ActionRequest, candidateText: string): Generator<HostCall, { citations: Array<{kind:string;id:string;quote:string;path:string;revision:string}>; provenance: unknown }, unknown> {
+  if (typeof candidateText !== 'string' || !candidateText.trim() || candidateText.length > 8000) throw new PairedError('invalid_input', 'Candidate text is invalid');
+  const result = (yield* answerQa({ question: candidateText }, host, request)) as {citations:Array<{kind:string;id:string;quote:string;path:string;revision:string}>;provenance:unknown};
+  return {citations:result.citations.slice(0,2),provenance:result.provenance};
 }
