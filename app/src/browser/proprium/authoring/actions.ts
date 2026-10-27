@@ -36,6 +36,7 @@ export interface ActionRuntime { invoke(options: RuntimeInvokeOptions): Promise<
 export interface HostOperationContext extends InvocationContext { invocation_id: string; plugin_id: string; descriptor: ActionDescriptor; request: ActionRequest }
 export interface StageLeaseInvocation { scope: Scope; invocation_id: string; caller_chain: readonly string[] }
 export interface HostCapabilityPorts {
+  providerRequest?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   identityRead?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   repositorySnapshotRead?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   fileList?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
@@ -330,6 +331,7 @@ export class AuthoringActionDispatcher {
       if (stagingToken !== undefined) await this.options.capabilities.validateStage!(stagingToken, hostContext);
     }
     switch (call.operation) {
+      case "provider.request": return this.port("providerRequest", payload, hostContext);
       case "workspace.identity.read": return this.port("identityRead", payload, hostContext);
       case "workspace.repository.snapshot.read": return this.repositorySnapshotRead(payload, hostContext);
       case "workspace.file.list": return this.port("fileList", payload, hostContext);
@@ -487,6 +489,7 @@ export class AuthoringActionDispatcher {
   }
   private validateHostPayload(operation: string, payload: Record<string, unknown>): void {
     const shapes: Readonly<Record<string, readonly string[]>> = {
+      "provider.request": ["request_id", "provider_id", "model_id", "purpose", "payload", "source_manifest", "max_output_bytes"],
       "workspace.identity.read": ["paths"], "workspace.file.list": ["snapshot", "prefix", "cursor", "limit"],
       "workspace.file.read": ["snapshot", "path", "offset", "length"], "workspace.navigation": ["target", "expected_context", "intent"],
       "workspace.repository.snapshot.read": ["workspace_id", "repository_id", "branch", "snapshot_id"],

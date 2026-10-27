@@ -9,6 +9,7 @@ const HOST_CAPABILITIES: readonly PluginCapability[] = [
   "workspace.snapshot.read", "workspace.change.propose", "workspace.ui.contribute",
 ];
 const AUTHORING_HOST_CAPABILITIES = new Set([
+  "provider.request",
   "workspace.identity.read", "workspace.file.read", "workspace.change.propose", "workspace.change.timestamp",
   "workspace.plugin.invoke", "workspace.derived.cache", "workspace.asset.read", "plugin.preferences", "plugin.preferences.read",
   "workspace.ui.contribute", "workspace.change.stage", "workspace.change.list", "workspace.change.status",

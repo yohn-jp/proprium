@@ -22,6 +22,7 @@ import { createAuthoringWorkspacePanels, validateAuthoringSurfaceRegistrations, 
 import { AuthoringReview } from "./authoring/AuthoringReview.js";
 import { AuthoringAssets } from "./authoring/AuthoringAssets.js";
 import { AuthoringCommandMenu } from "./authoring/AuthoringCommandMenu.js";
+import { useProviderConsent } from "./use-provider-consent.js";
 
 import { DesktopShell } from "../../../shells/desktop/DesktopShell.js";
 import { ThemeControl } from "../../../components/ThemeControl.js";
@@ -216,12 +217,14 @@ export function HostApp(): ReactElement {
   workspaceRef.current = workspace;
   workspaceGenerationRef.current = workspaceGeneration;
   const [authoring, setAuthoring] = useState<BrowserAuthoringService | null>(null);
+  const providerConsent = useProviderConsent();
   const [authoringRegistrations, setAuthoringRegistrations] = useState<AuthoringSurfaceRegistration[]>([]);
   const [authoringEpoch, setAuthoringEpoch] = useState(0);
   const refreshAuthoring = useCallback(() => setAuthoringEpoch(value => value + 1), []);
   useEffect(() => {
     if (!git || !workspace) { setAuthoring(null); setAuthoringRegistrations([]); return; }
     const service = createBrowserAuthoringService({ manager: pluginManager, git, workspace: workspace.identity,
+      onProviderConsent: providerConsent.request,
       generation: workspaceGeneration,
       measureAssetCapacity: async input => {
         const estimate = await navigator.storage?.estimate().catch(() => undefined);
@@ -1072,7 +1075,7 @@ export function HostApp(): ReactElement {
     </div>
   </details> : null;
   const Shell = mode === "desktop" ? DesktopShell : MobileShell;
-  return <main className="proprium-host restored-host" onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); if (!busy && !recoveryEntry) void saveDraft(); } }}><Suspense fallback={<p>ワークスペースを開いています…</p>}><Shell mode={mode} onNavigateHome={leaveWorkspace}
+  return <main className="proprium-host restored-host" onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); if (!busy && !recoveryEntry) void saveDraft(); } }}>{providerConsent.view}<Suspense fallback={<p>ワークスペースを開いています…</p>}><Shell mode={mode} onNavigateHome={leaveWorkspace}
     header={<header className="topbar">{mode === "desktop" && <button type="button" className="quiet-button" onClick={() => { void beforeLayoutChange().then(ok => { if (ok) setDesktopSettingsOpen(true); }); }}>設定</button>}{workspace && <button className="quiet-button" onClick={leaveWorkspace}>作品一覧</button>}{workspace && !syncClient && isGitHubWorkspaceIdentity(workspace.identity) && <button type="button" className="quiet-button" aria-haspopup="dialog" aria-controls="workspace-github-auth" disabled={busy} onClick={openWorkspaceGitHubAuth}>GitHubに接続</button>}{account && <span className="host-account-label" aria-label="GitHub account">{account.login}</span>}<ThemeControl mode={theme} onChange={value => { setTheme(value); try { persistThemeMode(value); } catch { setMessage({ tone: "error", text: "外観設定を保存できませんでした。" }); } }} />{workspace && account && <button className="quiet-button" onClick={signOut}>GitHubからログアウト</button>}</header>}
     documentTitle={currentFile?.path ?? workspace?.title ?? "Proprium"} documentContext={workspace?.identity.branch}
     desktopDurability={syncState === "published" ? "saved" : checkpointBusy ? "checkpointing" : status.head && status.entries.length === 0 && !currentFile?.dirty ? "checkpointed" : "draft"}

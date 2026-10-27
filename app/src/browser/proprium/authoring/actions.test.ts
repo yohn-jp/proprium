@@ -82,6 +82,36 @@ function createHarness(overrides: Partial<ActionDispatcherOptions> = {}) {
   return { dispatcher: new AuthoringActionDispatcher({ ...defaults, ...overrides }), entries, executed, hostCalls };
 }
 
+test("a granted provider request reaches the consent broker with Host-issued identity", async () => {
+  const providerCap = "provider.request";
+  let reached = false;
+  const h = createHarness({
+    authority: {
+      issue: async p => context(p, { grants: [providerCap], host_capabilities: [providerCap] }),
+      issueChild: async () => { throw new Error("unused"); },
+      assertCurrent: async () => {}, isSnapshotCurrent: () => true,
+    },
+    capabilities: { providerRequest: async (payload, ctx) => {
+      assert.equal(ctx.plugin_id, plugin_id);
+      assert.deepEqual(ctx.request.snapshot, snapshot);
+      assert.equal(payload.provider_id, "test-provider");
+      reached = true;
+      return { untrusted: true };
+    } },
+    runtime: { invoke: async options => {
+      await options.resolve_host_call({call_id:"provider-call",operation:"provider.request",payload:{
+        request_id:"external-1",provider_id:"test-provider",model_id:"model",purpose:"Previewed QA",
+        payload:{question:"Q"},source_manifest:[],max_output_bytes:4096,
+      }});
+      return {request_id:options.request.request_id,scope,snapshot,ok:true,value:{hits:0},warnings:[]};
+    } },
+  });
+  h.entries.set(plugin_id, installed({grants:[providerCap],host_capabilities:[providerCap],descriptors:[descriptor({required_capabilities:[providerCap]})]}));
+  const result=await h.dispatcher.invoke({plugin_id,action_id,input:{query:"Q"}},principal());
+  assert.equal(result.ok,true);
+  assert.equal(reached,true);
+});
+
 test("dependency calls preserve the full typed result envelope consumed by official guests", async () => {
   const dependency = "proprium.narrative";
   const invokeCap = "workspace.plugin.invoke";

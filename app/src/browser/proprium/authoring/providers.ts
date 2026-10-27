@@ -109,6 +109,11 @@ export class ProviderRequestError extends AuthoringError {
   }
 }
 
+/** Host UI resolves this only after a fresh click on the exact immutable preview. */
+export type ProviderConsentRequest = (broker: ProviderRequestBroker, preview: ProviderRequestPreview,
+  send: (consent: object, signal?: AbortSignal) => Promise<ProviderRequestResult>,
+  signal?: AbortSignal) => Promise<ProviderRequestResult>;
+
 interface NormalizedProvider {
   readonly provider_id: string;
   readonly label: string;
@@ -266,6 +271,32 @@ export class ProviderRequestBroker {
   /** Static capability status; this never resolves credentials or contacts a provider. */
   status(): { available: boolean; provider_ids: string[] } {
     return { available: this.providers.size > 0 && Boolean(this.options.credentials && this.fetcher), provider_ids: [...this.providers.keys()].sort() };
+  }
+
+  /** Shared UI/MCP/plugin route. Caller identity never substitutes for request consent. */
+  async requestWithConsent(input: ProviderRequestInput, context: ProviderRequestContext,
+    approve: ProviderConsentRequest | undefined, assertCurrent: () => Promise<void>, signal?: AbortSignal): Promise<ProviderRequestResult> {
+    if (!approve) throw providerUnavailable();
+    const cancelled = () => new ProviderRequestError("cancelled", "Provider request was cancelled before sending.");
+    if (signal?.aborted) throw cancelled();
+    const preview = await this.prepare(input, context);
+    let sending = false;
+    const send = async (consent: object, approvalSignal?: AbortSignal): Promise<ProviderRequestResult> => {
+      if (signal?.aborted || approvalSignal?.aborted) throw cancelled();
+      await assertCurrent();
+      if (signal?.aborted || approvalSignal?.aborted) throw cancelled();
+      const signals = [signal, approvalSignal].filter((value): value is AbortSignal => value !== undefined);
+      sending = true;
+      return this.request(preview, consent, signals.length ? AbortSignal.any(signals) : undefined);
+    };
+    return new Promise<ProviderRequestResult>((resolve, reject) => {
+      // Once sending starts, the broker owns cancellation/unknown-outcome semantics.
+      const abort = () => { if (!sending) reject(cancelled()); };
+      signal?.addEventListener("abort", abort, { once: true });
+      if (signal?.aborted) { signal.removeEventListener("abort", abort); reject(cancelled()); return; }
+      Promise.resolve().then(() => approve(this, preview, send, signal)).then(resolve, reject)
+        .finally(() => signal?.removeEventListener("abort", abort));
+    });
   }
 
   private async send(state: PreparedState, credential: string, callerSignal?: AbortSignal): Promise<ProviderRequestResult> {

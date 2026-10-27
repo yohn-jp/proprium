@@ -20,6 +20,7 @@ import { ChangeWriter, type ChangeSet as WriterChangeSet, type WriterCaller, typ
 import { IndexedDbWriterJournalStore } from "./store.js";
 import { BrowserGitWriterWorkspace } from "./writer-browser.js";
 import { ChangeStageStore, type ChangeStageContext, type ChangeStageRead } from "./stages.js";
+import { ProviderRequestBroker, type ProviderBrokerOptions, type ProviderConsentRequest, type ProviderRequestInput } from "./providers.js";
 
 export interface AuthoringWorkspaceSelection {
   readonly git: BrowserLocalGit;
@@ -71,6 +72,7 @@ export interface BrowserAuthoringAuthority {
   isSnapshotCurrent(context: InvocationContext): boolean;
 }
 export interface AuthoringServiceBackends {
+  readonly providerRequest?: (payload: Record<string, unknown>, context: AuthoringHostOperationContext) => Promise<unknown>;
   /** Host capability routes use these same authorities as UI action calls. */
   readonly identityRead?: (context: AuthoringSnapshotContext, paths: readonly string[]) => Promise<unknown>;
   readonly repositorySnapshotRead?: (payload: Record<string, unknown>, context: AuthoringHostOperationContext) =>
@@ -129,6 +131,9 @@ export interface AuthoringHostArtifact {
 }
 
 export interface CreateBrowserAuthoringServiceOptions {
+  /** Optional Host-only configuration; never supplied by a plugin or Git settings. */
+  readonly provider?: Omit<ProviderBrokerOptions, "gestures">;
+  readonly onProviderConsent?: ProviderConsentRequest;
   readonly manager: BrowserPluginManager;
   readonly git: BrowserLocalGit;
   readonly workspace: WorkspaceIdentity;
@@ -168,6 +173,7 @@ export interface AuthoringHostPort {
 }
 export type AuthoringHostOperationContext = HostOperationContext;
 export interface BrowserAuthoringCapabilityPorts {
+  providerRequest(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
   identityRead(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
   repositorySnapshotRead(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
   fileList(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
@@ -442,6 +448,9 @@ export class BrowserAuthoringService {
     if (operation === "workspace.file.read" && context.reader.supportsPinnedReads) this.assertSelection(context);
     else await this.assertCurrent(context);
     switch (operation) {
+      case "provider.request":
+        if (!operationContext || !this.options.backends.providerRequest) throw missing(operation);
+        return await this.options.backends.providerRequest(payload, operationContext) as T;
       case "workspace.identity.read": {
         if (!this.options.backends.identityRead) throw missing(operation);
         return await this.options.backends.identityRead(context, Array.isArray(payload.paths) ? payload.paths as string[] : []) as T;
@@ -524,6 +533,7 @@ export class BrowserAuthoringService {
     const route = (operation: string, payload: Record<string, unknown>, context: AuthoringHostOperationContext) =>
       this.hostRequest(operation, payload, context.request, context.plugin_id, this.preferenceGestures.get(context.request.request_id), context);
     return {
+      providerRequest: routed("provider.request", (p, c) => route("provider.request", p, c)),
       identityRead: routed("workspace.identity.read", (p, c) => route("workspace.identity.read", p, c)),
       repositorySnapshotRead: routed("workspace.repository.snapshot.read", (p, c) => route("workspace.repository.snapshot.read", p, c)),
       fileList: routed("workspace.file.list", (p, c) => route("workspace.file.list", p, c)),
@@ -834,6 +844,7 @@ export function createBrowserAuthoringService(options: CreateBrowserAuthoringSer
     issue: event => freshGestures.issue(event),
     consume: token => freshGestures.consume(token),
   };
+  const providerBroker = new ProviderRequestBroker({ ...options.provider, gestures });
   const workspaceSelection = (): AuthoringWorkspaceSelection => ({ git: options.git, identity: options.workspace, generation: options.generation });
   const scopeFor = (selection = workspaceSelection()): Scope => ({
     workspace_id: selection.identity.localWorkspaceId,
@@ -1017,7 +1028,13 @@ export function createBrowserAuthoringService(options: CreateBrowserAuthoringSer
         default: throw missing(operation);
       }
     },
-    capabilitiesQuery: options.queryCapabilities,
+    capabilitiesQuery: options.queryCapabilities ?? (async payload => payload.capability_id === "provider.request"
+      ? { ...providerBroker.status(), ...(!providerBroker.status().available ? { reason: "No Host provider is configured" } : {}) }
+      : { available: false, reason: "Optional Host capability is not configured" }),
+    providerRequest: (payload, context) => providerBroker.requestWithConsent(payload as unknown as ProviderRequestInput, {
+      plugin_id: context.plugin_id, action_id: context.descriptor.action_id,
+      scope: context.request.scope, snapshot: context.request.snapshot,
+    }, options.onProviderConsent, () => service.authority.assertCurrent(context), context.signal),
     changeTimestamp: request => {
       if (!request.idempotency_key) throw invalid("Stable idempotency key is required for a timestamp");
       return writer.timestamp(request.scope, request.plugin_id, request.action_id, request.idempotency_key);
