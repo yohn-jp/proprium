@@ -18,6 +18,7 @@ const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const suites = [
   ["browser-git.acceptance.spec.ts", "4275"],
   ["authoring-snapshot.acceptance.spec.ts", "4277"],
+  ["authoring-writer-git-guard.acceptance.spec.ts", "4279"],
   ["browser-git-sync.acceptance.spec.ts", "4273"],
   ["plugin-runtime.acceptance.spec.ts", "4275"],
 ];

@@ -99,6 +99,12 @@ jobs:
       - name: Exercise actual signed official plugins through the Host
         if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         run: pnpm exec playwright test --config tests/browser/authoring-official.playwright.config.ts
+      - name: Exercise all eight signed installs and persisted activation
+        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
+        run: node scripts/authoring-evidence-e2e.mjs
+      - name: Exercise Knowledge and Research authoring surfaces
+        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
+        run: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts
       - name: Exercise official typed actions through the live Gateway
         if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         run: pnpm exec playwright test --config tests/browser/authoring-mcp.playwright.config.ts
