@@ -20,6 +20,26 @@ const outlineSurface: AuthoringSurfaceDeclaration = {
   },
 };
 
+test("active nested tab exposes its signed read and separate detail/source controls", () => {
+  const surface: AuthoringSurfaceDeclaration = {
+    id: "bible", kind: "panel", title: "Bible", context: {},
+    body: { id: "tabs", type: "tabs", tabs: [{ id: "characters", title: "Characters", body: {
+      id: "characters-list", type: "list", title: "Character records",
+      load_action: { action_id: "knowledge.entities.list", input_template: { type: "character" } },
+      items: { data_key: "records" }, primary: "name",
+      item_action: { action_id: "knowledge.entities.get", input_template: { id: { data_key: "item.id" } } },
+      item_navigation: { intent: "open", target: { path: { data_key: "item.path" } } },
+    } }] },
+  };
+  const html = renderToStaticMarkup(createElement(AuthoringSurface, { surface,
+    data: { records: [{ id: "alice", name: "Alice", path: "characters/alice.yaml" }] },
+    onInvoke: async () => ({}), onRead: async () => ({ ok: true }),
+  }));
+  assert.match(html, /Character recordsを読み込む/u);
+  assert.match(html, /<strong>Alice<\/strong>/u);
+  assert.match(html, /Aliceの原文を開く/u);
+});
+
 test("authoring surface renders a navigable outline and context as escaped Host UI", () => {
   const html = renderToStaticMarkup(createElement(AuthoringSurface, {
     surface: outlineSurface,
