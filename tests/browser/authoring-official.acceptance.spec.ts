@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
-import { showPanel } from "./restored-ui.helpers.js";
+import { expectEditorText, showPanel } from "./restored-ui.helpers.js";
 
 // These are actual Narrative sources and actual signed registry artifacts. Only
 // repository provisioning and the test registry HTTP transport are fixtures.
@@ -59,4 +59,5 @@ test("signed Narrative installs and navigates a large work in the real Host", as
   await expect(page.getByText("Scene 301", { exact: true })).toBeVisible();
   await page.getByText("Scene 301", { exact: true }).click();
   await expect(page.getByRole("textbox", { name: "原稿 Markdown" })).toContainText("目的の原稿", { timeout: 120_000 });
+  await expectEditorText(page, files["manuscript/custom/scene-301.md"]!);
 });
