@@ -68,6 +68,12 @@ function* topicContext(input: unknown, host: GuestHost, request: ActionRequest) 
       if (!item || item.auto === true) continue;
       const target = item.target ?? item.id;
       if (typeof target !== 'string' || !selected.has(target) || target === p.id) continue;
+      const automatic = Array.isArray(p.raw.relations) && p.raw.relations.some(raw => {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+        const relation = raw as Record<string,unknown>;
+        return relation.auto === true && relation.target === target && (typeof relation.kind === 'string' ? relation.kind : 'related') === 'related' && relation.note === item.note;
+      });
+      if (automatic) continue;
       const note = typeof item.note === 'string' ? `: ${item.note}` : '';
       relations.push(`${p.name} ↔ ${result.profiles.find(x => x.id === target)?.name ?? target}: related${note}`);
     }
