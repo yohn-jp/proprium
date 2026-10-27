@@ -636,6 +636,7 @@ export class BrowserPluginManager {
         options.hostAllowed.some(capability => !declaredCapabilities.has(capability))) {
       throw new PluginManagerError("capability_denied", "Plugin activation grants must be declared by its signed manifest");
     }
+    const grants = [...new Set(options.grants.filter(capability => options.hostAllowed.includes(capability)))];
     const currentVersion = await this.store.getState(activeStateKey(options.pluginId));
     if (currentVersion && currentVersion !== options.version) await this.store.setState(previousStateKey(options.pluginId), currentVersion);
     const activationEpoch = validEpoch(await this.store.getState(activationEpochKey(options.pluginId))) + 1;
@@ -645,11 +646,11 @@ export class BrowserPluginManager {
       ? enabledIntentKey(this.activationSelection.scope, options.pluginId) : undefined;
     if (intentKey) await this.store.setState(intentKey, JSON.stringify({ version: options.version,
       digest: record.manifestSha256, registryRoot: record.registryRootFingerprint,
-      dependencies: record.resolvedDependencies, grants: [...options.grants] }));
+      dependencies: record.resolvedDependencies, grants }));
     this.enabled.set(options.pluginId, Object.freeze({
       ...(intentKey ? { intentKey } : {}),
       version: options.version, workspaceId: options.workspaceId,
-      activationEpoch, grants: Object.freeze([...options.grants]),
+      activationEpoch, grants: Object.freeze(grants),
       hostAllowed: Object.freeze([...options.hostAllowed]), context: Object.freeze({ ...context }),
     }));
   }

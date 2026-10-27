@@ -11,6 +11,7 @@ const HOST_CAPABILITIES: readonly PluginCapability[] = [
 ];
 const AUTHORING_HOST_CAPABILITIES = new Set([
   "provider.request",
+  "workspace.repository.snapshot.read",
   "workspace.identity.read", "workspace.file.read", "workspace.change.propose", "workspace.change.timestamp",
   "workspace.plugin.invoke", "workspace.derived.cache", "workspace.asset.read", "plugin.preferences", "plugin.preferences.read",
   "workspace.ui.contribute", "workspace.change.stage", "workspace.change.list", "workspace.change.status",
@@ -228,9 +229,11 @@ export function PluginPanel({ manager, workspaceId, activationScope, git, revisi
     const selected = grants[grantKey] ?? [];
     setOwnBusy(true); onBusyChange(true); setNotice("");
     try {
-      await manager.enable({ pluginId: plugin.id, version: plugin.version, workspaceId, grants: selected, hostAllowed: plugin.capabilities.filter(value => plugin.actions.length ? AUTHORING_HOST_CAPABILITIES.has(value) : HOST_CAPABILITIES.includes(value as PluginCapability)) });
+      const hostAllowed = plugin.capabilities.filter(value => plugin.actions.length ? AUTHORING_HOST_CAPABILITIES.has(value) : HOST_CAPABILITIES.includes(value as PluginCapability));
+      await manager.enable({ pluginId: plugin.id, version: plugin.version, workspaceId, grants: selected, hostAllowed });
       await refreshPlugins();
-      setNotice(`${plugin.id}@${plugin.version} is enabled with these grants. ${plugin.actions.length ? "パネル・コマンドから利用できます。" : "No Worker starts until you choose Run."}`);
+      const unavailable = selected.filter(capability => !hostAllowed.includes(capability));
+      setNotice(`${plugin.id}@${plugin.version} is enabled. ${plugin.actions.length ? "許可された機能をパネル・コマンドから利用できます。" : "No Worker starts until you choose Run."}${unavailable.length ? ` このHostでは許可されていない権限: ${unavailable.join(", ")}` : ""}`);
     } catch (error) { setNotice(error instanceof Error ? error.message : "Plugin could not be enabled."); }
     finally { setOwnBusy(false); onBusyChange(false); }
   }

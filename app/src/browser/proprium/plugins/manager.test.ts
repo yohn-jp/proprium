@@ -178,6 +178,20 @@ test("restoration never grants a permission removed by current Host policy", asy
   assert.equal((await next.verifiedActionSet("example.writer"))!.enabled,false);
 });
 
+test("unsupported requested permissions are never persisted as grants or gained after policy expands", async () => {
+  const f=await fixture();await f.addAuthoringPlugin("example.writer","2.0.0");await f.publishRegistry(["1.0.0","2.0.0"],"1.0.1");
+  await f.manager.installFromRegistry(await f.manager.previewInstall({registryUrl,pluginId:"example.writer",version:"2.0.0"}));
+  const selection={scope:{workspace_id:"workspace",repository_id:42,branch:"main"},hostAllowed:[]};
+  await f.manager.restoreEnabled(selection);
+  await f.manager.enable({pluginId:"example.writer",version:"2.0.0",workspaceId:"workspace",grants:["workspace.file.read"],hostAllowed:[]});
+  assert.deepEqual((await f.manager.verifiedActionSet("example.writer"))!.grants,[]);
+  await f.manager.dispose();
+  const next=new BrowserPluginManager({store:f.store,fetcher:f.fetcher,registries:[{url:registryUrl,publicKey:f.registryPublicKey,artifactOrigins:approvedOrigins}]});
+  await next.restoreEnabled({...selection,hostAllowed:["workspace.file.read"]});
+  const set=(await next.verifiedActionSet("example.writer"))!;
+  assert.equal(set.enabled,true);assert.deepEqual(set.grants,[]);
+});
+
 test("signed v2 actions and Host UI remain available while disabled, with no Worker activation", async () => {
   const { manager, store, fetcher, registryPublicKey, addAuthoringPlugin, publishRegistry } = await fixture();
   await addAuthoringPlugin("example.writer", "2.0.0");
