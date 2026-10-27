@@ -60,23 +60,41 @@ async function openSceneA(page: Page) {
   await expect.poll(() => page.evaluate(() => window.propriumHostEditorText?.() ?? '')).toBe(bodyA);
 }
 
-test('saved selection becomes a reviewed reading mark without changing manuscript text', async ({ page }) => {
+test('two reviewed reading marks open their saved source ranges', async ({ page }) => {
   await setup(page); await openSceneA(page);
-  const editor = page.getByRole('textbox', { name: '原稿 Markdown' });
-  await editor.click();
-  await page.keyboard.press('Control+Home');
-  for (let index = 0; index < 3; index++) await page.keyboard.press('Shift+ArrowRight');
   const capture = page.getByRole('region', { name: '選択範囲に読書マーク' });
-  await capture.getByRole('button', { name: '選択範囲に読書マークを提案' }).click();
-  await expect(capture.getByRole('status')).toContainText('レビューで確認してください。');
-  await showPanel(page, 'review');
-  const review = page.getByRole('region', { name: 'Authoring proposals' });
-  await review.getByRole('button').first().click();
-  await expect(review).toContainText('plot/volumes/v/chapters/c/scenes/a.yaml');
-  await expect(review).toContainText('readingMarks');
-  await review.getByRole('checkbox').first().check();
-  await review.getByRole('button', { name: '選択した単位をローカルへ適用' }).click();
-  await expect(review.getByRole('button', { name: /proprium.narrative · applied/ })).toBeVisible({ timeout: 60000 });
+  for (const [offset, length] of [[0, 3], [5, 2]]) {
+    const editor = page.getByRole('textbox', { name: '原稿 Markdown' });
+    await editor.click();
+    await page.keyboard.press('Control+Home');
+    for (let index = 0; index < offset!; index++) await page.keyboard.press('ArrowRight');
+    for (let index = 0; index < length!; index++) await page.keyboard.press('Shift+ArrowRight');
+    await capture.getByRole('button', { name: '選択範囲に読書マークを提案' }).click();
+    await expect(capture.getByRole('status')).toContainText('レビューで確認してください。');
+    await showPanel(page, 'review');
+    const review = page.getByRole('region', { name: 'Authoring proposals' });
+    await review.getByRole('button', { name: /proprium.narrative · proposed/ }).last().click();
+    await expect(review).toContainText('plot/volumes/v/chapters/c/scenes/a.yaml');
+    await expect(review).toContainText('readingMarks');
+    await review.getByRole('checkbox').last().check();
+    await review.getByRole('button', { name: '選択した単位をローカルへ適用' }).last().click();
+    await expect(review.getByRole('button', { name: /proprium.narrative · applied/ })).toHaveCount(offset === 0 ? 1 : 2, { timeout: 60000 });
+    await showPanel(page, 'editor');
+    await expect.poll(() => page.evaluate(() => window.propriumHostEditorText?.() ?? '')).toBe(bodyA);
+  }
+  const configuration = page.locator('.st-workspace-configuration');
+  if (await configuration.getAttribute('open') === null) await configuration.locator(':scope > summary').click();
+  const menu = page.locator('.st-workspace-panel-menu');
+  if (await menu.getAttribute('open') === null) await menu.locator(':scope > summary').click();
+  await page.getByRole('button', { name: '読書マークを表示する', exact: true }).click();
+  if (await configuration.getAttribute('open') !== null) await configuration.locator(':scope > summary').click();
+  const tab = page.getByRole('tab', { name: '読書マーク', exact: true });
+  if (await tab.isVisible()) await tab.click();
+  const panel = page.getByRole('tabpanel', { name: '読書マーク', exact: true }).first();
+  await panel.getByRole('button', { name: '本文で読書マークを開くを読み込む' }).click();
+  await panel.getByText('雨の夜', { exact: true }).click();
   await showPanel(page, 'editor');
   await expect.poll(() => page.evaluate(() => window.propriumHostEditorText?.() ?? '')).toBe(bodyA);
+  await expect.poll(() => page.evaluate(() => { const view = (document.querySelector('.cm-content') as any)?.cmTile?.root?.view; if (!view) return null; const selection = view.state.selection.main; return { from: selection.from, to: selection.to, text: view.state.doc.sliceString(selection.from, selection.to) }; })).toEqual({ from: 0, to: 3, text: '雨の夜' });
+  await expect(page.getByText(/選択 3 字/u)).toBeVisible();
 });
