@@ -6,7 +6,7 @@ declare global {
   interface Window {
     browserGitTest: {
       open(localWorkspaceId: string): BrowserLocalGit;
-      openWriterSession(localWorkspaceId: string, databaseName?: string): { git: BrowserLocalGit; writer: ChangeWriter; writer_workspace: import("../../app/src/browser/proprium/authoring/writer-browser.js").BrowserGitWriterWorkspace; scope: WriterScope };
+      openWriterSession(localWorkspaceId: string, databaseName?: string, generation?: string): { git: BrowserLocalGit; writer: ChangeWriter; writer_workspace: import("../../app/src/browser/proprium/authoring/writer-browser.js").BrowserGitWriterWorkspace; scope: WriterScope };
     };
   }
 }
@@ -85,6 +85,28 @@ test("Host proposal receipt survives page reload and applies through Browser Git
       source_payload: payloadObject,
       source_payload_digest: await digest(new TextEncoder().encode('{"termId":"term-1"}')),
     }, caller, [{ path: "meta/terms.json", revision: null }]);
+    // Emulate the on-disk pre-F01 IndexedDB key: the same receipt was stored
+    // under an activation-generation-scoped key, not a durable workspace key.
+    await new Promise<void>((resolve, reject) => {
+      const opening = indexedDB.open(databaseName, 1);
+      opening.onerror = () => reject(opening.error);
+      opening.onsuccess = () => {
+        const db = opening.result;
+        const tx = db.transaction("scopes", "readwrite");
+        const rows = tx.objectStore("scopes");
+        const stable = JSON.stringify([scope.workspace_id, scope.repository_id, scope.branch]);
+        const legacy = JSON.stringify([scope.workspace_id, scope.repository_id, scope.branch, scope.generation]);
+        const existing = rows.get(stable);
+        existing.onsuccess = () => {
+          if (!existing.result) { tx.abort(); return; }
+          rows.put({ ...existing.result, key: legacy });
+          rows.delete(stable);
+        };
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+        tx.onabort = () => { db.close(); reject(tx.error ?? new Error("Legacy fixture migration failed")); };
+      };
+    });
     git.close();
     return result.proposal_id;
   }, { workspaceId, databaseName });
@@ -92,7 +114,7 @@ test("Host proposal receipt survives page reload and applies through Browser Git
   await page.reload();
   await expect(page.locator("#ready")).toHaveText("ready");
   const receipt = await page.evaluate(async ({ workspaceId, databaseName, proposalId }) => {
-    const { git, writer, scope } = window.browserGitTest.openWriterSession(workspaceId, databaseName);
+    const { git, writer, scope } = window.browserGitTest.openWriterSession(workspaceId, databaseName, "reopened-generation");
     await git.init();
     const before = await writer.status(scope, proposalId);
     const after = await writer.apply(scope, proposalId, ["term"], "ui", true);
@@ -190,7 +212,7 @@ test("partial multi-file unit is restored from its persisted WAL after reload be
   await page.reload();
   await expect(page.locator("#ready")).toHaveText("ready");
   const recovered = await page.evaluate(async ({ workspaceId, databaseName, proposalId }) => {
-    const { git, writer, scope } = window.browserGitTest.openWriterSession(workspaceId, databaseName);
+    const { git, writer, scope } = window.browserGitTest.openWriterSession(workspaceId, databaseName, "reopened-generation");
     await git.verifyStorage();
     const beforeRecoveryOne = new TextDecoder().decode((await git.read("meta/one.json")).data!);
     const beforeRecoveryTwo = new TextDecoder().decode((await git.read("meta/two.json")).data!);

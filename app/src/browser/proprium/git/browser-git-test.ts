@@ -15,7 +15,7 @@ declare global {
         reader: AuthoringSnapshotReader;
         scope: AuthoringScope;
       };
-      openWriterSession(localWorkspaceId: string, databaseName?: string): {
+      openWriterSession(localWorkspaceId: string, databaseName?: string, generation?: string): {
         git: BrowserLocalGit;
         writer: ChangeWriter;
         writer_workspace: BrowserGitWriterWorkspace;
@@ -58,7 +58,7 @@ window.browserGitTest = {
     };
     return { git, reader: new AuthoringSnapshotReader(new BrowserGitSnapshotPort(git, workspace)), scope };
   },
-  openWriterSession(localWorkspaceId, databaseName = "proprium-authoring-writer-browser-test") {
+  openWriterSession(localWorkspaceId, databaseName = "proprium-authoring-writer-browser-test", generation = "browser-git-test-generation") {
     const workspace: WorkspaceIdentity = {
       origin: window.location.origin,
       repositoryId: 923456789,
@@ -72,7 +72,7 @@ window.browserGitTest = {
       workspace_id: localWorkspaceId,
       repository_id: workspace.repositoryId,
       branch: workspace.branch,
-      generation: "browser-git-test-generation",
+      generation,
     };
     const writer_workspace = new BrowserGitWriterWorkspace(git, workspace, {
       selected_scope: () => scope,
