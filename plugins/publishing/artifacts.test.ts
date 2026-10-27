@@ -132,3 +132,19 @@ test("streamed stored-ZIP artifact is byte-identical to the deterministic EPUB Z
   assert.equal(sealed.sha256, new Sha256().update(streamed).digest());
   assert.equal(sealed.total_bytes, streamed.byteLength);
 });
+
+test('artifact sink honors a smaller Host chunk limit for streamed exports', () => {
+  const sink = new ArtifactSink(host, request, 'work.txt', 'text/plain; charset=utf-8');
+  const create = sink.create(); create.next(); create.next({artifact_id:'bounded',max_bytes:100,max_chunk_bytes:3});
+  const append = sink.append(new Uint8Array([1,2,3,4,5,6,7]));
+  const sizes:number[]=[]; let step=append.next();
+  while(!step.done) { sizes.push((step.value.payload.bytes as number[]).length); step=append.next(); }
+  assert.deepEqual(sizes,[3,3,1]);
+});
+
+test('artifact sink discards a reservation with an invalid Host chunk limit', () => {
+  const sink = new ArtifactSink(host, request, 'work.txt', 'text/plain; charset=utf-8');
+  const create=sink.create(); create.next(); const step=create.next({artifact_id:'invalid',max_bytes:100,max_chunk_bytes:0});
+  assert.equal((step.value as HostCall).operation,'artifact.discard');
+  assert.throws(()=>create.next({}),(error:unknown)=>(error as {code?:string}).code==='invalid_input');
+});
