@@ -2,16 +2,16 @@
 
 ## Status and authority
 
-This is the **normative target boundary** for authoring plugin portability, not a declaration that it has been implemented. Existing Host v1 is functional for demo computation but **insufficient for a Narrative IDE**. Implement missing Host capabilities once, generically, instead of embedding Story Knowledge logic into trusted Host code.
+This is the **normative contract** for authoring plugin portability. The v1 Host remains a compute-demo interface and is **insufficient on its own for a Narrative IDE**; the separately versioned v2 WIT, runtime, typed Host actions and official plugin build path are implemented. This document states complete required behavior, not an unconditional claim that every optional provider, device or live deployment has been verified. Implement remaining gaps generically in the Host rather than embedding Story Knowledge logic into trusted Core.
 
-### Existing implementation (do not misreport)
+### Implemented boundaries and remaining certification (do not misreport)
 
-- `app/src/browser/proprium/plugin-runtime/wit/main.wit` defines `snapshot-list`, `snapshot-read`, `propose-change` and `ui-contribute`, with `panel/command` contributions comprising **only kind/id/title**.
-- `app/src/browser/proprium/host/PluginPanel.tsx` lists registered contribution *labels*, not functioning novel navigation/forms/graphs, and `takeSnapshot` eagerly reads **at most 256 files / 2 MiB**. It may not be used as the production full-work read path.
-- `scripts/build-plugin-registry.mjs` hardcodes `proprium.compute-sum`. Signed registry/admission works for its sample, not as a builder for the eight official authoring plugins.
-- `gateway/mcp.go` exposes the permanent eight core tools; `plugin_call` currently invokes a generic `run` against enabled active-workspace plugins. This is not narrative-action conformance.
+- The legacy `app/src/browser/proprium/plugin-runtime/wit/main.wit` exposes demo-scale v1 snapshot/propose and title-only UI contributions. The incompatible `plugin-runtime/wit-v2/main.wit` declares `proprium:plugin@2.0.0`; `plugin-runtime/v2/`, `authoring/service.ts` and the Host-side schema/Writer implement the versioned typed authoring route. Neither ABI silently alters the other.
+- The v1 `PluginPanel.takeSnapshot` still has a **256-file / 2 MiB** eager-read limit. Authoring v2 uses a separate paged, pinned file reader and Host-rendered declarative surfaces; the v1 limit must not be presented as a v2 full-work limit.
+- `scripts/build-plugin-registry.mjs` supports both the original `example` compute-sum mode and `authoring` mode for the eight independently signed official plugins. Distribution availability requires a published signed registry and Host-pinned trust; build success alone does not prove a production installation.
+- `gateway/mcp.go` exposes eight core MCP tools and forwards `plugin_call` to the active Browser Host. The Browser Host uses signed typed action dispatch for v2 authoring plugins; legacy v1 `run` remains separate. Live Gateway/provider conformance requires its corresponding integration and deployment evidence.
 
-Keep current v1 tests green during migration. When adding incompatible features, version WIT/manifest independently and migrate in one deliberate cutover; do **not** quietly change existing `proprium:plugin@1.0.0` semantics.
+Keep both ABI versions separately verified; do **not** quietly change existing `proprium:plugin@1.0.0` semantics. The v2 Host's actual behavior, independent plugin conformance and optional services must each be evaluated against the acceptance matrix.
 
 ## Host-owned contract surfaces required
 
@@ -94,7 +94,7 @@ Each guest runs under verified publisher signature/digest and explicitly approve
 
 ## H0 authoring profile v2 (fixed logical schema)
 
-The following is a **DESIGN_TARGET**, not an addition to the current WIT file. Implement it as the incompatible `proprium:plugin@2.0.0` authoring profile, preserving v1 admission for existing artifacts. Generate binding validators from one adopted schema and prove WIT round trips before admitting a v2 artifact. Field spellings below are logical JSON; plugin-specific payload fields are defined in the owning canon. Omitted optional fields are absent, never inferred from another workspace. Unknown input fields fail `invalid_input`; unknown source-file fields are retained.
+The following is the **fixed v2 authoring contract**. Its incompatible `proprium:plugin@2.0.0` WIT transport is implemented in `app/src/browser/proprium/plugin-runtime/wit-v2/main.wit` with Host-validated typed JSON exchanges in `plugin-runtime/v2/`; it does **not** modify the v1 WIT file. The logical schema and Host operations are implemented incrementally and require per-operation conformance evidence; optional provider-backed capabilities remain conditional on admission, consent and available assets. Field spellings below are logical JSON; plugin-specific payload fields are defined in the owning canon. Omitted optional fields are absent, never inferred from another workspace. Unknown input fields fail `invalid_input`; unknown source-file fields are retained.
 
 ### Identity, content and errors
 
