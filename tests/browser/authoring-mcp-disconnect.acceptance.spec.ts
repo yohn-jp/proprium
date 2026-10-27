@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { showPanel } from "./restored-ui.helpers.js";
 
-test("real pending typed action cancels and disconnects without applying changes", async ({ page }) => {
+test("real pending typed action cancels and disconnects without applying changes", async ({ page, context }) => {
   const origin = new URL(test.info().project.use.baseURL!).origin;
   const root = resolve(process.env.PROPRIUM_OFFICIAL_E2E_DIR!);
   await page.route(`${origin}/plugin-fixture/**`, async route => {
@@ -22,7 +22,8 @@ test("real pending typed action cancels and disconnects without applying changes
     files[`plot/volumes/v/chapters/c/scenes/scene-${index}.yaml`] = `id: scene-${index}\ntype: scene\ntitle: Scene ${index}\nvolume: volume-1\nchapter: chapter-1\norder: ${index}\nmanuscript: manuscript/scene-${index}.md\n`;
     files[`manuscript/scene-${index}.md`] = `Scene ${index}\n` + "x".repeat(7000);
   }
-  await page.evaluate(async files => window.propriumHostTest!.openWorkspace({ origin:"https://github.com", repositoryId:923456789, owner:"proprium-test", repository:"mcp-official", branch:"main", localWorkspaceId:`mcp-${crypto.randomUUID()}` }, files), files);
+  const identity = { origin:"https://github.com", repositoryId:923456789, owner:"proprium-test", repository:"mcp-official", branch:"main", localWorkspaceId:`mcp-${crypto.randomUUID()}` };
+  await page.evaluate(async ({identity, files}) => window.propriumHostTest!.openWorkspace(identity, files), {identity, files});
   await showPanel(page, "review");
   const manager = page.locator("details.plugin-manager-panel");
   await manager.locator("summary").click();
@@ -47,7 +48,17 @@ test("real pending typed action cancels and disconnects without applying changes
     const wire = await response.json();
     return JSON.parse(wire.result.content.find((item:{type:string}) => item.type === "text").text);
   }
+  async function fileRead() {
+    const response = await fetch(`${process.env.VITE_PROPRIUM_GATEWAY_URL}/mcp`, {
+      method:"POST", headers:{ Accept:"application/json, text/event-stream", "Content-Type":"application/json", "MCP-Protocol-Version":"2025-11-25" },
+      body:JSON.stringify({jsonrpc:"2.0",id:crypto.randomUUID(),method:"tools/call",params:{name:"file_read",arguments:{repository_id:923456789,branch:"main",path:"manuscript/scene-1.md"}}}),
+    });
+    expect(response.status).toBe(200);
+    const wire=await response.json();
+    return JSON.parse(wire.result.content.find((item:{type:string}) => item.type === "text").text);
+  }
   const beforeCancellation = await repositoryStatus();
+  const fileBeforeCancellation = await fileRead();
   const controller = new AbortController();
   const cancelled = pending(controller.signal).then(() => "completed", () => "cancelled");
   await expect(page.locator(".live-mcp-panel").getByText("MCP requests: 1")).toBeVisible({timeout:20_000});
@@ -59,4 +70,12 @@ test("real pending typed action cancels and disconnects without applying changes
   await expect(page.locator(".live-mcp-panel").getByText("MCP requests: 1")).toBeVisible({timeout:20_000});
   await page.close();
   expect((await disconnected).status).toBe(503);
+  const reopened = await context.newPage();
+  await reopened.goto("/");
+  await reopened.waitForFunction(() => typeof window.propriumHostTest?.openWorkspace === "function");
+  await reopened.evaluate(async identity => window.propriumHostTest!.openWorkspace(identity), identity);
+  await showPanel(reopened, "review");
+  await expect(reopened.locator(".live-mcp-panel").getByRole("status").first()).toContainText("ブラウザーに接続中", { timeout:20_000 });
+  expect(await repositoryStatus()).toEqual(beforeCancellation);
+  expect(await fileRead()).toEqual(fileBeforeCancellation);
 });
