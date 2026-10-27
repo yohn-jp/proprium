@@ -103,6 +103,7 @@ interface CachedVerification {
  */
 export class AuthoringSnapshotReader {
   private readonly cursors = new Map<string, CursorState>();
+  private readonly metadata = new Map<string, SnapshotFile>();
   private readonly verified = new Map<string, CachedVerification>();
 
   constructor(private readonly port: SnapshotPort, private readonly now = () => Date.now()) {}
@@ -151,6 +152,7 @@ export class AuthoringSnapshotReader {
       throw new AuthoringSnapshotError("storage_unknown", "Host returned an invalid or oversized file page.");
     }
     const items = page.items.map(item => validateFile(item, prefix));
+    if (this.port.validates_current_on_io) for (const item of items) this.rememberMetadata(lease, item);
     for (let index = 0; index < items.length; index += 1) {
       const path = items[index]!.path;
       if (last_path !== null && compareUtf8Path(last_path, path) >= 0) {
@@ -188,7 +190,9 @@ export class AuthoringSnapshotReader {
     if (!Number.isSafeInteger(length) || length < 0 || length > MAX_READ_CHUNK) throw invalid(`length must be between 0 and ${MAX_READ_CHUNK}`);
 
     if (!this.port.validates_current_on_io) await this.assertCurrent(lease);
-    const file = validateFile(await this.port.stat(lease, path), "", path);
+    const cached = this.port.validates_current_on_io ? this.metadata.get(this.metadataKey(lease, path)) : undefined;
+    const file = validateFile(cached ?? await this.port.stat(lease, path), "", path);
+    if (this.port.validates_current_on_io) this.rememberMetadata(lease, file);
     if (offset > file.byte_length) throw invalid("offset is beyond end of file");
     const read_length = Math.min(length, file.byte_length - offset);
     const bytes = await this.readAndVerify(lease, file, offset, read_length);
@@ -210,6 +214,17 @@ export class AuthoringSnapshotReader {
     }
     const keyPrefix = `${scopeKey(lease.scope)}\u0000${lease.snapshot.id}\u0000`;
     for (const key of this.verified.keys()) if (key.startsWith(keyPrefix)) this.verified.delete(key);
+    for (const key of this.metadata.keys()) if (key.startsWith(keyPrefix)) this.metadata.delete(key);
+  }
+
+  private metadataKey(lease: SnapshotLease, path: string): string {
+    return `${scopeKey(lease.scope)}\u0000${lease.snapshot.id}\u0000${path}`;
+  }
+  private rememberMetadata(lease: SnapshotLease, file: SnapshotFile): void {
+    const key = this.metadataKey(lease, file.path);
+    if (this.metadata.has(key)) this.metadata.delete(key);
+    else if (this.metadata.size >= 4096) this.metadata.delete(this.metadata.keys().next().value!);
+    this.metadata.set(key, file);
   }
 
   private async readAndVerify(lease: SnapshotLease, file: SnapshotFile, offset: number, length: number): Promise<Uint8Array> {
