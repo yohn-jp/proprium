@@ -194,6 +194,7 @@ export function createGitHubAccountSession(
   const repositories = async (): Promise<GitHubRepository[]> => {
     const credential = requireToken();
     const result: GitHubRepository[] = [];
+    let invalidEntries = 0;
     try {
       for (let page = 1; page <= 100; page += 1) {
         let response: Response;
@@ -216,7 +217,10 @@ export function createGitHubAccountSession(
         if (!response.ok) throw responseError(response.status, payload, "GitHub could not list repositories for this account.");
         if (!Array.isArray(payload) || payload.length > 100) throw new GitHubSyncError("git_error", "GitHub returned an invalid repository list.");
         for (const raw of payload) {
-          const repository = object(raw);
+          // An invalid item cannot make unrelated, valid repositories unselectable.
+          // Reject fully malformed responses instead of treating them as an empty account.
+          if (!raw || typeof raw !== "object" || Array.isArray(raw)) { invalidEntries++; continue; }
+          const repository = raw as Record<string, unknown>;
           const owner = repository.owner && typeof repository.owner === "object" && !Array.isArray(repository.owner)
             ? (repository.owner as Record<string, unknown>).login : undefined;
           const permissions = repository.permissions && typeof repository.permissions === "object" && !Array.isArray(repository.permissions)
@@ -227,7 +231,8 @@ export function createGitHubAccountSession(
               typeof repository.full_name !== "string" || repository.full_name.toLowerCase() !== `${owner}/${repository.name}`.toLowerCase() ||
               !isValidGitBranchName(repository.default_branch) ||
               typeof repository.private !== "boolean") {
-            throw new GitHubSyncError("git_error", "GitHub returned malformed repository metadata.");
+            invalidEntries++;
+            continue;
           }
           result.push({
             id: repository.id as number,
@@ -239,7 +244,12 @@ export function createGitHubAccountSession(
             permissions: { pull: permissions.pull === true, push: permissions.push === true },
           });
         }
-        if (payload.length < 100) return result;
+        if (payload.length < 100) {
+          if (result.length === 0 && invalidEntries > 0) {
+            throw new GitHubSyncError("git_error", "GitHub returned malformed repository metadata.");
+          }
+          return result;
+        }
       }
       throw new GitHubSyncError("git_error", "This account has more repositories than the browser picker can safely load at once.");
     } catch (error) {
