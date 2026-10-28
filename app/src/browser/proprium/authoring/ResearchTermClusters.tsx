@@ -158,10 +158,18 @@ export function ResearchTermClusters({ scopeKey, invokeRead, invokeUi, onProposa
     {error && <p role="alert">{error}</p>}
     {candidatePage && <>
       <p role="status">候補ページ {pageNumber} · {candidatePage.candidates.length} 件</p>
+      <p>クラスタは表示中の候補ページ内で比較します。ページを進めると、そのページの候補を個別に確認できます。</p>
       <section aria-label="抽出した候補">
         <h3>抽出した候補</h3>
         <ul>{candidatePage.candidates.map(candidate => <li key={candidate.term}>
           <strong>{candidate.term}</strong>{candidate.reading && <>（{candidate.reading}）</>} · {candidate.occurrenceCount} 回 · {candidate.sourceIds.length} 件の出典
+          {candidate.evidence.map((evidence, index) => {
+            const quote = evidenceQuote(evidence, texts);
+            return <p key={`${evidence.sourceId}:${evidence.textId}:${evidence.range.start}:${index}`}>
+              根拠: {evidence.path ?? `貼り付けた文章 · ${evidence.sourceId}`} · 改訂 {evidence.revision.slice(0, 12)} · UTF-16 {evidence.range.start}–{evidence.range.end}
+              {quote !== null ? <>「{quote}」</> : "（引用を表示できません）"}
+            </p>;
+          })}
         </li>)}</ul>
       </section>
       <section aria-label="用語クラスタ">
@@ -274,7 +282,7 @@ function TermClusterCard({ scopeKey, cluster, candidates, texts, invokeRead, inv
   return <section aria-label={`${cluster.canonical} の用語クラスタ`} className="research-term-cluster">
     <h4>代表表記: {cluster.canonical}</h4>
     <p>{cluster.semanticOnly
-      ? "モデルのみの意味類似候補です。辞書に追加するかは作者が選べます。"
+      ? "Semantic の semanticOnly 候補です。モデルによる意味類似の結び付きを含みます。辞書に追加するかは作者が選べます。"
       : "表記または読みの規則で一致した候補です。"}</p>
     <ul aria-label={`${cluster.canonical} の根拠`}>
       {[cluster.canonical, ...cluster.variants].map(term => {
