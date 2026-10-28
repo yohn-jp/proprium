@@ -177,6 +177,118 @@ function sceneTextInputs(story: LoadedKnowledgeSnapshot) {
   });
 }
 
+function* lensSceneOptions(_input: Record<string, unknown>, context: ActionRequest, host: GuestHost) {
+  assertKeys(_input, []);
+  const story = yield* storyFor(context, host);
+  const scenes = orderedScenes(story);
+  if (scenes.length > 1000) throw error("capacity", "The Knowledge scene cursor supports up to 1,000 selectable scenes", { sceneCount: scenes.length, limit: 1000 });
+  return {
+    snapshot: context.snapshot,
+    items: scenes.map(({ entity, order, volumeId, chapterId }) => ({
+      id: entity.id,
+      title: `${String(order).padStart(4, "0")} · ${story.entities.get(volumeId)?.name ?? volumeId} / ${story.entities.get(chapterId)?.name ?? chapterId} / ${entity.name ?? entity.id}`,
+      order, volumeId, chapterId,
+    })),
+  };
+}
+
+function* lensAtScene(input: Record<string, unknown>, context: ActionRequest, host: GuestHost) {
+  assertKeys(input, ["sceneId"]);
+  const sceneId = requiredString(input, "sceneId");
+  const base = yield* storyFor(context, host);
+  const ordered = orderedScenes(base);
+  const position = ordered.find((row) => row.entity.id === sceneId);
+  if (!position) throw error("scene_not_found", `Scene ${sceneId} is not in the pinned hierarchy`, { sceneId, snapshot: context.snapshot });
+  const throughCursor = ordered.filter((row) => row.order <= position.order);
+  const story = yield* storyWithScenes(context, host, new Set(throughCursor.map((row) => row.entity.id)));
+  const selectedScene = sourceErrorIfSceneMissing(story.entities.get(sceneId), sceneId);
+  const scene = buildSceneContext({ ...story, sceneId }).data;
+  if (!scene) throw error("scene_not_found", `Scene ${sceneId} has no resolvable context`, { sceneId });
+  const references = sceneReferences(story, sceneId);
+
+  const sceneRows = sceneTextInputs(story).filter((row) => row.order <= position.order);
+  const disclosureScenes = sceneRows.map((row) => ({
+    sceneId: row.sceneId,
+    order: row.order,
+    text: row.text,
+    characterIds: getLinkedEntities({ ...story, fromId: row.sceneId, kind: "appears" }).data
+      .filter((entity) => entity.type === "character").map((entity) => entity.id),
+    stateChanges: summaryDisclosure(story, story.entities.get(row.sceneId)!).changes,
+  }));
+  const disclosures = extractReaderDisclosures({ ...story, scenes: disclosureScenes }).data;
+  const threads = threadProjection(story, sceneId);
+  const timelineInputs = throughCursor.map(({ entity, order, chapterId }) => {
+    const sceneContext = buildSceneContext({ ...story, sceneId: entity.id }).data;
+    return {
+      sceneId: entity.id, order, text: sceneContext?.manuscriptBody ?? "", title: entity.name ?? entity.id,
+      explicitDateMeta: [entity.raw.date, entity.raw.storyDate, entity.raw.calendarDate].some((value) => typeof value === "string"),
+      locationId: sceneContext?.location?.id, locationName: sceneContext?.location?.name,
+      characters: sceneContext?.appears.filter((item) => item.type === "character").map((item) => ({ id: item.id, name: item.name ?? item.id })),
+      chapterId, chapterName: story.entities.get(chapterId)?.name ?? chapterId,
+    };
+  });
+  const timeline = buildSceneTimelineEntries({ snapshot: context.snapshot, scenes: timelineInputs }).data.at(-1) ?? null;
+  const state = getWorldStateAtScene({ ...story, sceneId }).data;
+  const events = listRuleStateEvents(story).data.filter((event) => event.order <= position.order && (!event.status || event.status === "confirmed"));
+  const readerDisclosures = citeDisclosures(story, disclosures.filter((event) => event.order <= position.order));
+  const threadStates = threads.snapshots.filter((thread) => threads.atStatus(thread) !== "unset").map((thread) => ({
+    threadId: thread.threadId,
+    status: threads.atStatus(thread),
+    plantedSceneId: thread.plantedSceneId,
+    advancedSceneIds: thread.recalledSceneIds,
+    resolvedSceneId: thread.resolvedSceneId,
+    mentions: thread.mentions,
+  }));
+  const facts: Array<Record<string, string>> = [];
+  facts.push({ aspect: "Location", item: scene.location?.name ?? scene.location?.id ?? "unknown", state: scene.location?.id ? "resolved" : "unknown", evidence: scene.location?.id ?? selectedScene.filePath });
+  for (const entity of scene.appears) facts.push({ aspect: "Appearance", item: entity.name ?? entity.id, state: "declared", evidence: `${entity.id} · ${entity.filePath}` });
+  for (const event of events) facts.push({ aspect: "Confirmed event", item: `${event.kind}: ${event.subject} → ${event.object ?? "unknown"}`, state: event.status ?? "confirmed", evidence: event.eventId ?? event.sceneId });
+  if (!events.length) facts.push({ aspect: "Confirmed event", item: "No confirmed event is declared through this scene", state: "unknown", evidence: selectedScene.filePath });
+  for (const thread of threadStates) facts.push({ aspect: "Thread", item: thread.threadId, state: thread.status, evidence: [thread.plantedSceneId, ...thread.advancedSceneIds, thread.resolvedSceneId].filter(Boolean).join(", ") || "no linked scene" });
+  if (!threadStates.length) facts.push({ aspect: "Thread", item: "No planted thread is active at this scene", state: "unknown", evidence: selectedScene.filePath });
+  for (const disclosure of readerDisclosures) facts.push({ aspect: "Reader disclosure", item: disclosure.entityId, state: disclosure.disclosureKind, evidence: `${disclosure.sceneId} · ${disclosure.evidence}` });
+  if (!readerDisclosures.length) facts.push({ aspect: "Reader disclosure", item: "No first disclosure or summary change was detected through this scene", state: "unknown", evidence: selectedScene.filePath });
+  if (timeline) facts.push({ aspect: "Timeline", item: timeline.title ?? sceneId, state: timeline.confidence ?? "unknown", evidence: timeline.sceneId ?? sceneId });
+  facts.push({ aspect: "Character belief", item: "Persisted character-belief records", state: "unavailable", evidence: "not implemented" });
+
+  const sourceRevisions = new Map<string, string>();
+  const addSource = (path: string | undefined) => {
+    const revision = path ? story.revisions.get(path) : undefined;
+    if (path && revision) sourceRevisions.set(path, revision);
+  };
+  for (const row of throughCursor) {
+    addSource(row.entity.filePath);
+    if (typeof row.entity.raw.manuscript === "string") addSource(row.entity.raw.manuscript);
+  }
+  for (const entity of [scene.pov, scene.location, ...scene.appears, ...scene.mentions].filter((item): item is StoryEntity => Boolean(item))) addSource(entity.filePath);
+  for (const event of readerDisclosures) addSource(event.sourcePath);
+  for (const event of events) {
+    const sourceScene = story.entities.get(event.sceneId);
+    addSource(sourceScene?.filePath);
+    if (typeof sourceScene?.raw.manuscript === "string") addSource(sourceScene.raw.manuscript);
+  }
+
+  return {
+    snapshot: context.snapshot,
+    cursor: { sceneId, title: selectedScene.name ?? selectedScene.id, order: position.order, volumeId: position.volumeId, chapterId: position.chapterId, sourcePath: selectedScene.filePath, sourceRevision: story.revisions.get(selectedScene.filePath) },
+    location: scene.location ? { id: scene.location.id, name: scene.location.name, path: scene.location.filePath } : null,
+    appearances: scene.appears.map(({ id, type, name, filePath }) => ({ id, type, name, path: filePath })),
+    worldState: state,
+    confirmedEvents: events,
+    threadStates,
+    timeline,
+    readerDisclosures,
+    characterBeliefs: { availability: "unavailable", reason: "not_implemented" },
+    facts,
+    sourceFiles: [...sourceRevisions].map(([path, revision]) => ({ path, revision })),
+    diagnostics: [
+      ...(Array.isArray(references.unresolvedReferences) && references.unresolvedReferences.length
+        ? [{ code: "broken_reference", items: references.unresolvedReferences }] : []),
+      ...(throughCursor.some(({ entity }) => typeof entity.raw.manuscript !== "string") ? [{ code: "missing_manuscript_link", message: "Some scenes before the cursor have no explicit manuscript path; reader and timeline evidence may be incomplete." }] : []),
+    ],
+  };
+}
+
 function disclosureEvidence(story: LoadedKnowledgeSnapshot, rows: ReturnType<typeof sceneTextInputs>) {
   const summaries = rows.map((row) => ({ sceneId: row.sceneId, ...summaryDisclosure(story, story.entities.get(row.sceneId)!) }));
   const sourceFiles = new Map<string, string>();
@@ -1927,6 +2039,8 @@ export const knowledgeHandlers: Record<string, Handler> = {
   "knowledge.graph.query": graphQuery,
   "knowledge.graph.cooccurrence": graphCooccurrence,
   "knowledge.map.query": mapQuery,
+  "knowledge.lenses.scenes": lensSceneOptions,
+  "knowledge.lenses.at-scene": lensAtScene,
   "knowledge.timeline.query": timelineQuery,
   "knowledge.world-state.at-scene": worldStateAtScene,
   "knowledge.world-state.history": worldStateHistory,

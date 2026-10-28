@@ -57,6 +57,64 @@ export interface SearchPage {
   warnings: string[];
 }
 
+export interface ResearchIndex {
+  snapshot: string;
+  documents: ResearchDocument[];
+  bytes: number;
+}
+
+export interface FusedSearchCandidate {
+  rank: number;
+  path: string;
+  title: string;
+  fileRevision: string;
+  snippet: string;
+  score: number;
+  scoreFactors: string[];
+  navigationSpan: { path: string; revision: string; start: number; end: number; quote: string };
+}
+
+export interface SemanticSearchCandidate {
+  candidateId: string;
+  entityId: string;
+  sentenceIndex: number;
+  path: string;
+  title: string;
+  fileRevision: string;
+  snippet: string;
+  cosineScore: number;
+  rank: number;
+  navigationSpan: { path: string; revision: string; start: number; end: number; quote: string };
+}
+
+export interface FusedSearchHit {
+  kind: "document";
+  path: string;
+  title: string;
+  fileRevision: string;
+  snippet: string;
+  score: number;
+  source: "hybrid" | "lexical" | "semantic";
+  scoreFactors: string[];
+  matchRanges: Array<{ start: number; end: number }>;
+  navigationSpan: { path: string; revision: string; start: number; end: number; quote: string };
+  lexicalScore: number | null;
+  semanticScore: number | null;
+  lexicalRank: number | null;
+  semanticRank: number | null;
+  semanticCandidate?: {
+    candidateId: string;
+    entityId: string;
+    sourcePath: string;
+    sourceRevision: string;
+    sentenceIndex: number;
+    text: string;
+    evidence: [{ path: string; revision: string; start: number; end: number; quote: string }];
+  };
+  expressionScore?: number;
+  expressionTokens?: string[];
+}
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const CODE_POINT_ORDER = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
@@ -196,9 +254,7 @@ export function createResearchDocument(input: ResearchDocumentInput): ResearchDo
   };
 }
 
-export function buildResearchIndex(documents: readonly ResearchDocumentInput[], snapshot: string): {
-  snapshot: string; documents: ResearchDocument[]; bytes: number;
-} {
+export function buildResearchIndex(documents: readonly ResearchDocumentInput[], snapshot: string): ResearchIndex {
   if (!snapshot) throw new TypeError("snapshot is required");
   if (documents.length > MAX_DOCUMENTS) throw Object.assign(new RangeError("Too many searchable documents"), { code: "capacity" });
   const seen = new Set<string>();
@@ -221,6 +277,144 @@ export function buildResearchIndex(documents: readonly ResearchDocumentInput[], 
   }
   indexed.sort((a, b) => compareCodePoints(a.path, b.path));
   return { snapshot, documents: indexed, bytes };
+}
+
+/**
+ * Reuse parsed documents whose content revision is unchanged in the current
+ * Host-pinned file listing. Changed and newly added documents must be supplied
+ * in `replacements`; deleted documents disappear from the returned index.
+ */
+export function updateResearchIndex(
+  previous: ResearchIndex,
+  current: readonly { path: string; fileRevision: string; byteLength: number }[],
+  replacements: readonly ResearchDocumentInput[],
+  snapshot: string,
+): ResearchIndex {
+  if (!snapshot) throw new TypeError("snapshot is required");
+  if (current.length > MAX_DOCUMENTS) throw Object.assign(new RangeError("Too many searchable documents"), { code: "capacity" });
+
+  const previousByPath = new Map(previous.documents.map((document) => [document.path, document]));
+  const replacementsByPath = new Map<string, ResearchDocumentInput>();
+  for (const replacement of replacements) {
+    if (replacementsByPath.has(replacement.path)) throw new TypeError(`Duplicate replacement path: ${replacement.path}`);
+    replacementsByPath.set(replacement.path, replacement);
+  }
+
+  const seen = new Set<string>();
+  const indexed: ResearchDocument[] = [];
+  let bytes = 0;
+  let terms = 0;
+  let normalizationSpans = 0;
+  for (const entry of current) {
+    if (!isSearchableDocumentPath(entry.path)) continue;
+    if (seen.has(entry.path)) throw new TypeError(`Duplicate searchable path: ${entry.path}`);
+    seen.add(entry.path);
+    if (!/^[a-f0-9]{64}$/u.test(entry.fileRevision) || !Number.isSafeInteger(entry.byteLength) || entry.byteLength < 0) {
+      throw new TypeError(`Invalid current file metadata: ${entry.path}`);
+    }
+
+    const prior = previousByPath.get(entry.path);
+    let document: ResearchDocument;
+    if (prior && prior.fileRevision === entry.fileRevision && prior.bytes === entry.byteLength) {
+      document = prior;
+      replacementsByPath.delete(entry.path);
+    } else {
+      const replacement = replacementsByPath.get(entry.path);
+      if (!replacement || replacement.fileRevision !== entry.fileRevision || encoder.encode(replacement.text).byteLength !== entry.byteLength) {
+        throw new TypeError(`Changed searchable document bytes are required: ${entry.path}`);
+      }
+      document = createResearchDocument(replacement);
+      replacementsByPath.delete(entry.path);
+    }
+
+    bytes += document.bytes;
+    if (bytes > MAX_INDEX_BYTES) throw Object.assign(new RangeError("Search index exceeds its byte limit"), { code: "capacity" });
+    terms += document.tokens.size;
+    normalizationSpans += document.normalizationSpans.length;
+    if (terms > MAX_INDEX_TERMS) throw Object.assign(new RangeError("Search index contains too many distinct document terms"), { code: "capacity" });
+    if (normalizationSpans > MAX_INDEX_NORMALIZATION_SPANS) throw Object.assign(new RangeError("Search index contains too many normalization spans"), { code: "capacity" });
+    indexed.push(document);
+  }
+  if (replacementsByPath.size) throw new TypeError(`Replacement path is absent from the current searchable listing: ${replacementsByPath.keys().next().value}`);
+  indexed.sort((a, b) => compareCodePoints(a.path, b.path));
+  return { snapshot, documents: indexed, bytes };
+}
+
+/**
+ * Combine snapshot-validated document and passage ranks using reciprocal rank
+ * fusion. Semantic passages are reduced to their best passage per source file
+ * so one document cannot occupy multiple positions in the same result list.
+ */
+export function fuseSearchCandidates(
+  lexicalCandidates: readonly FusedSearchCandidate[],
+  semanticCandidates: readonly SemanticSearchCandidate[],
+  mode: "hybrid" | "semantic" | "expression",
+  limit: number,
+): FusedSearchHit[] {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 30 || lexicalCandidates.length > 30 || semanticCandidates.length > 30) {
+    throw Object.assign(new RangeError("Fusion candidates or limit exceed the 30-result bound"), { code: "capacity" });
+  }
+  if (mode !== "hybrid" && mode !== "semantic" && mode !== "expression") throw Object.assign(new TypeError("Fusion mode is unsupported"), { code: "invalid_input" });
+
+  const lexicalBySource = new Map<string, { candidate: FusedSearchCandidate; rank: number }>();
+  lexicalCandidates.forEach((candidate) => {
+    const key = `${candidate.path}\0${candidate.fileRevision}`;
+    if (!lexicalBySource.has(key)) lexicalBySource.set(key, { candidate, rank: candidate.rank });
+  });
+  const semanticBySource = new Map<string, SemanticSearchCandidate>();
+  for (const candidate of semanticCandidates.slice().sort((a, b) => a.rank - b.rank)) {
+    const key = `${candidate.path}\0${candidate.fileRevision}`;
+    if (!semanticBySource.has(key)) semanticBySource.set(key, candidate);
+  }
+
+  const keys = new Set<string>(mode === "semantic" ? semanticBySource.keys() : [...lexicalBySource.keys(), ...semanticBySource.keys()]);
+  const rows: FusedSearchHit[] = [];
+  for (const key of keys) {
+    const lexical = lexicalBySource.get(key);
+    const semantic = semanticBySource.get(key);
+    if (mode === "semantic" && !semantic) continue;
+    if (!lexical && !semantic) continue;
+    const lexicalRrf = mode === "semantic" || !lexical ? 0 : 1 / (60 + lexical.rank);
+    const semanticRrf = semantic ? 1 / (60 + semantic.rank) : 0;
+    const lexicalSpan = lexical?.candidate.navigationSpan;
+    const navigationSpan = semantic?.navigationSpan ?? lexicalSpan;
+    if (!navigationSpan) continue;
+    const source = lexical && semantic ? "hybrid" : semantic ? "semantic" : "lexical";
+    rows.push({
+      kind: "document",
+      path: semantic?.path ?? lexical!.candidate.path,
+      title: semantic?.title || lexical?.candidate.title || semantic?.path || lexical!.candidate.path,
+      fileRevision: semantic?.fileRevision ?? lexical!.candidate.fileRevision,
+      snippet: semantic?.snippet ?? lexical!.candidate.snippet,
+      score: lexicalRrf + semanticRrf,
+      source,
+      scoreFactors: [
+        ...(lexicalRrf ? [`rrf-lexical:1/${60 + lexical!.rank}`] : []),
+        ...(semanticRrf ? [`rrf-semantic:1/${60 + semantic!.rank}`] : []),
+        ...(lexical?.candidate.scoreFactors ?? []),
+      ].slice(0, 16),
+      matchRanges: [{ start: navigationSpan.start, end: navigationSpan.end }],
+      navigationSpan,
+      lexicalScore: lexical?.candidate.score ?? null,
+      semanticScore: semantic?.cosineScore ?? null,
+      lexicalRank: lexical?.rank ?? null,
+      semanticRank: semantic?.rank ?? null,
+      ...(semantic ? { semanticCandidate: {
+        candidateId: semantic.candidateId,
+        entityId: semantic.entityId,
+        sourcePath: semantic.path,
+        sourceRevision: semantic.fileRevision,
+        sentenceIndex: semantic.sentenceIndex,
+        text: semantic.snippet,
+        evidence: [semantic.navigationSpan],
+      } } : {}),
+    });
+  }
+  rows.sort((a, b) => b.score - a.score ||
+    (a.lexicalRank ?? Number.MAX_SAFE_INTEGER) - (b.lexicalRank ?? Number.MAX_SAFE_INTEGER) ||
+    (a.semanticRank ?? Number.MAX_SAFE_INTEGER) - (b.semanticRank ?? Number.MAX_SAFE_INTEGER) ||
+    compareCodePoints(a.path, b.path));
+  return rows.slice(0, limit);
 }
 
 function rangesForNeedle(document: ResearchDocument, needle: string, cap = 10): Array<{ start: number; end: number }> {

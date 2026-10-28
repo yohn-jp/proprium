@@ -60,6 +60,16 @@ test("Research official manifest declares every implemented action and only acti
   for (const actionId of bindings) assert.ok(actionIds.includes(actionId), `surface binding references undeclared action ${actionId}`);
 });
 
+test("search fusion accepts typed Host action results only from the user interface", async () => {
+  const metadata = JSON.parse(await readFile(new URL("./plugin.json", import.meta.url), "utf8"));
+  const action = metadata.actions.find((item: any) => item.action_id === "research.search.fuse");
+  assert.equal(action.effect, "read");
+  assert.deepEqual(action.callers, ["ui"]);
+  assert.ok(action.required_capabilities.includes("workspace.file.read"));
+  assert.ok(action.required_capabilities.includes("workspace.derived.cache"));
+  assert.ok(!action.required_capabilities.includes("workspace.change.propose"));
+});
+
 test("analyzer exposes local literal analysis and its results", async () => {
   const metadata = JSON.parse(await readFile(new URL("./plugin.json", import.meta.url), "utf8"));
   const surface = metadata.ui.find((item: any) => item.id === "nlp.analyzer");

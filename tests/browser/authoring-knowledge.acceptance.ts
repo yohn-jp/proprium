@@ -89,6 +89,19 @@ test("signed Knowledge and Research surfaces read and navigate real workspace da
   await search.getByRole("button", { name: /manuscript\/scene\.md/ }).click();
   await expect(page.getByRole("textbox", { name: "原稿 Markdown" })).toContainText("青い灯台で灯は待った。", { timeout: 60_000 });
 
+  await showAuthoringPanel(page, "Graph, map and timeline");
+  const lenses = page.getByRole("tabpanel", { name: "Graph, map and timeline", exact: true }).first();
+  await lenses.getByRole("tab", { name: "Scene cursor", exact: true }).click();
+  const sceneCursor = lenses.locator(".authoring-surface").filter({ hasText: "Choose the scene for every Knowledge projection" });
+  await sceneCursor.getByRole("button", { name: "Choose the scene for every Knowledge projectionを読み込む", exact: true }).click();
+  await sceneCursor.getByRole("combobox", { name: "Scene", exact: true }).selectOption("scene-1");
+  await sceneCursor.getByRole("button", { name: "送信", exact: true }).click();
+  await lenses.getByRole("tab", { name: "Scene lens", exact: true }).click();
+  await expect(lenses).toContainText("灯台", { timeout: 60_000 });
+  await expect(lenses).toContainText("灯");
+  await lenses.getByRole("tab", { name: "Timeline at cursor", exact: true }).click();
+  await expect(lenses).toContainText("灯の場面");
+
  });
 
 test("saved manuscript and local commit survive a browser reload", async ({ page }) => {

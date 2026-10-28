@@ -992,6 +992,94 @@
     },
     {
       "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.lenses.scenes",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "snapshot": true,
+          "items": true
+        },
+        "required": [
+          "snapshot",
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
+      "action_id": "knowledge.lenses.at-scene",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sceneId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "sceneId"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "snapshot": true,
+          "cursor": true,
+          "location": true,
+          "appearances": true,
+          "worldState": true,
+          "confirmedEvents": true,
+          "threadStates": true,
+          "timeline": true,
+          "readerDisclosures": true,
+          "characterBeliefs": true,
+          "facts": true,
+          "sourceFiles": true,
+          "diagnostics": true
+        },
+        "required": [
+          "snapshot",
+          "cursor",
+          "facts",
+          "sourceFiles",
+          "diagnostics"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.knowledge",
       "action_id": "knowledge.timeline.query",
       "schema_version": 1,
       "effect": "read",
@@ -3140,6 +3228,209 @@
                 {
                   "key": "confidence",
                   "label": "Confidence"
+                }
+              ]
+            }
+          },
+          {
+            "id": "lens-scene-cursor",
+            "title": "Scene cursor",
+            "body": {
+              "id": "knowledge-scene-cursor-form",
+              "type": "form",
+              "title": "Choose the scene for every Knowledge projection",
+              "description": "The selected scene, its state, thread lifecycle, timeline and reader evidence all use the same Host-pinned snapshot.",
+              "load_actions": [
+                {
+                  "key": "scenes",
+                  "action_id": "knowledge.lenses.scenes",
+                  "input_template": {}
+                }
+              ],
+              "fields": [
+                {
+                  "id": "scene_id",
+                  "label": "Scene",
+                  "type": "enum",
+                  "required": true,
+                  "options": {
+                    "data_key": "load.scenes.items"
+                  },
+                  "option_value_key": "id",
+                  "option_label_key": "title"
+                }
+              ],
+              "submit": {
+                "action_id": "knowledge.lenses.at-scene",
+                "input_template": {
+                  "sceneId": {
+                    "data_key": "form.scene_id"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "lens-scene-result",
+            "title": "Scene lens",
+            "body": {
+              "id": "knowledge-scene-lens-result-tabs",
+              "type": "tabs",
+              "title": "Projections at the selected scene",
+              "tabs": [
+                {
+                  "id": "lens-scene-facts",
+                  "title": "Evidence",
+                  "body": {
+                    "id": "knowledge-scene-lens-facts",
+                    "type": "table",
+                    "title": "Scene facts at the shared cursor",
+                    "rows": {
+                      "data_key": "last_action_result.facts"
+                    },
+                    "columns": [
+                      {
+                        "key": "aspect",
+                        "label": "Projection"
+                      },
+                      {
+                        "key": "item",
+                        "label": "Item"
+                      },
+                      {
+                        "key": "state",
+                        "label": "State"
+                      },
+                      {
+                        "key": "evidence",
+                        "label": "Evidence"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "lens-scene-cursor-detail",
+                  "title": "Selected scene",
+                  "body": {
+                    "id": "knowledge-scene-lens-cursor",
+                    "type": "detail",
+                    "title": "Scene and snapshot",
+                    "value": {
+                      "data_key": "last_action_result.cursor"
+                    },
+                    "fields": [
+                      {
+                        "key": "sceneId",
+                        "label": "Scene ID"
+                      },
+                      {
+                        "key": "title",
+                        "label": "Scene"
+                      },
+                      {
+                        "key": "order",
+                        "label": "Order"
+                      },
+                      {
+                        "key": "sourcePath",
+                        "label": "Scene source"
+                      },
+                      {
+                        "key": "sourceRevision",
+                        "label": "Scene revision"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "lens-scene-timeline",
+                  "title": "Timeline at cursor",
+                  "body": {
+                    "id": "knowledge-scene-lens-timeline",
+                    "type": "detail",
+                    "title": "Timeline evidence at selected scene",
+                    "value": {
+                      "data_key": "last_action_result.timeline"
+                    },
+                    "fields": [
+                      {
+                        "key": "order",
+                        "label": "Scene order"
+                      },
+                      {
+                        "key": "title",
+                        "label": "Scene"
+                      },
+                      {
+                        "key": "relation",
+                        "label": "Time relation"
+                      },
+                      {
+                        "key": "confidence",
+                        "label": "Confidence"
+                      },
+                      {
+                        "key": "cumulativeDayOffset",
+                        "label": "Estimated day offset"
+                      },
+                      {
+                        "key": "deltaFromPrevious",
+                        "label": "Days from previous"
+                      },
+                      {
+                        "key": "locationName",
+                        "label": "Location"
+                      },
+                      {
+                        "key": "chapterName",
+                        "label": "Chapter"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "lens-scene-sources",
+                  "title": "Sources",
+                  "body": {
+                    "id": "knowledge-scene-lens-sources",
+                    "type": "table",
+                    "title": "Pinned source revisions",
+                    "rows": {
+                      "data_key": "last_action_result.sourceFiles"
+                    },
+                    "columns": [
+                      {
+                        "key": "path",
+                        "label": "Path"
+                      },
+                      {
+                        "key": "revision",
+                        "label": "Revision"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "lens-scene-diagnostics",
+                  "title": "Diagnostics",
+                  "body": {
+                    "id": "knowledge-scene-lens-diagnostics",
+                    "type": "table",
+                    "title": "Unavailable and unresolved data",
+                    "rows": {
+                      "data_key": "last_action_result.diagnostics"
+                    },
+                    "columns": [
+                      {
+                        "key": "code",
+                        "label": "Status"
+                      },
+                      {
+                        "key": "message",
+                        "label": "Details"
+                      }
+                    ]
+                  }
                 }
               ]
             }

@@ -21,6 +21,7 @@ function file(path: string, text: string): FixtureFile {
 
 class ResearchHostFixture {
   readonly files = new Map<string, FixtureFile>();
+  readonly snapshotIds = new Set([snapshot.id]);
   readonly calls: Array<{ operation: string; payload: Record<string, unknown> }> = [];
   readonly proposals: ChangeSet[] = [];
   readonly cache = new Map<string, unknown>();
@@ -46,7 +47,7 @@ class ResearchHostFixture {
     if (operation === "workspace.file.read") {
       const entry = this.files.get(payload.path as string);
       if (!entry) throw Object.assign(new Error("missing"), { code: "file_not_found" });
-      if (payload.snapshot && (payload.snapshot as Snapshot).id !== snapshot.id) throw new Error("wrong snapshot");
+      if (payload.snapshot && !this.snapshotIds.has((payload.snapshot as Snapshot).id)) throw new Error("wrong snapshot");
       const offset = payload.offset as number;
       const length = payload.length as number;
       const bytes = [...entry.bytes.slice(offset, offset + length)];
@@ -103,11 +104,12 @@ async function invoke(
   hostFixture: ResearchHostFixture,
   actionId: string,
   input: Record<string, unknown>,
-  options: { idempotencyKey?: string; scope?: ActionRequest["scope"] } = {},
+  options: { idempotencyKey?: string; scope?: ActionRequest["scope"]; snapshot?: Snapshot } = {},
 ): Promise<unknown> {
+  const requestSnapshot = options.snapshot ?? snapshot;
   const context: ActionRequest = {
     schema_version: 1, request_id: `request-${actionId}`, plugin_id: "proprium.research", action_id: actionId,
-    scope: options.scope ?? scope, snapshot, input, deadline_ms: 30_000,
+    scope: options.scope ?? scope, snapshot: requestSnapshot, input, deadline_ms: 30_000,
     ...(options.idempotencyKey ? { idempotency_key: options.idempotencyKey } : {}),
   };
   const guestHost: GuestHost = { request: hostFixture.request.bind(hostFixture) };
@@ -145,6 +147,8 @@ test("search values match the signed schema with and without envelope warnings",
       assertValue(outputSchema, output.value, "Research query output");
       assert.equal(output.value.hits[0].path, item.path);
       assert.deepEqual(output.warnings, morphologyHints ? ["tokenizer_unavailable"] : []);
+      assert.deepEqual(output.value.snapshot, snapshot);
+      assert.equal(output.value.scope, null);
       assert.equal(Object.hasOwn(output.value, "warnings"), false);
     } finally { guest.dispose(); }
   }
@@ -215,9 +219,148 @@ test("index status reads Host metadata and a new guest verifies cached source re
   const queryCallsStart = host.calls.length;
   const page = await invoke(createResearchHandlers()["research.query"]!, host, "research.query", { query: "lantern", includeTerms: false }) as { hits: Array<{ path: string; navigationSpan: unknown }> };
   assert.equal(page.hits[0]?.path, source.path);
-  assert.deepEqual(page.hits[0]?.navigationSpan, { path: source.path, revision: source.revision, start: 4, end: 11 });
+  assert.deepEqual(page.hits[0]?.navigationSpan, { path: source.path, revision: source.revision, start: 4, end: 11, quote: "lantern" });
   assert.ok(host.calls.slice(queryCallsStart).some(({ operation }) => operation === "workspace.derived.cache.get"));
   assert.equal(host.calls.slice(queryCallsStart).some(({ operation }) => operation === "workspace.file.read"), false);
+});
+
+test("changed snapshots reread only changed and added files while removing deleted entries", async () => {
+  const host = new ResearchHostFixture();
+  for (const [path, text] of [
+    ["manuscript/changed.md", "old lighthouse"],
+    ["manuscript/removed.md", "harbor removed"],
+    ["manuscript/unchanged.md", "quiet harbor"],
+  ]) host.files.set(path, file(path, text));
+  const handlers = createResearchHandlers();
+  const original = await invoke(handlers["research.query"]!, host, "research.query", { query: "harbor", includeTerms: false }) as { hits: Array<{ path: string }> };
+  assert.deepEqual(original.hits.map(({ path }) => path), ["manuscript/removed.md", "manuscript/unchanged.md"]);
+
+  host.files.set("manuscript/changed.md", file("manuscript/changed.md", "new beacon"));
+  host.files.delete("manuscript/removed.md");
+  host.files.set("manuscript/added.md", file("manuscript/added.md", "distant beacon"));
+  const nextSnapshot: Snapshot = { ...snapshot, id: "snapshot-2", worktree_generation: "generation-2", draft_generation: "draft-2" };
+  host.snapshotIds.add(nextSnapshot.id);
+  const nextScope = { ...scope, generation: "scope-2" };
+  const readStart = host.calls.length;
+  const updated = await invoke(handlers["research.query"]!, host, "research.query", { query: "beacon", includeTerms: false }, {
+    scope: nextScope, snapshot: nextSnapshot,
+  }) as { hits: Array<{ path: string }> };
+
+  assert.deepEqual(updated.hits.map(({ path }) => path), ["manuscript/added.md", "manuscript/changed.md"]);
+  assert.deepEqual(host.calls.slice(readStart).filter(({ operation }) => operation === "workspace.file.read").map(({ payload }) => payload.path).sort(), [
+    "manuscript/added.md", "manuscript/changed.md",
+  ]);
+  const nextSnapshotManifests = [...host.cache.values()].filter((value) => value && typeof value === "object" &&
+    (value as Record<string, unknown>).snapshotId === nextSnapshot.id);
+  assert.ok(nextSnapshotManifests.length > 0, "the updated snapshot is sealed into its own cache namespace");
+});
+
+test("UI-only search fusion validates both Host envelopes and source spans before RRF", async () => {
+  const host = new ResearchHostFixture();
+  const source = file("manuscript/lantern.md", "The lantern opens the sea.\n");
+  host.files.set(source.path, source);
+  const handlers = createResearchHandlers();
+  const lexicalValue = await invoke(handlers["research.query"]!, host, "research.query", {
+    query: "lantern", mode: "lexical", limit: 30, includeTerms: false,
+  }) as Record<string, unknown>;
+  const quote = "The lantern opens the sea.";
+  const span = { path: source.path, revision: source.revision, start: 0, end: quote.length, quote };
+  const vectorValue = {
+    snapshot,
+    model: { id: "e5-small", revision: "v1", role: "embedding", dimensions: 384, digest: "d".repeat(64) },
+    results: [{ entityId: "scene-a", sourcePath: source.path, sourceRevision: source.revision, sentenceIndex: 0,
+      quote, cosineScore: 0.91, rank: 1, indexCoverage: 1, evidence: [span] }],
+  };
+  const fusionInput = {
+    mode: "hybrid", query: "lantern", limit: 30,
+    lexicalResult: { scope, snapshot, value: lexicalValue },
+    vectorResult: { scope, snapshot, query: "lantern", granularity: "sentence", value: vectorValue },
+  };
+  const result = await invoke(handlers["research.search.fuse"]!, host, "research.search.fuse", fusionInput) as {
+    snapshot: Snapshot; snapshotId: string; hits: Array<{ path: string; source: string; navigationSpan: { quote: string }; semanticCandidate?: { sentenceIndex: number } }>;
+    expressionStatus: { state: string }; warnings: string[];
+  };
+  const schemaPath = process.env.PROPRIUM_AUTHORING_SCHEMA ?? fileURLToPath(new URL("../../app/src/browser/proprium/authoring/schema.ts", import.meta.url));
+  const { assertValue } = await import(pathToFileURL(schemaPath).href);
+  const metadata = JSON.parse(readFileSync(new URL("./plugin.json", import.meta.url), "utf8"));
+  const descriptor = metadata.actions.find((row: any) => row.action_id === "research.search.fuse");
+  assertValue(descriptor.input_schema, fusionInput, "Research fusion input");
+  assertValue(descriptor.output_schema, result, "Research fusion output");
+  assert.equal(result.snapshotId, snapshot.id);
+  assert.deepEqual(result.snapshot, snapshot);
+  assert.equal(result.hits[0]?.path, source.path);
+  assert.equal(result.hits[0]?.source, "hybrid");
+  assert.equal(result.hits[0]?.navigationSpan.quote, quote);
+  assert.equal(result.hits[0]?.semanticCandidate?.sentenceIndex, 0);
+  assert.equal(result.expressionStatus.state, "not_requested");
+
+  await assert.rejects(() => invoke(handlers["research.search.fuse"]!, host, "research.search.fuse", {
+    ...fusionInput, vectorResult: { ...fusionInput.vectorResult, snapshot: { ...snapshot, id: "old-snapshot" } },
+  }), /another Host scope, snapshot, query, or granularity/u);
+  await assert.rejects(() => invoke(handlers["research.search.fuse"]!, host, "research.search.fuse", {
+    ...fusionInput, vectorResult: { ...fusionInput.vectorResult, value: { ...vectorValue,
+      results: [{ ...vectorValue.results[0], quote: "forged quote" }] } },
+  }), /not a current source-backed result/u);
+});
+
+test("path-scoped fusion filters the global Semantic page without changing provider ranks", async () => {
+  const host = new ResearchHostFixture();
+  const inside = file("manuscript/in-scope/lantern.md", "The lantern waits inside.\n");
+  const outside = file("manuscript/other/lantern.md", "The lantern waits outside.\n");
+  host.files.set(inside.path, inside); host.files.set(outside.path, outside);
+  const handlers = createResearchHandlers();
+  const pathScope = "manuscript/in-scope";
+  const lexicalValue = await invoke(handlers["research.query"]!, host, "research.query", {
+    query: "lantern", mode: "lexical", scope: pathScope, limit: 30, includeTerms: false,
+  }) as Record<string, unknown>;
+  const outsideQuote = "The lantern waits outside.";
+  const insideQuote = "The lantern waits inside.";
+  const vectorValue = {
+    snapshot,
+    model: { id: "e5-small", revision: "v1", role: "embedding" },
+    results: [
+      { entityId: "scene-outside", sourcePath: outside.path, sourceRevision: outside.revision, sentenceIndex: 0,
+        quote: outsideQuote, cosineScore: 0.95, rank: 1, indexCoverage: 1,
+        evidence: [{ path: outside.path, revision: outside.revision, start: 0, end: outsideQuote.length, quote: outsideQuote }] },
+      { entityId: "scene-inside", sourcePath: inside.path, sourceRevision: inside.revision, sentenceIndex: 0,
+        quote: insideQuote, cosineScore: 0.90, rank: 2, indexCoverage: 1,
+        evidence: [{ path: inside.path, revision: inside.revision, start: 0, end: insideQuote.length, quote: insideQuote }] },
+    ],
+  };
+  const result = await invoke(handlers["research.search.fuse"]!, host, "research.search.fuse", {
+    mode: "hybrid", query: "lantern", scope: pathScope, limit: 30,
+    lexicalResult: { scope, snapshot, value: lexicalValue },
+    vectorResult: { scope, snapshot, query: "lantern", granularity: "sentence", value: vectorValue },
+  }) as { scope: string | null; hits: Array<{ path: string; semanticRank: number | null; scoreFactors: string[] }> };
+  assert.equal(result.scope, pathScope);
+  assert.deepEqual(result.hits.map(({ path }) => path), [inside.path]);
+  assert.equal(result.hits[0]?.semanticRank, 2);
+  assert.ok(result.hits[0]?.scoreFactors.includes("rrf-semantic:1/62"));
+});
+
+test("expression fusion reports tokenizer denial while preserving its validated hybrid candidates", async () => {
+  const host = new ResearchHostFixture();
+  const source = file("manuscript/lantern.md", "The lantern opens the sea.\n");
+  host.files.set(source.path, source);
+  const handlers = createResearchHandlers();
+  const lexicalValue = await invoke(handlers["research.query"]!, host, "research.query", {
+    query: "lantern", mode: "lexical", limit: 30, includeTerms: false,
+  }) as Record<string, unknown>;
+  const quote = "The lantern opens the sea.";
+  const vectorValue = { snapshot, model: { id: "e5-small", revision: "v1", role: "embedding" }, results: [
+    { entityId: "scene-a", sourcePath: source.path, sourceRevision: source.revision, sentenceIndex: 0,
+      quote, cosineScore: 0.91, rank: 1, indexCoverage: 1,
+      evidence: [{ path: source.path, revision: source.revision, start: 0, end: quote.length, quote }] },
+  ] };
+  const result = await invoke(handlers["research.search.fuse"]!, host, "research.search.fuse", {
+    mode: "expression", query: "lantern", limit: 30,
+    lexicalResult: { scope, snapshot, value: lexicalValue },
+    vectorResult: { scope, snapshot, query: "lantern", granularity: "sentence", value: vectorValue },
+  }) as { expressionStatus: { state: string; reason?: string }; hits: unknown[]; warnings: string[] };
+  assert.equal(result.expressionStatus.state, "unavailable");
+  assert.equal(result.expressionStatus.reason, "dependency_unavailable");
+  assert.equal(result.hits.length, 1);
+  assert.ok(result.warnings.includes("expression_tokenizer_unavailable"));
 });
 
 test("token counting labels an explicitly selected approximation and rejects unavailable or unsafe models", async () => {

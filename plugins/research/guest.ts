@@ -5,6 +5,7 @@ import type { ActionRequest, ChangeSet, FileOperation } from "../../app/src/brow
 import type { GuestHost, Handler, HostCall } from "../shared/guest.js";
 import {
   buildResearchIndex,
+  fuseSearchCandidates,
   isSearchableDocumentPath,
   isSafeRelativePath,
   parseTermRegistry,
@@ -12,7 +13,11 @@ import {
   removeTermRegistryEntry,
   resolveTermSpans,
   TERM_REGISTRY_PATH,
+  updateResearchIndex,
   upsertTermRegistry,
+  type ResearchIndex,
+  type FusedSearchCandidate,
+  type SemanticSearchCandidate,
   type ResearchDocumentInput,
   type SearchRequest,
   type TermRegistry,
@@ -79,9 +84,12 @@ interface ParsedYaml { document: Document; value: Record<string, unknown> }
 interface LoadedRegistry { registry: TermRegistry; revision: string | null }
 interface ResearchCacheEntry {
   snapshot: ActionRequest["snapshot"];
+  workspaceId: string;
+  repositoryId: number | null;
+  branch: string;
   scope?: string;
   snapshotId: string;
-  index: ReturnType<typeof buildResearchIndex>;
+  index: ResearchIndex;
 }
 
 function publicTerm(term: TermRegistry["terms"][number]): Record<string, unknown> {
@@ -108,6 +116,31 @@ function utf8PathCompare(a: string, b: string): number {
 }
 function snapshotCacheKey(context: ActionRequest, scope?: string): string {
   return JSON.stringify([context.scope.workspace_id, context.scope.repository_id, context.scope.branch, context.scope.generation, context.snapshot.id, scope ?? null]);
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const row = value as Record<string, unknown>;
+    return `{${Object.keys(row).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(row[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+function sameScope(value: unknown, context: ActionRequest): boolean {
+  const scope = object(value, "scope");
+  exactFields(scope, ["workspace_id", "repository_id", "branch", "generation"]);
+  return scope.workspace_id === context.scope.workspace_id && scope.repository_id === context.scope.repository_id &&
+    scope.branch === context.scope.branch && scope.generation === context.scope.generation;
+}
+function sameSnapshot(value: unknown, context: ActionRequest): boolean {
+  const snapshot = object(value, "snapshot");
+  exactFields(snapshot, ["id", "local_commit", "worktree_generation", "draft_generation", "remote_commit"]);
+  return snapshot.id === context.snapshot.id && snapshot.local_commit === context.snapshot.local_commit &&
+    snapshot.worktree_generation === context.snapshot.worktree_generation && snapshot.draft_generation === context.snapshot.draft_generation &&
+    snapshot.remote_commit === context.snapshot.remote_commit;
+}
+function isWithinScope(path: string, scope?: string): boolean {
+  return scope === undefined || path === scope || path.startsWith(`${scope}/`);
 }
 function encodeCursor(value: Record<string, unknown>, prefix = TERMS_PAGE_PREFIX): string {
   const bytes = new TextEncoder().encode(JSON.stringify(value));
@@ -568,23 +601,34 @@ function* storeIndexSources(
   yield* storeCacheValue(host, context, scope, "manifest", manifest);
 }
 
-function* loadIndex(host: GuestHost, context: ActionRequest, scope?: string, force = false): Generator<HostCall, ReturnType<typeof buildResearchIndex>, unknown> {
+function* loadIndex(
+  host: GuestHost,
+  context: ActionRequest,
+  scope?: string,
+  force = false,
+  previous?: ResearchIndex,
+): Generator<HostCall, ResearchIndex, unknown> {
   const entries = yield* listSearchableEntries(host, context, scope);
   const searchable = entries.filter(({ path }) => isSearchableDocumentPath(path));
   if (searchable.length > 10_000) throw fail("capacity", "Research document limit exceeded");
   const totalBytes = searchable.reduce((total, entry) => total + entry.byte_length, 0);
   if (totalBytes > 32 * 1024 * 1024) throw fail("capacity", "Research index exceeds its 32 MiB limit");
-  if (!force) {
+  if (!force && !previous) {
     const cached = yield* cachedIndexSources(host, context, scope, searchable);
     if (cached) return buildResearchIndex(cached, context.snapshot.id);
   }
   const documents: ResearchDocumentInput[] = [];
+  const previousByPath = new Map((previous?.documents ?? []).map((document) => [document.path, document]));
   for (const entry of searchable) {
     if (entry.byte_length > MAX_FILE_READ) throw fail("capacity", `Searchable file exceeds its 2 MiB limit: ${entry.path}`, false, { path: entry.path });
+    const cached = previousByPath.get(entry.path);
+    if (!force && cached && cached.fileRevision === entry.revision && cached.bytes === entry.byte_length) continue;
     const text = yield* readEntryText(host, context, entry);
     documents.push({ path: entry.path, fileRevision: entry.revision, text });
   }
-  const index = buildResearchIndex(documents, context.snapshot.id);
+  const index = previous && !force
+    ? updateResearchIndex(previous, searchable.map((entry) => ({ path: entry.path, fileRevision: entry.revision, byteLength: entry.byte_length })), documents, context.snapshot.id)
+    : buildResearchIndex(documents, context.snapshot.id);
   yield* storeIndexSources(host, context, scope, index);
   return index;
 }
@@ -597,8 +641,18 @@ export function createResearchHandlers(): Record<string, Handler> {
     try { getResearchMorphologyBindings().release(); } catch { /* The component may not have initialized. */ }
   };
   const indexFor = (context: ActionRequest, scope?: string): ResearchCacheEntry | undefined => indexes.get(snapshotCacheKey(context, scope));
-  const rememberIndex = (context: ActionRequest, index: ReturnType<typeof buildResearchIndex>, scope?: string): ResearchCacheEntry => {
-    const entry: ResearchCacheEntry = { snapshot: context.snapshot, scope, snapshotId: context.snapshot.id, index };
+  const previousIndexFor = (context: ActionRequest, scope?: string): ResearchIndex | undefined => {
+    for (const entry of indexes.values()) {
+      if (entry.workspaceId === context.scope.workspace_id && entry.repositoryId === context.scope.repository_id &&
+          entry.branch === context.scope.branch && entry.scope === scope) return entry.index;
+    }
+    return undefined;
+  };
+  const rememberIndex = (context: ActionRequest, index: ResearchIndex, scope?: string): ResearchCacheEntry => {
+    const entry: ResearchCacheEntry = {
+      snapshot: context.snapshot, workspaceId: context.scope.workspace_id, repositoryId: context.scope.repository_id,
+      branch: context.scope.branch, scope, snapshotId: context.snapshot.id, index,
+    };
     const key = snapshotCacheKey(context, scope);
     indexes.delete(key); indexes.set(key, entry);
     while (indexes.size > 1) indexes.delete(indexes.keys().next().value!);
@@ -616,7 +670,7 @@ export function createResearchHandlers(): Record<string, Handler> {
       if (input.includeTerms !== undefined && typeof input.includeTerms !== "boolean" || input.morphologyHints !== undefined && typeof input.morphologyHints !== "boolean") throw fail("invalid_input", "search flags must be boolean");
       const scope = input.scope as string | undefined;
       let cached = indexFor(context, scope);
-      if (!cached) cached = rememberIndex(context, yield* loadIndex(host, context, scope), scope);
+      if (!cached) cached = rememberIndex(context, yield* loadIndex(host, context, scope, false, previousIndexFor(context, scope)), scope);
       const registry = input.includeTerms === false ? { registry: { schemaVersion: 1, terms: [] } as TermRegistry } : yield* loadRegistry(host, context);
       const page = queryResearchIndex(cached.index, {
         query: input.query, mode, snapshot: context.snapshot.id, scope,
@@ -629,9 +683,153 @@ export function createResearchHandlers(): Record<string, Handler> {
       const { warnings, ...value } = page;
       const result = { ...value, query: input.query, mode, hits: page.hits.map((hit) => {
         const first = hit.kind === "document" ? hit.matchRanges[0] : undefined;
-        return { ...hit, navigationSpan: first ? { path: hit.path, revision: hit.fileRevision, start: first.start, end: first.end } : null };
+        return { ...hit, navigationSpan: first ? { path: hit.path, revision: hit.fileRevision, start: first.start, end: first.end,
+          quote: cached!.index.documents.find((document) => document.path === hit.path)?.text.slice(first.start, first.end) ?? "" } : null };
       }) };
-      return warnings.length ? withWarnings(result, warnings) : result;
+      const boundResult = { ...result, snapshot: context.snapshot, scope: scope ?? null };
+      return warnings.length ? withWarnings(boundResult, warnings) : boundResult;
+    },
+    "research.search.fuse": function* (raw, context, host) {
+      const input = object(raw);
+      exactFields(input, ["mode", "query", "scope", "limit", "lexicalResult", "vectorResult"]);
+      if (input.mode !== "hybrid" && input.mode !== "semantic" && input.mode !== "expression") throw fail("invalid_input", "mode must be hybrid, semantic, or expression");
+      if (typeof input.query !== "string" || !input.query.trim() || input.query.length > 512) throw fail("invalid_input", "query must contain 1 to 512 characters");
+      const scope = input.scope === null ? undefined : input.scope;
+      if (scope !== undefined && (typeof scope !== "string" || !isSafeRelativePath(scope))) throw fail("invalid_path", "scope must be a safe relative path or null");
+      const limit = input.limit ?? 30;
+      if (!Number.isSafeInteger(limit) || (limit as number) < 1 || (limit as number) > 30) throw fail("invalid_input", "limit must be between 1 and 30");
+
+      const lexicalEnvelope = object(input.lexicalResult, "lexicalResult");
+      exactFields(lexicalEnvelope, ["scope", "snapshot", "value"]);
+      if (!sameScope(lexicalEnvelope.scope, context) || !sameSnapshot(lexicalEnvelope.snapshot, context)) throw fail("snapshot_stale", "Lexical results belong to another Host scope or snapshot", true);
+      const lexicalValue = object(lexicalEnvelope.value, "lexicalResult.value");
+      exactFields(lexicalValue, ["snapshot", "scope", "hits", "nextCursor", "indexSnapshot", "coverage", "query", "mode", "warnings"]);
+      if (!sameSnapshot(lexicalValue.snapshot, context) || lexicalValue.query !== input.query || lexicalValue.mode !== "lexical" ||
+          lexicalValue.scope !== (scope ?? null) || lexicalValue.indexSnapshot !== context.snapshot.id || !Array.isArray(lexicalValue.hits) || lexicalValue.hits.length > 30) {
+        throw fail("snapshot_stale", "Lexical result query, scope, or index does not match this fusion request", true);
+      }
+
+      const vectorEnvelope = object(input.vectorResult, "vectorResult");
+      exactFields(vectorEnvelope, ["scope", "snapshot", "query", "granularity", "value"]);
+      if (!sameScope(vectorEnvelope.scope, context) || !sameSnapshot(vectorEnvelope.snapshot, context) ||
+          vectorEnvelope.query !== input.query || vectorEnvelope.granularity !== "sentence") {
+        throw fail("snapshot_stale", "Semantic results belong to another Host scope, snapshot, query, or granularity", true);
+      }
+      const vectorValue = object(vectorEnvelope.value, "vectorResult.value");
+      exactFields(vectorValue, ["snapshot", "model", "results"]);
+      if (!sameSnapshot(vectorValue.snapshot, context) || !Array.isArray(vectorValue.results) || vectorValue.results.length > 30) {
+        throw fail("snapshot_stale", "Semantic result does not match this Host snapshot", true);
+      }
+      const model = object(vectorValue.model, "vectorResult.value.model");
+      if (typeof model.id !== "string" || typeof model.revision !== "string" || model.role !== "embedding") throw fail("invalid_input", "Semantic result model identity is invalid");
+
+      const index = yield* loadIndex(host, context, scope, false, previousIndexFor(context, scope));
+      const page = queryResearchIndex(index, {
+        query: input.query, mode: "lexical", snapshot: context.snapshot.id, scope,
+        scopeBinding: cacheScopeDigest(context, scope), limit: 30, includeTerms: false,
+      }, { tokenizerAvailable: false });
+      const expectedLexical = page.hits.map((hit) => {
+        const first = hit.matchRanges[0];
+        return { ...hit, navigationSpan: first ? { path: hit.path, revision: hit.fileRevision, start: first.start, end: first.end,
+          quote: index.documents.find((document) => document.path === hit.path)?.text.slice(first.start, first.end) ?? "" } : null };
+      });
+      if (canonicalJson(lexicalValue.hits) !== canonicalJson(expectedLexical)) throw fail("snapshot_stale", "Lexical hits no longer match the current Research index and query", true);
+
+      const documents = new Map(index.documents.map((document) => [document.path, document]));
+      const lexicalCandidates: FusedSearchCandidate[] = [];
+      for (const [offset, rawHit] of lexicalValue.hits.entries()) {
+        const hit = object(rawHit, `lexicalResult.value.hits[${offset}]`);
+        if (hit.kind !== "document" || typeof hit.path !== "string" || typeof hit.title !== "string" || typeof hit.fileRevision !== "string" ||
+            typeof hit.snippet !== "string" || typeof hit.score !== "number" || !Array.isArray(hit.scoreFactors)) throw fail("invalid_input", `Lexical hit ${offset} is invalid`);
+        if (!isWithinScope(hit.path, scope)) throw fail("invalid_path", `Lexical hit is outside the selected path scope: ${hit.path}`);
+        const document = documents.get(hit.path);
+        if (!document || document.fileRevision !== hit.fileRevision) throw fail("snapshot_stale", `Lexical hit source changed: ${hit.path}`, true);
+        const span = hit.navigationSpan === null ? undefined : object(hit.navigationSpan, `lexicalResult.value.hits[${offset}].navigationSpan`);
+        if (!span || typeof span.start !== "number" || typeof span.end !== "number" || typeof span.quote !== "string" ||
+            span.path !== hit.path || span.revision !== hit.fileRevision || !Number.isSafeInteger(span.start) || !Number.isSafeInteger(span.end) ||
+            span.start < 0 || span.end <= span.start || span.end > document.text.length || document.text.slice(span.start, span.end) !== span.quote) {
+          // A lexical candidate without a validated visible range cannot safely drive editor navigation.
+          continue;
+        }
+        lexicalCandidates.push({ rank: offset + 1, path: hit.path, title: hit.title, fileRevision: hit.fileRevision, snippet: hit.snippet,
+          score: hit.score, scoreFactors: hit.scoreFactors as string[], navigationSpan: { path: hit.path, revision: hit.fileRevision,
+            start: span.start, end: span.end, quote: span.quote } });
+      }
+
+      const semanticCandidates: SemanticSearchCandidate[] = [];
+      for (const [offset, rawCandidate] of vectorValue.results.entries()) {
+        const candidate = object(rawCandidate, `vectorResult.value.results[${offset}]`);
+        const evidence = Array.isArray(candidate.evidence) ? candidate.evidence : [];
+        const sourcePath = candidate.sourcePath;
+        const sourceRevision = candidate.sourceRevision;
+        const sentenceIndex = candidate.sentenceIndex;
+        const quote = candidate.quote;
+        const cosineScore = candidate.cosineScore;
+        const rank = candidate.rank;
+        if (typeof sourcePath === "string" && isSafeRelativePath(sourcePath) && !isWithinScope(sourcePath, scope)) continue;
+        const source = typeof sourcePath === "string" ? documents.get(sourcePath) : undefined;
+        const span = evidence.length === 1 ? object(evidence[0], `vectorResult.value.results[${offset}].evidence[0]`) : undefined;
+        if (typeof candidate.entityId !== "string" || !candidate.entityId || !Number.isSafeInteger(sentenceIndex) || (sentenceIndex as number) < 0 ||
+            typeof sourcePath !== "string" || !isSafeRelativePath(sourcePath) || !source || source.fileRevision !== sourceRevision ||
+            typeof quote !== "string" || !quote || quote.length > 32_768 || typeof cosineScore !== "number" || !Number.isFinite(cosineScore) || cosineScore < -1 || cosineScore > 1 ||
+            !Number.isSafeInteger(rank) || (rank as number) !== offset + 1 || !span || span.path !== sourcePath || span.revision !== sourceRevision ||
+            typeof span.start !== "number" || typeof span.end !== "number" ||
+            span.quote !== quote || !Number.isSafeInteger(span.start) || !Number.isSafeInteger(span.end) || span.start < 0 || span.end <= span.start ||
+            span.end > source.text.length || source.text.slice(span.start, span.end) !== quote) {
+          throw fail("snapshot_stale", `Semantic passage ${offset + 1} is not a current source-backed result`, true);
+        }
+        const semanticSpan = { path: sourcePath, revision: sourceRevision as string, start: span.start as number, end: span.end as number, quote };
+        semanticCandidates.push({ candidateId: `research-${sha256Text(JSON.stringify([candidate.entityId, sourcePath, sourceRevision, sentenceIndex])).slice(0, 48)}`,
+          entityId: candidate.entityId, sentenceIndex: sentenceIndex as number, path: sourcePath,
+          title: source.title, fileRevision: sourceRevision as string, snippet: quote,
+          cosineScore, rank: rank as number, navigationSpan: semanticSpan });
+      }
+
+      const fused = fuseSearchCandidates(lexicalCandidates, semanticCandidates, input.mode as "hybrid" | "semantic" | "expression", limit as number);
+      const warnings = [...page.warnings];
+      let expressionStatus: Record<string, unknown> = { state: "not_requested" };
+      if (input.mode === "expression") {
+        try {
+          yield* ensureResearchTokenizer(host, () => tokenizerReady, (value) => { tokenizerReady = value; });
+          const morphology = getResearchMorphologyBindings();
+          const tokenize = (text: string): string[] => {
+            const raw = morphology.tokenize(text);
+            if (!Array.isArray(raw)) throw fail("incompatible_abi", "Research tokenizer returned a non-array token result");
+            return [...new Set(mapLinderaRawTokens(text, raw).filter((token) => token.pos !== "記号")
+              .map((token) => normalizeUnicode(token.base ?? token.surface, "NFKC").toLowerCase()).filter(Boolean))].slice(0, 256);
+          };
+          const queryTerms = tokenize(input.query);
+          for (const row of fused) {
+            const candidateTerms = new Set(tokenize(row.snippet));
+            const matched = queryTerms.filter((term) => candidateTerms.has(term));
+            row.expressionScore = queryTerms.length ? matched.length / queryTerms.length : 0;
+            row.expressionTokens = matched;
+          }
+          fused.sort((a, b) => (b.expressionScore ?? 0) - (a.expressionScore ?? 0) || b.score - a.score ||
+            (a.lexicalRank ?? Number.MAX_SAFE_INTEGER) - (b.lexicalRank ?? Number.MAX_SAFE_INTEGER) || utf8PathCompare(a.path, b.path));
+          expressionStatus = { state: "ready", tokenizerIdentity: { id: RESEARCH_TOKENIZER_ID, version: RESEARCH_TOKENIZER_VERSION, digest: RESEARCH_DICTIONARY_MANIFEST_SHA256 }, matchedCandidates: fused.filter((row) => (row.expressionScore ?? 0) > 0).length };
+        } catch (cause) {
+          const failure = getMorphologyFailure(cause);
+          if (failure.code === "cancelled") throw fail("cancelled", failure.message, true);
+          expressionStatus = { state: "unavailable", reason: failure.code ?? "tokenizer_unavailable" };
+          warnings.push("expression_tokenizer_unavailable");
+        }
+      }
+
+      return {
+        snapshot: context.snapshot,
+        snapshotId: context.snapshot.id,
+        indexSnapshot: index.snapshot,
+        query: input.query,
+        mode: input.mode,
+        scope: scope ?? null,
+        hits: fused,
+        nextCursor: null,
+        coverage: { documents: index.documents.length, bytes: index.bytes },
+        expressionStatus,
+        semanticModel: model,
+        warnings,
+      };
     },
     "research.index.status": function* (raw, context, host) {
       const input = object(raw); exactFields(input, ["scope"]);
@@ -654,7 +852,8 @@ export function createResearchHandlers(): Record<string, Handler> {
       if (input.force !== undefined && typeof input.force !== "boolean") throw fail("invalid_input", "force must be boolean");
       const scope = input.scope as string | undefined;
       const existing = indexFor(context, scope);
-      const index = existing && input.force !== true ? existing.index : yield* loadIndex(host, context, scope, input.force === true);
+      const previous = existing?.index ?? previousIndexFor(context, scope);
+      const index = existing && input.force !== true ? existing.index : yield* loadIndex(host, context, scope, input.force === true, previous);
       const entry = rememberIndex(context, index, scope);
       return { jobId: `research-index-${idHash(snapshotCacheKey(context, scope))}`, state: "current", indexSnapshot: entry.snapshotId, progress: { completed: index.documents.length, total: index.documents.length } };
     },
