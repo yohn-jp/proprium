@@ -45,6 +45,10 @@ test("index and model actions report their unavailable state without loading or 
   status = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: status.call_id, ok: true, value: { found: false } })));
   assert.equal(status.operation, "workspace.derived.cache.get");
   status = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: status.call_id, ok: true, value: { found: false } })));
+  assert.equal(status.operation, "workspace.derived.cache.get_previous");
+  status = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: status.call_id, ok: true, value: { found: false } })));
+  assert.equal(status.operation, "workspace.derived.cache.get_previous");
+  status = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: status.call_id, ok: true, value: { found: false } })));
   assert.equal(status.ok, true);
   assert.equal(status.value.index.state, "missing");
   assert.equal(status.value.resources.modelLoaded, false);
@@ -60,6 +64,10 @@ test("index and model actions report their unavailable state without loading or 
   query = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: query.call_id, ok: true, value: { found: false } })));
   assert.equal(query.operation, "workspace.derived.cache.get");
   query = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: query.call_id, ok: true, value: { found: false } })));
+  assert.equal(query.operation, "workspace.derived.cache.get_previous");
+  query = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: query.call_id, ok: true, value: { found: false } })));
+  assert.equal(query.operation, "workspace.derived.cache.get_previous");
+  query = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: query.call_id, ok: true, value: { found: false } })));
   assert.equal(query.ok, false);
   assert.equal(query.error.code, "index_missing");
   assert.doesNotMatch(query.error.message, /asset is unavailable/i);
@@ -69,6 +77,10 @@ test("index and model actions report their unavailable state without loading or 
   assert.equal(rebuild.operation, "workspace.derived.cache.get");
   rebuild = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: rebuild.call_id, ok: true, value: { found: false } })));
   assert.equal(rebuild.operation, "workspace.derived.cache.get");
+  rebuild = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: rebuild.call_id, ok: true, value: { found: false } })));
+  assert.equal(rebuild.operation, "workspace.derived.cache.get_previous");
+  rebuild = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: rebuild.call_id, ok: true, value: { found: false } })));
+  assert.equal(rebuild.operation, "workspace.derived.cache.get_previous");
   rebuild = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: rebuild.call_id, ok: true, value: { found: false } })));
   assert.equal(rebuild.ok, true);
   assert.equal(rebuild.value.state, "running");

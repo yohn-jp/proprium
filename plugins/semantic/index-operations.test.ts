@@ -77,6 +77,27 @@ test('a cached index can warm the signed model through bounded scheduler steps a
  const complete = run(stepIndexBuild({ taskId:'warm', sequence:1 }, context, host, warming));
  assert.equal(complete.state, 'complete'); assert.equal(complete.result.reused, 1); assert.equal(ready, true);
 });
+test('a new Host pin lease reuses an unchanged prior index and starts model warming', () => {
+ reset(); build('before-new-pin');
+ const originalSnapshot = context.snapshot, originalScope = context.scope;
+ for (const [key, value] of cache) previousCache.set(key, value);
+ previousSnapshot = originalSnapshot;
+ cache.clear();
+ context.snapshot = { ...originalSnapshot, id: 'new-pin-id' };
+ context.scope = { ...originalScope, generation: 'new-host-activation' };
+ let loads = 0; let ready = false;
+ const warming: any = { ...engine, model: () => ({ ...engine.model(), status: ready ? 'ready' : 'unavailable' }), *ensureStep() {
+  loads += 1; ready = loads === 2; return { ready, completed: loads * 4, total: 8 };
+ } };
+ try {
+  const start = run(startIndexBuild({ taskId:'same-source-warm' }, context, host, warming));
+  assert.equal(start.state, 'running'); assert.equal(start.phase, 'model_loading');
+  const first = run(stepIndexBuild({ taskId:'same-source-warm', sequence:0 }, context, host, warming));
+  assert.equal(first.phase, 'model_loading'); assert.equal(first.completed, 4);
+  const complete = run(stepIndexBuild({ taskId:'same-source-warm', sequence:1 }, context, host, warming));
+  assert.equal(complete.state, 'complete'); assert.equal(complete.result.reused, 1); assert.equal(ready, true);
+ } finally { context.snapshot = originalSnapshot; context.scope = originalScope; }
+});
 test('cross-snapshot reuse validates previous page hashes and evicts only that previous generation after commit', () => {
  reset();
  build('first-generation');
@@ -131,6 +152,35 @@ test('a fresh worker resumes persisted vectors and a partial page generation bef
   const complete = run(fourth.stepIndexBuild({ taskId:'restartable', sequence:3 }, context, host, engine));
   assert.equal(complete.state, 'complete'); assert.equal(publishedPassages().length, 5);
  } finally { files['manuscript/custom.md'] = previous!; }
+});
+test('a new Host pin lease resumes vectors from the prior pin after revalidating source hashes', async () => {
+ reset();
+ const originalText = files['manuscript/custom.md']; const originalSnapshot = context.snapshot, originalScope = context.scope;
+ files['manuscript/custom.md'] = '星を見る。'.repeat(5);
+ let embedded = 0;
+ const counted: any = { ...engine, embed: (texts: string[]) => { embedded += texts.length; return texts.map(() => vector); } };
+ const worker = async () => await import(`./index-operations.ts?pin-restart=${Math.random()}`);
+ try {
+  const first = await worker();
+  run(first.startIndexBuild({ taskId:'pin-resumable' }, context, host, counted));
+  const slice0 = run(first.stepIndexBuild({ taskId:'pin-resumable', sequence:0 }, context, host, counted));
+  assert.equal(slice0.phase, 'embedding'); assert.equal(slice0.completed, 2); assert.equal(embedded, 2);
+  for (const [key, value] of cache) previousCache.set(key, value);
+  previousSnapshot = originalSnapshot;
+  cache.clear();
+  context.snapshot = { ...originalSnapshot, id: 'reloaded-pin-id' };
+  context.scope = { ...originalScope, generation: 'reloaded-host-generation' };
+
+  const second = await worker();
+  const slice1 = run(second.stepIndexBuild({ taskId:'pin-resumable', sequence:1 }, context, host, counted));
+  assert.equal(slice1.phase, 'embedding'); assert.equal(slice1.completed, 4); assert.equal(embedded, 4);
+  const slice2 = run(second.stepIndexBuild({ taskId:'pin-resumable', sequence:2 }, context, host, counted));
+  assert.equal(slice2.phase, 'cache_publish'); assert.equal(embedded, 5);
+  const complete = run(second.stepIndexBuild({ taskId:'pin-resumable', sequence:3 }, context, host, counted));
+  assert.equal(complete.state, 'complete'); assert.equal(publishedPassages().length, 5);
+  assert.equal(previousCache.has('semantic-index-staging-control-v1'), false);
+  assert.equal([...previousCache.keys()].some(key => key.startsWith('semantic-index-staging-chunk-v1-')), false);
+ } finally { files['manuscript/custom.md'] = originalText; context.snapshot = originalSnapshot; context.scope = originalScope; }
 });
 test('query rejects source changes after index construction instead of returning stale evidence', () => {
  reset(); build('t');

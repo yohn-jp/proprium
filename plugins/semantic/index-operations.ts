@@ -93,7 +93,10 @@ export function* loadIndex(request: ActionRequest, host: GuestHost): Generator<H
  const current = yield* cacheGet<unknown>(request, host, INDEX_MANIFEST_KEY);
  if (current.found) return rememberIndex(request, yield* readManifestIndex(request, host, current.value));
  const legacy = yield* cacheGet<unknown>(request, host, 'semantic-index-v2');
- return legacy.found ? rememberIndex(request, validateIndex(legacy.value, request)) : undefined;
+ if (legacy.found) return rememberIndex(request, validateIndex(legacy.value, request));
+ const previous = yield* loadPreviousIndex(request, host);
+ if (!previous || !sameSourceSnapshot(previous.snapshot, request.snapshot)) return undefined;
+ return rememberIndex(request, makeIndexFromReferences(request, previous.passages));
 }
 function canonical(value: unknown): string {
  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -158,7 +161,9 @@ function* getPreviousCache<T>(request: ActionRequest, host: GuestHost, cacheKey:
  return result;
 }
 function* readPreviousManifest(request: ActionRequest, host: GuestHost, rawManifest: unknown, snapshot: ActionRequest['snapshot']): Generator<HostCall, SemanticIndex, unknown> {
- const previousRequest = { ...request, snapshot };
+ const rawScope = rawManifest && typeof rawManifest === 'object' && !Array.isArray(rawManifest) ? (rawManifest as SemanticIndexManifest).scope : undefined;
+ if (!sameStableScope(rawScope, request.scope)) throw failure('cache_corrupt', 'Previous Semantic index belongs to another workspace scope');
+ const previousRequest = { ...request, scope: rawScope as ActionRequest['scope'], snapshot };
  if (!validManifest(rawManifest, previousRequest)) throw failure('cache_corrupt', 'Previous Semantic index manifest is corrupt');
  const manifest = rawManifest;
  const passages: IndexedReference[] = [];
@@ -178,6 +183,25 @@ function* readPreviousManifest(request: ActionRequest, host: GuestHost, rawManif
 }
 function scopeKey(request: ActionRequest): string { return canonical(request.scope); }
 function snapshotKey(request: ActionRequest): string { return canonical(request.snapshot); }
+function stableScopeKey(scope: unknown): string | undefined {
+ if (!scope || typeof scope !== 'object' || Array.isArray(scope)) return undefined;
+ const value = scope as Record<string, unknown>;
+ if (typeof value.workspace_id !== 'string' || !value.workspace_id || !(typeof value.repository_id === 'number' || value.repository_id === null) ||
+     (typeof value.repository_id === 'number' && (!Number.isSafeInteger(value.repository_id) || value.repository_id < 1)) ||
+     typeof value.branch !== 'string' || !value.branch || typeof value.generation !== 'string' || !value.generation) return undefined;
+ return canonical({ workspace_id: value.workspace_id, repository_id: value.repository_id, branch: value.branch });
+}
+function sameStableScope(left: unknown, right: unknown): boolean {
+ const leftKey = stableScopeKey(left), rightKey = stableScopeKey(right);
+ return leftKey !== undefined && leftKey === rightKey;
+}
+function sourceSnapshotKey(snapshot: ActionRequest['snapshot']): string {
+ return canonical({ local_commit: snapshot.local_commit, worktree_generation: snapshot.worktree_generation,
+  draft_generation: snapshot.draft_generation, remote_commit: snapshot.remote_commit ?? null });
+}
+function sameSourceSnapshot(left: ActionRequest['snapshot'], right: ActionRequest['snapshot']): boolean {
+ return sourceSnapshotKey(left) === sourceSnapshotKey(right);
+}
 function sourceKey(reference: Pick<IndexedReference, 'sourcePath' | 'entityId' | 'sentenceIndex'>): string {
  return JSON.stringify([reference.sourcePath, reference.entityId, reference.sentenceIndex]);
 }
@@ -247,14 +271,22 @@ function* loadPreviousIndex(request: ActionRequest, host: GuestHost): Generator<
  const legacy = yield* getPreviousCache<unknown>(request, host, 'semantic-index-v2');
  if (!legacy.found) return undefined;
  if (!legacy.snapshot || canonical(legacy.snapshot) === snapshotKey(request)) throw failure('storage_unknown', 'Host returned an invalid previous Semantic snapshot');
- try { return validateIndex(legacy.value, { ...request, snapshot: legacy.snapshot }); }
+ const legacyScope = legacy.value && typeof legacy.value === 'object' && !Array.isArray(legacy.value) ? (legacy.value as SemanticIndex).scope : undefined;
+ if (!sameStableScope(legacyScope, request.scope)) return undefined;
+ try { return validateIndex(legacy.value, { ...request, scope: legacyScope as ActionRequest['scope'], snapshot: legacy.snapshot }); }
  catch (error) {
   if (['cache_corrupt','index_stale'].includes(String((error as { code?: string })?.code))) return undefined;
   throw error;
  }
 }
-function* readStageChunk(request: ActionRequest, host: GuestHost, sequence: number): Generator<HostCall, StagedChunk, unknown> {
- const response = yield* cacheGet<unknown>(request, host, STAGING_CHUNK_PREFIX + sequence);
+function* readStageChunk(request: ActionRequest, host: GuestHost, sequence: number, sourceSnapshot: ActionRequest['snapshot'] = request.snapshot, fromPreviousCache = false): Generator<HostCall, StagedChunk, unknown> {
+ let response: { found: boolean; value?: unknown };
+ if (!fromPreviousCache) response = yield* cacheGet<unknown>(request, host, STAGING_CHUNK_PREFIX + sequence);
+ else {
+  const previous = yield* getPreviousCache<unknown>(request, host, STAGING_CHUNK_PREFIX + sequence);
+  if (!previous.found || !previous.snapshot || canonical(previous.snapshot) !== canonical(sourceSnapshot)) throw failure('cache_corrupt', 'Previous Semantic staging chunk is missing or belongs to another pin');
+  response = previous;
+ }
  if (!response.found || !response.value || typeof response.value !== 'object' || Array.isArray(response.value)) throw failure('cache_corrupt', 'Semantic staging vector chunk is missing');
  const chunk = response.value as StagedChunk;
  if (chunk.version !== 1 || chunk.sequence !== sequence || !Array.isArray(chunk.items) || chunk.items.length < 1 || chunk.items.length > INDEX_EMBED_BATCH) throw failure('cache_corrupt', 'Semantic staging vector chunk is corrupt');
@@ -263,6 +295,14 @@ function* readStageChunk(request: ActionRequest, host: GuestHost, sequence: numb
 function* persistCheckpoint(request: ActionRequest, host: GuestHost, checkpoint: IndexBuildCheckpoint): Generator<HostCall, void, unknown> {
  if (serializedBytes(checkpoint) > INDEX_CHECKPOINT_BYTE_LIMIT) throw failure('capacity', 'Semantic indexing checkpoint exceeds the bounded 1 MiB limit');
  yield* cachePut(request, host, STAGING_CONTROL_KEY, checkpoint);
+}
+function* evictPreviousStagingForTask(request: ActionRequest, host: GuestHost, taskId: string, mode: IndexBuildCheckpoint['mode']): Generator<HostCall, void, unknown> {
+ const previous = yield* getPreviousCache<unknown>(request, host, STAGING_CONTROL_KEY);
+ const previousScope = previous.value && typeof previous.value === 'object' && !Array.isArray(previous.value) ? (previous.value as IndexBuildCheckpoint).scope : undefined;
+ if (!previous.found || !previous.snapshot || !sameStableScope(previousScope, request.scope) || !sameSourceSnapshot(previous.snapshot, request.snapshot) ||
+     !validCheckpoint(previous.value, { ...request, scope: previousScope as ActionRequest['scope'], snapshot: previous.snapshot }) || previous.value.taskId !== taskId || previous.value.mode !== mode) return;
+ if (mode === 'build') yield* cacheEvictPreviousPrefix(request, host, STAGING_CHUNK_PREFIX);
+ yield* cacheEvictPrevious(request, host, STAGING_CONTROL_KEY);
 }
 function isSamePassage(reference: IndexedReference | undefined, passage: import('./source.ts').SemanticSourcePassage): reference is IndexedReference {
  return !!reference && reference.entityId === passage.entityId && reference.type === passage.type && reference.sourcePath === passage.sourcePath &&
@@ -301,19 +341,39 @@ function validActiveBuild(active: ActiveIndexBuild | undefined, taskId: string, 
 function* prepareBuild(input: { taskId: string; sequence: number }, request: ActionRequest, host: GuestHost): Generator<HostCall, { active: ActiveIndexBuild; checkpoint: IndexBuildCheckpoint }, unknown> {
  const stored = yield* cacheGet<unknown>(request, host, STAGING_CONTROL_KEY);
  let checkpoint: IndexBuildCheckpoint | undefined;
+ let checkpointSnapshot = request.snapshot;
+ let checkpointFromPreviousCache = false;
  if (stored.found && validCheckpoint(stored.value, request)) checkpoint = stored.value;
  else if (stored.found) {
   yield* cacheEvict(request, host, STAGING_CONTROL_KEY);
   yield* cacheEvictPrefix(request, host, STAGING_CHUNK_PREFIX);
  }
+ if (!checkpoint) {
+  const previous = yield* getPreviousCache<unknown>(request, host, STAGING_CONTROL_KEY);
+  const previousScope = previous.value && typeof previous.value === 'object' && !Array.isArray(previous.value) ? (previous.value as IndexBuildCheckpoint).scope : undefined;
+  if (previous.found && previous.snapshot && sameStableScope(previousScope, request.scope) && sameSourceSnapshot(previous.snapshot, request.snapshot) &&
+      validCheckpoint(previous.value, { ...request, scope: previousScope as ActionRequest['scope'], snapshot: previous.snapshot })) {
+   checkpoint = previous.value;
+   checkpointSnapshot = previous.snapshot;
+   checkpointFromPreviousCache = true;
+  }
+ }
+ const checkpointFromPreviousPin = !!checkpoint && (canonical(checkpointSnapshot) !== snapshotKey(request) || canonical(checkpoint.scope) !== scopeKey(request));
+ const evictCheckpoint = function* (): Generator<HostCall, void, unknown> {
+  if (checkpointFromPreviousCache) {
+   yield* cacheEvictPrevious(request, host, STAGING_CONTROL_KEY);
+   yield* cacheEvictPreviousPrefix(request, host, STAGING_CHUNK_PREFIX);
+  } else {
+   yield* cacheEvict(request, host, STAGING_CONTROL_KEY);
+   yield* cacheEvictPrefix(request, host, STAGING_CHUNK_PREFIX);
+  }
+ };
  if (checkpoint?.mode === 'warm') {
-  yield* cacheEvict(request, host, STAGING_CONTROL_KEY);
-  yield* cacheEvictPrefix(request, host, STAGING_CHUNK_PREFIX);
+  yield* evictCheckpoint();
   checkpoint = undefined;
  }
  if (checkpoint?.mode === 'build' && checkpoint.taskId !== input.taskId) {
-  yield* cacheEvict(request, host, STAGING_CONTROL_KEY);
-  yield* cacheEvictPrefix(request, host, STAGING_CHUNK_PREFIX);
+  yield* evictCheckpoint();
   checkpoint = undefined;
  }
  if (validActiveBuild(activeIndexBuild, input.taskId, request)) {
@@ -327,7 +387,8 @@ function* prepareBuild(input: { taskId: string; sequence: number }, request: Act
  const active = hydrateBuild(input.taskId, request, corpus, previous);
  if (checkpoint && checkpoint.total === corpus.passages.length && checkpoint.scanned === corpus.scanned) {
   for (const sequence of checkpoint.chunkSequences) {
-   const chunk = yield* readStageChunk(request, host, sequence);
+   const chunk = yield* readStageChunk(request, host, sequence, checkpointSnapshot, checkpointFromPreviousCache);
+   if (checkpointFromPreviousCache) yield* cachePut(request, host, STAGING_CHUNK_PREFIX + sequence, chunk);
    active.stagedBytes += serializedBytes(chunk);
    if (active.stagedBytes > INDEX_GENERATION_BYTE_LIMIT) throw failure('capacity', 'Semantic staged vectors exceed the bounded 60 MiB cache limit');
    applyStagedChunk(active, chunk);
@@ -336,21 +397,26 @@ function* prepareBuild(input: { taskId: string; sequence: number }, request: Act
   active.taskId = input.taskId;
   active.nextSequence = checkpoint.nextSequence;
   active.chunkSequences = [...checkpoint.chunkSequences];
-  if (checkpoint.phase === 'cache_publish') {
+  if (checkpoint.phase === 'cache_publish' && !checkpointFromPreviousPin) {
    if (active.pendingSet.size !== 0) throw failure('cache_corrupt', 'Semantic publish checkpoint has missing vectors');
    active.publishingIndex = makeIndexFromReferences(request, active.references as IndexedReference[]);
    active.publishingPages = makeIndexPages(active.publishingIndex);
    if (active.publishingIndex.checksum !== checkpoint.publishChecksum || active.publishingPages.length !== checkpoint.publishPageCount) throw failure('cache_corrupt', 'Semantic publish checkpoint does not match staged vectors');
    active.nextPage = checkpoint.nextPage!;
   }
+  if (checkpointFromPreviousPin && checkpoint.phase === 'cache_publish') {
+   checkpoint = { ...checkpoint, phase: 'embedding', publishChecksum: undefined, publishPageCount: undefined, nextPage: undefined };
+  }
  } else {
-  if (checkpoint) yield* cacheEvictPrefix(request, host, STAGING_CHUNK_PREFIX);
+  if (checkpoint) yield* evictCheckpoint();
+  checkpointSnapshot = request.snapshot;
   checkpoint = { version: 1, mode: 'build', taskId: input.taskId, scope: request.scope, snapshot: request.snapshot, modelDigest: E5_MODEL.model_sha256,
    scanned: corpus.scanned, total: corpus.passages.length, stagedBytes: 0, chunkSequences: [], nextSequence: input.sequence, phase: 'source_scan' };
  }
  activeIndexBuild = active;
-  checkpoint = { version: 1, mode: 'build', taskId: input.taskId, scope: request.scope, snapshot: request.snapshot, modelDigest: E5_MODEL.model_sha256,
+ checkpoint = { version: 1, mode: 'build', taskId: input.taskId, scope: request.scope, snapshot: request.snapshot, modelDigest: E5_MODEL.model_sha256,
   scanned: corpus.scanned, total: corpus.passages.length, stagedBytes: active.stagedBytes, chunkSequences: active.chunkSequences, nextSequence: active.nextSequence,
+  ...(checkpointFromPreviousPin && checkpoint.phase === 'model_loading' ? { modelCompleted: 0 } : checkpoint?.modelCompleted !== undefined ? { modelCompleted: checkpoint.modelCompleted } : {}),
   phase: checkpoint?.phase ?? 'source_scan', ...(checkpoint?.phase === 'cache_publish' ? { publishChecksum: checkpoint.publishChecksum,
    publishPageCount: checkpoint.publishPageCount, nextPage: checkpoint.nextPage } : {}) };
  yield* persistCheckpoint(request, host, checkpoint);
@@ -398,7 +464,10 @@ function* publishBuild(request: ActionRequest, host: GuestHost, active: ActiveIn
  rememberIndex(request, index);
  yield* cacheEvictPrefix(request, host, STAGING_CHUNK_PREFIX);
  yield* cacheEvict(request, host, STAGING_CONTROL_KEY);
- if (previous.found && previous.snapshot && canonical(previous.snapshot) !== snapshotKey(request) && validManifest(previous.value, { ...request, snapshot: previous.snapshot })) {
+ yield* evictPreviousStagingForTask(request, host, input.taskId, 'build');
+ const previousScope = previous.value && typeof previous.value === 'object' && !Array.isArray(previous.value) ? (previous.value as SemanticIndexManifest).scope : undefined;
+ if (previous.found && previous.snapshot && canonical(previous.snapshot) !== snapshotKey(request) && sameStableScope(previousScope, request.scope) &&
+     validManifest(previous.value, { ...request, scope: previousScope as ActionRequest['scope'], snapshot: previous.snapshot })) {
   const old = previous.value as SemanticIndexManifest;
   yield* cacheEvictPreviousPrefix(request, host, `${INDEX_PAGE_PREFIX}${old.indexChecksum}-`);
   yield* cacheEvictPrevious(request, host, INDEX_MANIFEST_KEY);
@@ -435,6 +504,7 @@ function* warmModelStep(input: { taskId: string; sequence: number }, request: Ac
  assertSemanticTaskActive();
  if (engine.model().status === 'ready') {
   yield* cacheEvict(request, host, STAGING_CONTROL_KEY);
+  yield* evictPreviousStagingForTask(request, host, input.taskId, 'warm');
   return completeResult(request, input.taskId, { scanned: 0, embedded: 0, reused: index.passages.length, removed: 0, total: index.passages.length });
  }
  let loaded: { ready: boolean; completed: number; total: number };
@@ -444,6 +514,7 @@ function* warmModelStep(input: { taskId: string; sequence: number }, request: Ac
  updateSemanticTask('model_loading', loaded.completed, loaded.total);
  if (loaded.ready || engine.model().status === 'ready') {
   yield* cacheEvict(request, host, STAGING_CONTROL_KEY);
+  yield* evictPreviousStagingForTask(request, host, input.taskId, 'warm');
   return completeResult(request, input.taskId, { scanned: 0, embedded: 0, reused: index.passages.length, removed: 0, total: index.passages.length });
  }
  yield* persistCheckpoint(request, host, checkpoint);
