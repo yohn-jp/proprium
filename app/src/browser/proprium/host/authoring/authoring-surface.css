@@ -40,11 +40,17 @@
 .authoring-form label,
 .authoring-field { display: grid; gap: .35rem; }
 .authoring-record-list,
+.authoring-ordered-list,
 .authoring-record-row { display: grid; min-width: 0; gap: .65rem; border: 1px solid var(--border, #d5d7da); border-radius: .4rem; padding: .65rem; }
 .authoring-record-list > legend,
+.authoring-ordered-list > legend,
 .authoring-record-row > legend { padding-inline: .3rem; }
 .authoring-record-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
 .authoring-record-actions button { min-width: 4rem; }
+.authoring-ordered-list textarea { box-sizing: border-box; width: 100%; min-height: 7rem; }
+.authoring-ordered-list-controls { display: flex; align-items: end; flex-wrap: wrap; gap: .5rem; }
+.authoring-ordered-list-controls label { display: grid; gap: .3rem; }
+.authoring-ordered-list-controls input { box-sizing: border-box; min-height: 2.5rem; width: 7rem; }
 .authoring-field input:not([type=checkbox]),
 .authoring-field select,
 .authoring-field textarea { box-sizing: border-box; width: 100%; min-height: 2.5rem; }

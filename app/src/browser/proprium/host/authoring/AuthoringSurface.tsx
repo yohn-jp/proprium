@@ -352,8 +352,44 @@ function FormScalarInput({ field, value, disabled, options = [], onChange }: {
   if (field.type === "boolean") return <input type="checkbox" disabled={disabled} checked={Boolean(value)} onChange={event => onChange(event.currentTarget.checked)} />;
   if (field.type === "enum") return <select disabled={disabled} required={field.required} value={plainText(value)} onChange={event => onChange(event.currentTarget.value)}><option value="">選択してください</option>{options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>;
   if (field.type === "multi-reference") return <select multiple disabled={disabled} required={field.required} value={Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []} onChange={event => onChange(Array.from(event.currentTarget.selectedOptions, option => option.value))}>{options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>;
-  if (field.type === "ordered-list") return <textarea rows={4} disabled={disabled} required={field.required} placeholder={field.placeholder} value={Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").join("\n") : ""} onChange={event => onChange(event.currentTarget.value === "" ? [] : event.currentTarget.value.split("\n"))} />;
   return <input type={field.type === "integer" ? "number" : "text"} disabled={disabled} required={field.required} minLength={field.min_length} maxLength={field.max_length} placeholder={field.placeholder} value={plainText(value)} onChange={event => onChange(event.currentTarget.value)} />;
+}
+
+function OrderedListField({ field, value, disabled, onChange }: {
+  readonly field: AuthoringScalarField & { readonly type: "ordered-list" };
+  readonly value: unknown;
+  readonly disabled: boolean;
+  onChange(value: unknown): void;
+}): ReactElement {
+  const items = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  const [line, setLine] = useState(1);
+  const selectedLine = Math.min(Math.max(line, 1), Math.max(items.length, 1));
+  const move = (offset: -1 | 1) => {
+    const next = moveOrderedListItem(items, selectedLine - 1, offset);
+    if (next === items) return;
+    onChange(next);
+    setLine(Math.max(1, Math.min(selectedLine + offset, next.length)));
+  };
+  return <fieldset className="authoring-ordered-list" disabled={disabled}>
+    <legend>{field.label}{field.required && <span aria-hidden="true"> *</span>}</legend>
+    <textarea aria-label={`${field.label}（1行に1件）`} rows={4} required={field.required} placeholder={field.placeholder}
+      value={items.join("\n")} onChange={event => onChange(event.currentTarget.value === "" ? [] : event.currentTarget.value.split("\n"))} />
+    <p className="field-help">順序を変える行番号を指定し、移動ボタンを押してください。ID は一行に一件です。</p>
+    <div className="authoring-ordered-list-controls">
+      <label>移動する行番号<input type="number" min={1} max={Math.max(items.length, 1)} value={selectedLine}
+        onChange={event => { const next = Number(event.currentTarget.value); if (Number.isSafeInteger(next)) setLine(next); }} /></label>
+      <button type="button" aria-label={`${field.label} ${selectedLine}行目を上へ移動`} disabled={selectedLine <= 1 || items.length < 2} onClick={() => move(-1)}>上へ移動</button>
+      <button type="button" aria-label={`${field.label} ${selectedLine}行目を下へ移動`} disabled={selectedLine >= items.length || items.length < 2} onClick={() => move(1)}>下へ移動</button>
+    </div>
+  </fieldset>;
+}
+
+export function moveOrderedListItem(items: readonly string[], index: number, offset: -1 | 1): readonly string[] {
+  const target = index + offset;
+  if (!Number.isSafeInteger(index) || index < 0 || index >= items.length || target < 0 || target >= items.length) return items;
+  const next = [...items];
+  [next[index], next[target]] = [next[target]!, next[index]!];
+  return next;
 }
 
 function RecordListField({ field, value, data, disabled, onChange }: {
@@ -471,7 +507,8 @@ function FormWidget({ node, data, invoke, busy }: {
     {node.title && <h3 id={labelId}>{node.title}</h3>}{node.description && <p>{node.description}</p>}
     {node.fields.map(field => field.type === "record-list"
       ? <RecordListField key={field.id} field={field} value={values[field.id]} data={data} disabled={busy} onChange={value => update(field, value)} />
-      : <label className="authoring-field" key={field.id}><span>{field.label}{field.required && <span aria-hidden="true"> *</span>}</span><FormScalarInput field={field} value={values[field.id]} options={optionsForField(field, data)} disabled={busy} onChange={value => update(field, value)} /></label>)}
+      : field.type === "ordered-list" ? <OrderedListField key={field.id} field={field as AuthoringScalarField & { readonly type: "ordered-list" }} value={values[field.id]} disabled={busy} onChange={value => update(field, value)} />
+        : <label className="authoring-field" key={field.id}><span>{field.label}{field.required && <span aria-hidden="true"> *</span>}</span><FormScalarInput field={field} value={values[field.id]} options={optionsForField(field, data)} disabled={busy} onChange={value => update(field, value)} /></label>)}
     {error && <p className="authoring-error" role="alert">{error}</p>}
     {!submitAllowed && node.unavailable_message && <p className="authoring-unavailable" role="status">{node.unavailable_message}</p>}
     <div className="authoring-form-actions"><button type="submit" disabled={busy || !submitAllowed || !validBinding(node.submit)}>送信</button>{node.cancel_action && <button type="button" disabled={busy} onClick={event => invoke(node.cancel_action!, event.nativeEvent)}>キャンセル</button>}</div>

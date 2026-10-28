@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AuthoringSurface, formValuesToJson, initialFormValues, mergeInitialFormValues, omitAbsentOptionalFormInputs, optionsForRecordField, resolveAuthoringNavigation, resolveAuthoringTemplate } from "./AuthoringSurface.js";
+import { AuthoringSurface, formValuesToJson, initialFormValues, mergeInitialFormValues, moveOrderedListItem, omitAbsentOptionalFormInputs, optionsForRecordField, resolveAuthoringNavigation, resolveAuthoringTemplate } from "./AuthoringSurface.js";
 import type { AuthoringSurfaceDeclaration } from "./types.js";
 import { validateAuthoringSurfaceDeclaration } from "./validate.js";
 
@@ -152,6 +152,26 @@ test("integer form values become safe JSON numbers and invalid values fail befor
   assert.throws(() => formValuesToJson(fields, { limit: "1.2" }), /整数/u);
   assert.throws(() => formValuesToJson(fields, { limit: "9007199254740992" }), /範囲外/u);
   assert.deepEqual(formValuesToJson([{ id: "scene_ids", label: "話", type: "ordered-list" }], { scene_ids: [] }), { scene_ids: [] });
+});
+
+test("ordered-list controls expose accessible adjacent moves and retain complete IDs", () => {
+  const fields = [{ id: "ordered_ids", label: "章の順序", type: "ordered-list" as const, required: true,
+    initial_value: { data_key: "last_action_result.selected_children_ids" } }];
+  const html = renderToStaticMarkup(createElement(AuthoringSurface, {
+    surface: { id: "reorder", kind: "panel", title: "章を並べ替え", context: {}, body: { id: "reorder-form", type: "form", fields,
+      submit: { action_id: "proprium.narrative.structure.reorder", input_template: { ordered_ids: { data_key: "form.ordered_ids" } } } } },
+    data: { last_action_result: { selected_children_ids: ["chapter-1", "chapter-2", "chapter-3"] } },
+    onInvoke: async () => ({}), onRead: async () => ({ ok: true }),
+  }));
+  assert.match(html, /章の順序（1行に1件）/u);
+  assert.match(html, /章の順序 1行目を上へ移動/u);
+  assert.match(html, /章の順序 1行目を下へ移動/u);
+  assert.deepEqual(moveOrderedListItem(["chapter-1", "chapter-2", "chapter-3"], 1, -1), ["chapter-2", "chapter-1", "chapter-3"]);
+  assert.deepEqual(moveOrderedListItem(["chapter-1", "chapter-2", "chapter-3"], 1, 1), ["chapter-1", "chapter-3", "chapter-2"]);
+  assert.deepEqual(moveOrderedListItem(["chapter-1", "chapter-2"], 0, -1), ["chapter-1", "chapter-2"]);
+  assert.deepEqual(formValuesToJson(fields, { ordered_ids: ["chapter-2", "chapter-1", "chapter-3"] }), {
+    ordered_ids: ["chapter-2", "chapter-1", "chapter-3"],
+  });
 });
 
 test("form fields initialize from declared data keys while untouched optional fields stay sparse", () => {
