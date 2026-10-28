@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import type { BrowserLocalGit, WorkspaceFile } from "../git/index.js";
 import { validateGitPath } from "../git/protocol.js";
 import { documentPath } from "./workspace-transfer.js";
@@ -45,14 +45,64 @@ export function WorkspaceFileBrowser(props: Props) {
   const [explicit, setExplicit] = useState(false);
   const [newPath, setNewPath] = useState("");
   const [notice, setNotice] = useState("");
+  const [contextPath, setContextPath] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDialogElement>(null);
+  const contextTrigger = useRef<HTMLButtonElement | null>(null);
+  const longPress = useRef<{ path: string; x: number; y: number; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const suppressClick = useRef<string | null>(null);
+  const suppressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function cancelLongPress(): void {
+    if (longPress.current) clearTimeout(longPress.current.timer);
+    longPress.current = null;
+  }
+  function openContext(path: string, trigger: HTMLButtonElement): void {
+    cancelLongPress();
+    contextTrigger.current = trigger;
+    setNewPath(path);
+    setNotice("");
+    setContextPath(path);
+  }
+  function beginLongPress(event: ReactPointerEvent<HTMLButtonElement>, path: string): void {
+    if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+    cancelLongPress();
+    const trigger = event.currentTarget;
+    const x = event.clientX, y = event.clientY;
+    longPress.current = { path, x, y, timer: setTimeout(() => {
+      longPress.current = null;
+      suppressClick.current = path;
+      if (suppressTimer.current) clearTimeout(suppressTimer.current);
+      suppressTimer.current = setTimeout(() => { suppressClick.current = null; }, 800);
+      openContext(path, trigger);
+    }, 500) };
+  }
+  function trackLongPress(event: ReactPointerEvent<HTMLButtonElement>): void {
+    const press = longPress.current;
+    if (press && Math.hypot(press.x - event.clientX, press.y - event.clientY) > 12) cancelLongPress();
+  }
+  useEffect(() => {
+    const menu = menuRef.current;
+    if (!menu) return;
+    if (contextPath && !menu.open) menu.showModal();
+    if (!contextPath && menu.open) menu.close();
+  }, [contextPath]);
+  useEffect(() => () => {
+    cancelLongPress();
+    if (suppressTimer.current) clearTimeout(suppressTimer.current);
+  }, []);
+  function closeContext(): void {
+    setContextPath(null);
+    contextTrigger.current?.focus({ preventScroll: true });
+  }
   async function create() {
     setNotice("");
     try { const path = documentPath(name, explicit); await props.onCreate(path); setName(""); }
     catch (error) { setNotice(error instanceof Error ? error.message : "文書を作成できませんでした。"); }
   }
   async function move() {
-    if (!props.selectedPath || !props.canModify || props.busy) return;
-    const from = props.selectedPath, to = newPath.trim();
+    const from = contextPath ?? props.selectedPath;
+    if (!from || !props.canModify || props.busy) return;
+    const to = newPath.trim();
     setNotice(""); props.onBusyChange(true);
     try {
       validateGitPath(to);
@@ -63,12 +113,29 @@ export function WorkspaceFileBrowser(props: Props) {
       if (!(await props.beforeApply())) throw new Error("編集中の本文または作品が変わりました。端末に保存してから再試行してください。");
       await props.git.renameFile(from, to, source.revision, destination.revision);
       await props.onMoved(from, to);
-      setNewPath(""); setNotice("名前・保存先を変更しました。GitHubにはまだ公開されていません。");
+      setNewPath(""); closeContext(); setNotice("名前・保存先を変更しました。GitHubにはまだ公開されていません。");
     } catch (error) { setNotice(error instanceof Error ? error.message : "ファイルを移動できませんでした。"); }
     finally { props.onBusyChange(false); }
   }
   function render(nodes: Node[]): ReactNode {
-    return nodes.map(node => <li key={node.path}>{node.children.size ? <details open><summary>{node.name}</summary><ul>{render([...node.children.values()])}</ul></details> : <button type="button" aria-label={node.path} aria-current={props.selectedPath === node.path ? "page" : undefined} className={`file-row ${props.selectedPath === node.path ? "file-selected" : ""}`} onClick={() => props.onSelect(node.path)} disabled={props.busy}><span className="file-path">{node.name}</span>{node.pending ? <small>作成中の下書き</small> : props.changedPaths.has(node.path) ? <small>未コミット</small> : null}</button>}</li>);
+    return nodes.map(node => <li key={node.path}>{node.children.size ? <details open><summary>{node.name}</summary><ul>{render([...node.children.values()])}</ul></details> : <div className="file-row-group">
+      <button type="button" aria-label={node.path} aria-current={props.selectedPath === node.path ? "page" : undefined}
+        className={"file-row" + (props.selectedPath === node.path ? " file-selected" : "")}
+        onClick={() => { if (suppressClick.current === node.path) { suppressClick.current = null; return; } props.onSelect(node.path); }}
+        onContextMenu={event => { event.preventDefault(); if (!props.busy) openContext(node.path, event.currentTarget); }}
+        onPointerDown={event => beginLongPress(event, node.path)}
+        onPointerMove={trackLongPress}
+        onPointerUp={cancelLongPress}
+        onPointerCancel={cancelLongPress}
+        onPointerLeave={cancelLongPress}
+        disabled={props.busy}>
+        <span className="file-path">{node.name}</span>
+        {node.pending ? <small>作成中の下書き</small> : props.changedPaths.has(node.path) ? <small>未コミット</small> : null}
+      </button>
+      <button type="button" className="file-row-overflow" disabled={props.busy}
+        aria-label={node.path + " の操作メニュー"}
+        onClick={event => openContext(node.path, event.currentTarget)}>···</button>
+    </div>}</li>);
   }
   return <section className="host-file-browser" aria-labelledby="workspace-files-heading">
     <div className="section-title-row"><h2 id="workspace-files-heading">文書とファイル</h2><span className="count-badge">{props.files.length + (props.pendingPath && !props.files.some(file => file.path === props.pendingPath) ? 1 : 0)}</span></div>
@@ -79,6 +146,22 @@ export function WorkspaceFileBrowser(props: Props) {
     </form>
     {props.files.length || props.pendingPath ? <ul className="file-list file-tree" aria-label="Repository files">{render(fileTree(props.files, props.pendingPath))}</ul> : <p className="sidebar-empty">まだ文書がありません。文書名を入力して作成するか、手元のファイルを取り込めます。</p>}
     {props.recovery}
+    <dialog ref={menuRef} className="file-context-dialog" aria-label="ファイルの操作" onClose={() => { setContextPath(null); contextTrigger.current?.focus({ preventScroll: true }); }}>
+      {contextPath && <>
+        <div className="file-context-heading">
+          <div><span>ファイルの操作</span><strong>{contextPath}</strong></div>
+          <button type="button" onClick={closeContext} aria-label="操作メニューを閉じる">×</button>
+        </div>
+        <button type="button" className="file-context-open" onClick={() => { const path = contextPath; closeContext(); props.onSelect(path); }} disabled={props.busy}>ファイルを開く</button>
+        <form onSubmit={event => { event.preventDefault(); void move(); }}>
+          <label htmlFor="context-rename-path">名前・保存先を変更</label>
+          <input id="context-rename-path" value={newPath} maxLength={1024} onChange={event => setNewPath(event.target.value)} />
+          <button type="submit" disabled={props.busy || !props.canModify || !newPath.trim() || contextPath === newPath.trim()}>この端末で変更</button>
+        </form>
+        {!props.canModify && <p>変更前に現在の原稿を端末へ保存してください。</p>}
+        <p className="file-context-hint">ここでの変更はローカルのみです。GitHubへの公開は別操作です。</p>
+      </>}
+    </dialog>
     {props.selectedPath && <details className="file-rename-panel" key={props.selectedPath}>
       <summary>選択中の文書の名前・保存先を変更</summary>
       <p>{props.selectedPath}</p>
