@@ -28,9 +28,9 @@ import { NarrativeReadingMarkCapture, findMarkForSelectedRange, savedSelectionRa
 import { NarrativeQuickAppend, recentManuscriptParagraphs } from "./authoring/NarrativeQuickAppend.js";
 import { SemanticTaskControls } from "./authoring/SemanticTaskControls.js";
 import { ResearchSemanticSearch } from "./authoring/ResearchSemanticSearch.js";
+import { ResearchTermClusters } from "../authoring/ResearchTermClusters.js";
 import { SemanticPreferences, type SemanticSettingsValue } from "./authoring/SemanticPreferences.js";
 import { PublishingHostTokenRecovery, inspectLegacyShareMap } from "./authoring/PublishingHostTokenRecovery.js";
-import { ResearchCandidateControls } from "../authoring/ResearchCandidateControls.js";
 import { sourceTextDecoder } from "../authoring/source-text.js";
 import { measureBrowserAssetCapacity } from "../authoring/asset-capacity.js";
 import { useProviderConsent } from "./use-provider-consent.js";
@@ -1071,8 +1071,11 @@ export function HostApp(): ReactElement {
     currentFile?.dirty ?? false,
     currentFile?.dirty ? currentFile.text : null,
   ]);
-  const researchScopeKey=JSON.stringify([workspaceGeneration,status.head,status.entries.map(entry=>[entry.path,entry.worktree,entry.stage]),preferences.email,
-    authoringRegistrations.filter(row=>row.pluginId==="proprium.research").map(row=>[row.manifestDigest,row.status])]);
+  const researchScopeKey=JSON.stringify([workspace?.identity.localWorkspaceId,workspace?.identity.branch,
+    workspace && isGitHubWorkspaceIdentity(workspace.identity) ? workspace.identity.repositoryId : null,
+    workspaceGeneration,status.head,status.entries.map(entry=>[entry.path,entry.worktree,entry.stage]),preferences.email,
+    authoringRegistrations.filter(row=>row.pluginId==="proprium.research"||row.pluginId==="proprium.semantic")
+      .map(row=>[row.pluginId,row.manifestDigest,row.status])]);
   const researchScopeRef=useRef(researchScopeKey);researchScopeRef.current=researchScopeKey;
   const semanticRepositoryId=workspace&&isGitHubWorkspaceIdentity(workspace.identity)?workspace.identity.repositoryId:null;
   const selectedScene=selectedNarrativeScene.current;
@@ -1182,8 +1185,21 @@ export function HostApp(): ReactElement {
       readLocal={async(signal)=>{if(signal.aborted)throw new Error("cancelled");const value=await authoring.readLocalPreference(authoring.localPreferenceScope(),"proprium.semantic","reranker.enabled",1);if(signal.aborted)throw new Error("cancelled");return value;}}
       read={async(signal)=>{const result=await authoring.invokeRead("proprium.semantic","proprium.semantic.settings.read",{},signal);if(!result.ok)throw new Error(result.error.message);return result.value as unknown as SemanticSettingsValue;}}
       save={(event,expectedScope,value)=>authoring.writeLocalPreference(event,expectedScope,"proprium.semantic","reranker.enabled",1,value)} /></details>}
-    {authoringRegistrations.some(row=>row.pluginId==="proprium.research"&&row.status==="ready") && <details><summary>文章から用語候補を抽出</summary><ResearchCandidateControls key={`research:${workspaceGeneration}`} scopeKey={researchScopeKey}
-      invokeRead={async(expectedScope,actionId,input,signal)=>{if(expectedScope!==researchScopeRef.current)throw new Error("snapshot_stale");const result=await authoring.invokeRead("proprium.research",actionId,input,signal);if(expectedScope!==researchScopeRef.current)throw new Error("snapshot_stale");return result;}} /></details>}
+    {authoringRegistrations.some(row=>row.pluginId==="proprium.research"&&row.status==="ready") &&
+      authoringRegistrations.some(row=>row.pluginId==="proprium.semantic"&&row.status==="ready") &&
+      <details><summary>文章から用語候補と関連語を確認</summary><ResearchTermClusters key={`research-terms:${workspaceGeneration}`} scopeKey={researchScopeKey}
+        invokeRead={async(expectedScope,pluginId,actionId,input,signal)=>{
+          if(expectedScope!==researchScopeRef.current)throw Object.assign(new Error("snapshot_stale"),{code:"snapshot_stale"});
+          const result=await authoring.invokeRead(pluginId,actionId,input as Readonly<Record<string,import("./authoring/types.js").AuthoringJson>>,signal);
+          if(expectedScope!==researchScopeRef.current)throw Object.assign(new Error("snapshot_stale"),{code:"snapshot_stale"});
+          return result;
+        }} invokeUi={async(event,expectedScope,pluginId,actionId,input)=>{
+          if(expectedScope!==researchScopeRef.current)throw Object.assign(new Error("snapshot_stale"),{code:"snapshot_stale"});
+          const result=await invokeAuthoring(event,pluginId,actionId,input as Readonly<Record<string,import("./authoring/types.js").AuthoringJson>>);
+          if(expectedScope!==researchScopeRef.current)throw Object.assign(new Error("snapshot_stale"),{code:"snapshot_stale"});
+          if(!result.action_result.ok)throw Object.assign(new Error(result.action_result.error.message),{code:result.action_result.error.code});
+          return result.action_result;
+        }} onProposalCreated={refreshAuthoring} /></details>}
     {authoringRegistrations.some(row=>row.pluginId==="proprium.research"&&row.status==="ready") && <ResearchSemanticSearch
       key={`research-search:${workspaceGeneration}`} scopeKey={researchScopeKey}
       semanticAvailable={authoringRegistrations.some(row=>row.pluginId==="proprium.semantic"&&row.status==="ready")}
