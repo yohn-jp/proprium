@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --import tsx --test core.test.ts guest.test.ts sentences.test.ts source.test.ts corpus.test.ts inference.test.ts index.test.ts index-operations.test.ts && node --test asset-build.test.mjs"
+    "test": "node --import tsx --test core.test.ts guest.test.ts sentences.test.ts source.test.ts corpus.test.ts inference.test.ts index.test.ts index-operations.test.ts manifest.test.mjs && node --test asset-build.test.mjs"
   },
   "dependencies": {
     "yaml": "2.9.1"

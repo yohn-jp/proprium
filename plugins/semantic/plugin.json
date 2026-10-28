@@ -296,6 +296,92 @@
         }
       },
       "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "taskId",
+          "state",
+          "phase",
+          "completed",
+          "total"
+        ],
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              }
+            }
+          },
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
+          },
+          "state": {
+            "enum": [
+              "running",
+              "complete"
+            ]
+          },
+          "phase": {
+            "enum": [
+              "source_scan",
+              "model_loading",
+              "embedding",
+              "cache_publish",
+              "complete"
+            ]
+          },
+          "completed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "result": true
+        },
         "oneOf": [
           {
             "type": "object",
@@ -309,54 +395,8 @@
               "total"
             ],
             "properties": {
-              "snapshot": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "id",
-                  "local_commit",
-                  "worktree_generation",
-                  "draft_generation"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  },
-                  "local_commit": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 128
-                  },
-                  "worktree_generation": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  },
-                  "draft_generation": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 256
-                  },
-                  "remote_commit": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 128
-                  }
-                }
-              },
-              "taskId": {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9_-]{1,128}$",
-                "maxLength": 128
-              },
+              "snapshot": true,
+              "taskId": true,
               "state": {
                 "const": "running"
               },
@@ -365,20 +405,12 @@
                   "source_scan",
                   "model_loading",
                   "embedding",
-                  "cache_publish",
-                  "complete"
+                  "cache_publish"
                 ]
               },
-              "completed": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 2147483647
-              },
-              "total": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 2147483647
-              }
+              "completed": true,
+              "total": true,
+              "result": false
             }
           },
           {
@@ -394,70 +426,16 @@
               "result"
             ],
             "properties": {
-              "snapshot": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "id",
-                  "local_commit",
-                  "worktree_generation",
-                  "draft_generation"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  },
-                  "local_commit": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 128
-                  },
-                  "worktree_generation": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  },
-                  "draft_generation": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 256
-                  },
-                  "remote_commit": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 128
-                  }
-                }
-              },
-              "taskId": {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9_-]{1,128}$",
-                "maxLength": 128
-              },
+              "snapshot": true,
+              "taskId": true,
               "state": {
                 "const": "complete"
               },
               "phase": {
                 "const": "complete"
               },
-              "completed": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 2147483647
-              },
-              "total": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 2147483647
-              },
+              "completed": true,
+              "total": true,
               "result": {
                 "type": "object",
                 "additionalProperties": false,
@@ -511,6 +489,7 @@
       "requires_user_gesture": true
     },
     {
+      "plugin_id": "proprium.semantic",
       "action_id": "proprium.semantic.index.step",
       "schema_version": 1,
       "effect": "read",
@@ -535,6 +514,92 @@
         }
       },
       "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "taskId",
+          "state",
+          "phase",
+          "completed",
+          "total"
+        ],
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              }
+            }
+          },
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
+          },
+          "state": {
+            "enum": [
+              "running",
+              "complete"
+            ]
+          },
+          "phase": {
+            "enum": [
+              "source_scan",
+              "model_loading",
+              "embedding",
+              "cache_publish",
+              "complete"
+            ]
+          },
+          "completed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "result": true
+        },
         "oneOf": [
           {
             "type": "object",
@@ -548,54 +613,8 @@
               "total"
             ],
             "properties": {
-              "snapshot": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "id",
-                  "local_commit",
-                  "worktree_generation",
-                  "draft_generation"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  },
-                  "local_commit": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 128
-                  },
-                  "worktree_generation": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  },
-                  "draft_generation": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 256
-                  },
-                  "remote_commit": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 128
-                  }
-                }
-              },
-              "taskId": {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9_-]{1,128}$",
-                "maxLength": 128
-              },
+              "snapshot": true,
+              "taskId": true,
               "state": {
                 "const": "running"
               },
@@ -604,20 +623,12 @@
                   "source_scan",
                   "model_loading",
                   "embedding",
-                  "cache_publish",
-                  "complete"
+                  "cache_publish"
                 ]
               },
-              "completed": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 2147483647
-              },
-              "total": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 2147483647
-              }
+              "completed": true,
+              "total": true,
+              "result": false
             }
           },
           {
@@ -633,70 +644,16 @@
               "result"
             ],
             "properties": {
-              "snapshot": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "id",
-                  "local_commit",
-                  "worktree_generation",
-                  "draft_generation"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  },
-                  "local_commit": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 128
-                  },
-                  "worktree_generation": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  },
-                  "draft_generation": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 256
-                  },
-                  "remote_commit": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 128
-                  }
-                }
-              },
-              "taskId": {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9_-]{1,128}$",
-                "maxLength": 128
-              },
+              "snapshot": true,
+              "taskId": true,
               "state": {
                 "const": "complete"
               },
               "phase": {
                 "const": "complete"
               },
-              "completed": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 2147483647
-              },
-              "total": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 2147483647
-              },
+              "completed": true,
+              "total": true,
               "result": {
                 "type": "object",
                 "additionalProperties": false,
