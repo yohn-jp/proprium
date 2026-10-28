@@ -19,7 +19,14 @@ const pluginFixturePublicKey = createPublicKey(pluginFixturePrivateKey);
 const pluginFixturePublicKeyBytes = pluginFixturePublicKey.export({ format: "der", type: "spki" }).subarray(-32);
 const pluginFixtureOrigin = new URL(baseURL).origin;
 process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_URL = `${pluginFixtureOrigin}/plugin-fixture/registry.json`;
-process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_KEY = pluginFixturePublicKeyBytes.toString("base64");
+// A signed artifact downloaded from another job has a public trust root but
+// deliberately does not transfer the signing private key. The browser must
+// pin that verified root instead of the unrelated per-process fixture key.
+// Diagnostic version fixtures may supply their own independently signed root.
+process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_KEY =
+  process.env.PROPRIUM_AUTHORING_REGISTRY_PUBLIC_KEY ??
+  process.env.PROPRIUM_SIGNED_AUTHORING_REGISTRY_PUBLIC_KEY ??
+  pluginFixturePublicKeyBytes.toString("base64");
 process.env.VITE_PROPRIUM_PLUGIN_ARTIFACT_ORIGINS = pluginFixtureOrigin;
 // This per-run key signs the test server's fixture data. It has no relationship
 // to a production trust root and is never exposed through Vite's VITE_ prefix.
