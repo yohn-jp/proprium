@@ -61,7 +61,7 @@ function referenceTabId(panelId: string): string {
 const VIEWS: ReadonlyArray<{ id: MobileView; label: string; title: string; mark: string }> = [
   { id: "library", label: "作品", title: "作品ライブラリ", mark: "▤" },
   { id: "writing", label: "書く", title: "執筆・読書", mark: "✎" },
-  { id: "inspection", label: "確認", title: "状態と回復", mark: "◎" },
+  { id: "inspection", label: "変更", title: "状態と回復", mark: "◎" },
   { id: "tools", label: "道具", title: "ツールとレビュー", mark: "◇" },
   { id: "settings", label: "設定", title: "設定", mark: "⚙" },
 ];
@@ -532,7 +532,7 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
             </div>
           ) : null}
           <nav className="mobile-shell-navigation" aria-label="モバイルの主要画面">
-            {VIEWS.filter((view) => view.id !== "settings" && view.id !== "inspection").map((view) => (
+            {VIEWS.filter((view) => view.id !== "settings").map((view) => (
               <IonButton
                 key={view.id}
                 type="button"
