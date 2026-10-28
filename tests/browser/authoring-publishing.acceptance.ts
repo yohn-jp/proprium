@@ -15,12 +15,12 @@ const fixture: Record<string, string> = {
 
 async function install(page: Page, id: string, capabilities: string[]) {
   const manager = page.locator('details.plugin-manager-panel');
-  await page.getByRole('button', { name: `${id} 0.1.0 の署名済みプレビューを確認` }).click();
+  await page.getByRole('button', { name: `${id} v0.1.0 の導入内容と署名を確認` }).click();
   await page.getByRole('button', { name: 'ダウンロードして無効状態でインストール' }).click();
   await expect(manager.getByRole('status')).toContainText('署名とダイジェストを検証し、無効状態でインストールしました');
-  const plugin = page.getByRole('listitem').filter({ hasText: id }).filter({ hasText: 'v0.1.0' });
+  const plugin = page.locator(".installed-plugins > li").filter({ hasText: id }).filter({ hasText: 'v0.1.0' });
   for (const capability of capabilities) await plugin.getByRole('checkbox', { name: capability, exact: true }).check();
-  await plugin.getByRole('button', { name: 'Enable' }).click();
+  await plugin.getByRole('button', { name: '有効化' }).click();
   await expect(manager.getByRole('status')).toContainText(`${id}@0.1.0 is enabled`);
 }
 async function openPanel(page: Page, name: string) {
@@ -121,7 +121,7 @@ test('signed Publishing locally exports TXT and EPUB and opens vertical print wi
   await showPanel(page, 'review');
   const manager = page.locator('details.plugin-manager-panel');
   await manager.locator('summary').click();
-  await page.getByRole('button', { name: '信頼済みカタログを表示' }).click();
+  await page.getByRole('button', { name: 'カタログを表示' }).click();
   await install(page, 'proprium.narrative', ['workspace.change.propose', 'workspace.change.timestamp', 'workspace.file.read', 'workspace.identity.read']);
   await install(page, 'proprium.publishing', ['workspace.file.read', 'workspace.plugin.invoke', 'artifact.create', 'artifact.append', 'artifact.seal', 'artifact.discard']);
   const txtPanel = await makeExport(page, '書き出し');

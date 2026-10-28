@@ -36,14 +36,14 @@ test('Semantic local preference persists without model or provider requests', as
   await openWorkspace({ 'manuscript/start.md': '文章。\n' });
   const manager = page.locator('details.plugin-manager-panel');
   await manager.locator('summary').click();
-  await page.getByRole('button', { name: '信頼済みカタログを表示' }).click();
+  await page.getByRole('button', { name: 'カタログを表示' }).click();
   for (const [id, version] of [['proprium.research', '1.0.0'], ['proprium.semantic', '0.1.0']]) {
-    await page.getByRole('button', { name: `${id} ${version} の署名済みプレビューを確認` }).click();
+    await page.getByRole('button', { name: `${id} v${version} の導入内容と署名を確認` }).click();
     await page.getByRole('button', { name: 'ダウンロードして無効状態でインストール' }).click();
     await expect(manager.getByRole('status')).toContainText('署名とダイジェストを検証し、無効状態でインストールしました');
-    const plugin = page.getByRole('listitem').filter({ hasText: id }).filter({ hasText: `v${version}` });
+    const plugin = page.locator(".installed-plugins > li").filter({ hasText: id }).filter({ hasText: `v${version}` });
     if (id === 'proprium.semantic') await plugin.getByRole('checkbox', { name: 'plugin.preferences', exact: true }).check();
-    await plugin.getByRole('button', { name: 'Enable' }).click();
+    await plugin.getByRole('button', { name: '有効化' }).click();
     await expect(manager.getByRole('status')).toContainText(`${id}@${version} is enabled`);
   }
   async function settings() {
