@@ -80,11 +80,11 @@ function signedHostPanelFixture(origin: string): Map<string, ServedFile> {
 }
 
 async function previewCatalogPlugin(page: Page, pluginId: string, version: string): Promise<void> {
-  await page.getByRole("button", { name: "信頼済みカタログを表示" }).click();
+  await page.getByRole("button", { name: "カタログを表示" }).click();
   await expect(page.locator(".registry-plugin-list")).toContainText(pluginId);
-  await expect(page.locator(".registry-plugin-card h4 code").first()).toHaveText(pluginId);
-  await expect(page.locator(".registry-plugin-card").getByText(version, { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: `${pluginId} ${version} の署名済みプレビューを確認` }).click();
+  await expect(page.locator(".registry-plugin-identity code").first()).toHaveText(pluginId);
+  await expect(page.locator(".registry-plugin-card").getByText(`v${version}`, { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: `${pluginId} v${version} の導入内容と署名を確認` }).click();
 }
 
 test.beforeAll(() => {
@@ -246,9 +246,9 @@ test("exposes the fixed MCP tools without any client token and executes against 
   await previewCatalogPlugin(page, "fixture.compute-sum", "1.0.0");
   await page.getByRole("region", { name: "インストールプレビュー" }).waitFor();
   await page.getByRole("button", { name: "ダウンロードして無効状態でインストール" }).click();
-  const plugin = page.getByRole("listitem").filter({ hasText: "fixture.compute-sum" }).filter({ hasText: "v1.0.0" });
+  const plugin = page.locator(".installed-plugins > li").filter({ hasText: "fixture.compute-sum" }).filter({ hasText: "v1.0.0" });
   await expect(plugin).toBeVisible();
-  await plugin.getByRole("button", { name: "Enable" }).click();
+  await plugin.getByRole("button", { name: "有効化" }).click();
   await expect(pluginPanel.getByRole("status")).toContainText("fixture.compute-sum@1.0.0 is enabled");
   const result = textResult(await mcpCall("plugin", "plugin_call", {
     ...sampleRepository, pluginId: "fixture.compute-sum", operation: "run",
