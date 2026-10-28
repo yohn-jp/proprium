@@ -113,5 +113,5 @@ test("saved manuscript and local commit survive a browser reload", async ({ page
   await chooseFile(page, "manuscript/scene.md");
   await expectEditorText(page, edited);
   await showPanel(page, "history");
-  await expect(page.locator(".installed-plugins > li").filter({ hasText: "灯台の原稿を保存" })).toBeVisible();
+  await expect(page.getByRole("listitem").filter({ hasText: "灯台の原稿を保存" })).toBeVisible();
 });
