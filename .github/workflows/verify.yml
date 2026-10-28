@@ -15,8 +15,9 @@ concurrency:
   cancel-in-progress: true
 
 # All jobs use the same trusted bytes, not a signing private key shared across
-# runners. The handoff is an immutable artifact verified with the published
-# ephemeral public key after download.
+# runners. The handoff is verified with the published ephemeral public key
+# after every download. A full re-run replaces the run-scoped artifact, while
+# partial consumer re-runs reuse the successful producer artifact.
 env:
   PROPRIUM_CI_ARTIFACT_ROOT: /tmp/proprium-authoring-ci-${{ github.run_id }}-${{ github.run_attempt }}
   PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR: /tmp/proprium-authoring-ci-${{ github.run_id }}-${{ github.run_attempt }}/registry
@@ -114,7 +115,11 @@ jobs:
       - name: Publish verified signed artifacts and public key
         uses: actions/upload-artifact@v4
         with:
-          name: proprium-signed-authoring-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          name: proprium-signed-authoring-ci-${{ github.run_id }}
+          # Re-run all: replace the old successful producer's artifact.
+          # Re-run only a failed consumer: reuse the successful producer's
+          # artifact from the same run, verifying signatures before use.
+          overwrite: true
           path: ${{ env.PROPRIUM_CI_ARTIFACT_ROOT }}/
           if-no-files-found: error
           retention-days: 2
@@ -208,7 +213,7 @@ jobs:
       - name: Restore verified signed authoring registry
         uses: actions/download-artifact@v4
         with:
-          name: proprium-signed-authoring-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          name: proprium-signed-authoring-ci-${{ github.run_id }}
           path: ${{ env.PROPRIUM_CI_ARTIFACT_ROOT }}
       - name: Verify transferred signatures with the published test root
         run: |
@@ -270,7 +275,7 @@ jobs:
       - name: Restore verified signed authoring registry
         uses: actions/download-artifact@v4
         with:
-          name: proprium-signed-authoring-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          name: proprium-signed-authoring-ci-${{ github.run_id }}
           path: ${{ env.PROPRIUM_CI_ARTIFACT_ROOT }}
       - name: Verify transferred signatures with the published test root
         run: |
