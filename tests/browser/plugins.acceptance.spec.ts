@@ -143,11 +143,11 @@ function signedHostPanelFixture(
 }
 
 async function previewCatalogPlugin(page: Page, pluginId: string, version: string): Promise<void> {
-  await page.getByRole("button", { name: "信頼済みカタログを表示" }).click();
+  await page.getByRole("button", { name: "カタログを表示" }).click();
   await expect(page.locator(".registry-plugin-list")).toContainText(pluginId);
-  await expect(page.locator(".registry-plugin-card h4 code").first()).toHaveText(pluginId);
-  await expect(page.locator(".registry-plugin-card").getByText(version, { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: `${pluginId} ${version} の署名済みプレビューを確認` }).click();
+  await expect(page.locator(".registry-plugin-identity code").first()).toHaveText(pluginId);
+  await expect(page.locator(".registry-plugin-card").getByText(`v${version}`, { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: `${pluginId} v${version} の導入内容と署名を確認` }).click();
 }
 
 const gatewayOrigin = process.env.VITE_PROPRIUM_GATEWAY_URL ?? "http://127.0.0.1:4174";
@@ -326,10 +326,10 @@ test("Host Plugin panel previews, installs, runs, stops, updates and rolls back 
   await expect(panelNotice).toContainText("署名とダイジェストを検証し、無効状態でインストールしました");
 
   const pluginV1 = page.getByRole("listitem").filter({ hasText: "fixture.compute-sum" }).filter({ hasText: "v1.0.0" });
-  await pluginV1.getByRole("button", { name: "Enable" }).click();
+  await pluginV1.getByRole("button", { name: "有効化" }).click();
   await expect(panelNotice).toContainText("fixture.compute-sum@1.0.0 is enabled");
   await pluginV1.getByLabel(/プラグイン入力（テキスト）/u).fill(JSON.stringify({ left: 20, right: 22 }));
-  await pluginV1.getByRole("button", { name: "Run" }).click();
+  await pluginV1.getByRole("button", { name: "実行" }).click();
   await expect(page.getByLabel("fixture.compute-sum output")).toHaveText('{"result":42}');
   await pluginV1.getByRole("button", { name: "Stop" }).click();
   await expect(pluginV1).toContainText("v1.0.0 · installed, disabled");
@@ -380,7 +380,7 @@ test("Host runs a signed no-capability Component without workspace reads in UI o
   await expect(preview).toContainText("要求する権限: なし");
   await page.getByRole("button", { name: "ダウンロードして無効状態でインストール" }).click();
   const plugin = panel.getByRole("listitem").filter({ hasText: pluginId }).filter({ hasText: `v${version}` });
-  await plugin.getByRole("button", { name: "Enable" }).click();
+  await plugin.getByRole("button", { name: "有効化" }).click();
   await expect(panel.getByRole("status")).toContainText(`${pluginId}@${version} is enabled`);
 
   await page.evaluate(async () => {
@@ -402,7 +402,7 @@ test("Host runs a signed no-capability Component without workspace reads in UI o
 
   const request = JSON.stringify({ left: 20, right: 22 });
   await plugin.getByLabel(/プラグイン入力（テキスト）/u).fill(request);
-  await plugin.getByRole("button", { name: "Run" }).click();
+  await plugin.getByRole("button", { name: "実行" }).click();
   await expect(page.getByLabel(`${pluginId} output`)).toHaveText('{"result":42}');
   await expect.poll(() => page.evaluate(() => window.propriumPluginGitCalls)).toEqual({ listFiles: 0, read: 0 });
 
@@ -456,7 +456,7 @@ test("Host keeps newer editor text when a reviewed plugin proposal refresh finis
   await plugin.getByRole("checkbox", { name: "workspace.snapshot.read" }).check();
   await plugin.getByRole("checkbox", { name: "workspace.change.propose" }).check();
   await plugin.getByRole("checkbox", { name: "workspace.ui.contribute" }).check();
-  await plugin.getByRole("button", { name: "Enable" }).click();
+  await plugin.getByRole("button", { name: "有効化" }).click();
 
   // The Host's snapshot ID is intentionally random. Adapt only the test fixture's
   // request to the exact immutable snapshot supplied to the real Component.
@@ -484,7 +484,7 @@ test("Host keeps newer editor text when a reviewed plugin proposal refresh finis
     };
   });
   await plugin.getByLabel(/プラグイン入力（テキスト）/u).fill(JSON.stringify({ path: "README.md", content: "proposal from plugin\n" }));
-  await plugin.getByRole("button", { name: "Run" }).click();
+  await plugin.getByRole("button", { name: "実行" }).click();
   await expect(panel.getByRole("status")).toContainText("Plugin returned 1 change proposal(s) for Host review.");
   await expect(plugin.getByRole("button", { name: "Review and apply to local worktree" })).toBeVisible();
 
