@@ -78,7 +78,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: proprium-authoring-build-evidence-${{ github.sha }}
+          name: proprium-authoring-build-evidence-${{ github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/authoring-plugin-build-evidence.json
           if-no-files-found: ignore
           retention-days: 14
@@ -179,7 +179,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: proprium-browser-evidence-host-${{ github.sha }}
+          name: proprium-browser-evidence-host-${{ github.sha }}-${{ github.run_attempt }}
           path: |
             tests/browser/test-results/**
             tests/browser/playwright-report/**
@@ -237,7 +237,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: proprium-browser-evidence-authoring-${{ github.sha }}
+          name: proprium-browser-evidence-authoring-${{ github.sha }}-${{ github.run_attempt }}
           path: |
             tests/browser/test-results/**
             tests/browser/playwright-report/**
@@ -352,7 +352,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: proprium-browser-evidence-lifecycle-${{ github.sha }}
+          name: proprium-browser-evidence-lifecycle-${{ github.sha }}-${{ github.run_attempt }}
           path: |
             tests/browser/test-results/**
             tests/browser/playwright-report/**
