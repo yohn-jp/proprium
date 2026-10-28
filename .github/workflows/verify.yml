@@ -14,15 +14,21 @@ concurrency:
   group: proprium-browser-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# All jobs use the same trusted bytes, not a signing private key shared across
+# runners. The handoff is an immutable artifact verified with the published
+# ephemeral public key after download.
+env:
+  PROPRIUM_CI_ARTIFACT_ROOT: /tmp/proprium-authoring-ci-${{ github.run_id }}-${{ github.run_attempt }}
+  PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR: /tmp/proprium-authoring-ci-${{ github.run_id }}-${{ github.run_attempt }}/registry
+  PROPRIUM_AUTHORING_TEST_ARTIFACT_BASE: http://127.0.0.1:4173/plugin-fixture/
+
 jobs:
-  verify:
-    name: Browser host, Git, plugins and static assets
+  prepare:
+    name: Signed component build and unit verification
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 45
     env:
-      PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR: /tmp/proprium-authoring-registry-${{ github.run_id }}-${{ github.run_attempt }}
-      PROPRIUM_E2E_PLUGIN_REGISTRY_KEY_FILE: /tmp/proprium-authoring-key-${{ github.run_id }}-${{ github.run_attempt }}.pem
-      PROPRIUM_AUTHORING_TEST_ARTIFACT_BASE: http://127.0.0.1:4173/plugin-fixture/
+      PROPRIUM_E2E_PLUGIN_REGISTRY_KEY_FILE: /tmp/proprium-authoring-private-${{ github.run_id }}-${{ github.run_attempt }}.pem
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,10 +41,6 @@ jobs:
         with:
           node-version: 24.21.0
           cache: pnpm
-      - uses: actions/setup-go@v6
-        with:
-          go-version: 1.27.3
-          cache-dependency-path: gateway/go.mod
       - uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           toolchain: 1.99.0
@@ -101,6 +103,43 @@ jobs:
             run: node scripts/test-authoring-plugin-units.mjs
           - name: Test recovered editor, appearance and workspace layouts
             run: pnpm --dir app exec node --import tsx --test 'src/workspace/*.test.ts' 'src/editor/cm/*.test.ts' 'src/theme.test.ts' 'src/editor.test.ts' 'src/editor/terms.test.ts' 'src/journal.test.ts' 'src/continueCandidates.test.ts'
+      - name: Derive and verify public test trust root
+        run: |
+          set -euo pipefail
+          node -e 'const {readFileSync,writeFileSync}=require("node:fs"); const {createPrivateKey,createPublicKey}=require("node:crypto"); const privateKey=createPrivateKey(readFileSync(process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_KEY_FILE)); const publicKey=createPublicKey(privateKey).export({format:"der",type:"spki"}).subarray(-32).toString("base64"); writeFileSync(process.env.PROPRIUM_CI_ARTIFACT_ROOT+"/public-key.txt",publicKey+"\\n");'
+          test -s "$PROPRIUM_CI_ARTIFACT_ROOT/public-key.txt"
+          PROPRIUM_PLUGIN_OUTPUT_DIR="$PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR" \
+            PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY="$(cat "$PROPRIUM_CI_ARTIFACT_ROOT/public-key.txt")" \
+            node scripts/verify-plugin-registry.mjs authoring
+      - name: Publish verified signed artifacts and public key
+        uses: actions/upload-artifact@v4
+        with:
+          name: proprium-signed-authoring-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.PROPRIUM_CI_ARTIFACT_ROOT }}/
+          if-no-files-found: error
+          retention-days: 2
+  host:
+    name: Browser Host, static shell and Git acceptance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.10.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: pnpm
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.27.3
+          cache-dependency-path: gateway/go.mod
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
       - name: Build the static Proprium Host
         run: pnpm build:browser
       - name: Validate Workers Static Assets packaging without deployment
@@ -119,6 +158,135 @@ jobs:
           PROPRIUM_E2E_GITHUB_REPOSITORY_ID: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY_ID }}
           PROPRIUM_E2E_GITHUB_BRANCH: ${{ vars.PROPRIUM_E2E_GITHUB_BRANCH }}
         run: pnpm test:browser:e2e
+      - name: Exercise the production static shell offline
+        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
+        env:
+          PROPRIUM_E2E_GITHUB_TOKEN: ${{ secrets.PROPRIUM_E2E_GITHUB_TOKEN }}
+          PROPRIUM_E2E_GITHUB_OWNER: ${{ vars.PROPRIUM_E2E_GITHUB_OWNER }}
+          PROPRIUM_E2E_GITHUB_REPOSITORY: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY }}
+          PROPRIUM_E2E_GITHUB_REPOSITORY_ID: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY_ID }}
+          PROPRIUM_E2E_GITHUB_BRANCH: ${{ vars.PROPRIUM_E2E_GITHUB_BRANCH }}
+        run: pnpm test:browser:static:e2e
+      - name: Exercise existing Browser Git and Component Worker adapter scenarios
+        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
+        env:
+          SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN: ${{ secrets.PROPRIUM_E2E_GITHUB_TOKEN }}
+          SCRIPTORIUM_GITHUB_LIVE_TEST_OWNER: ${{ vars.PROPRIUM_E2E_GITHUB_OWNER }}
+          SCRIPTORIUM_GITHUB_LIVE_TEST_REPOSITORY: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY }}
+          SCRIPTORIUM_GITHUB_LIVE_TEST_REPOSITORY_ID: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY_ID }}
+          SCRIPTORIUM_GITHUB_LIVE_TEST_BRANCH: ${{ vars.PROPRIUM_E2E_GITHUB_BRANCH }}
+        run: pnpm test:browser:adapters
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: proprium-browser-evidence-host-${{ github.sha }}
+          path: |
+            tests/browser/test-results/**
+            tests/browser/playwright-report/**
+            tests/e2e/test-results/**
+          if-no-files-found: ignore
+          retention-days: 14
+  authoring:
+    name: Official signed authoring acceptance
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.10.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Restore verified signed authoring registry
+        uses: actions/download-artifact@v4
+        with:
+          name: proprium-signed-authoring-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.PROPRIUM_CI_ARTIFACT_ROOT }}
+      - name: Verify transferred signatures with the published test root
+        run: |
+          set -euo pipefail
+          test -f "$PROPRIUM_CI_ARTIFACT_ROOT/public-key.txt"
+          test -f "$PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR/registry.json"
+          public_key="$(cat "$PROPRIUM_CI_ARTIFACT_ROOT/public-key.txt")"
+          PROPRIUM_PLUGIN_OUTPUT_DIR="$PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR" \
+            PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY="$public_key" \
+            node scripts/verify-plugin-registry.mjs authoring
+          printf 'PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY=%s\nPROPRIUM_SIGNED_AUTHORING_REGISTRY_PUBLIC_KEY=%s\n' "$public_key" "$public_key" >> "$GITHUB_ENV"
+      - name: Build shared TypeScript contracts
+        run: pnpm --filter @scriptorium/contracts build
+      - name: Install desktop and mobile browser engines
+        id: browser_engines
+        run: pnpm exec playwright install --with-deps chromium webkit
+      - name: Exercise signed v2 transport with its fixture setup
+        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
+        run: pnpm exec playwright test --config tests/browser/plugin-runtime-v2.playwright.config.ts
+      - name: Exercise actual signed official plugins through the Host
+        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
+        run: pnpm exec playwright test --config tests/browser/authoring-official.playwright.config.ts
+      - name: Exercise all eight signed installs and persisted activation
+        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
+        run: node scripts/authoring-evidence-e2e.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: proprium-browser-evidence-authoring-${{ github.sha }}
+          path: |
+            tests/browser/test-results/**
+            tests/browser/playwright-report/**
+            tests/e2e/test-results/**
+          if-no-files-found: ignore
+          retention-days: 14
+  lifecycle:
+    name: Signed lifecycle, tools and Gateway acceptance
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.10.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: pnpm
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.27.3
+          cache-dependency-path: gateway/go.mod
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Restore verified signed authoring registry
+        uses: actions/download-artifact@v4
+        with:
+          name: proprium-signed-authoring-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.PROPRIUM_CI_ARTIFACT_ROOT }}
+      - name: Verify transferred signatures with the published test root
+        run: |
+          set -euo pipefail
+          test -f "$PROPRIUM_CI_ARTIFACT_ROOT/public-key.txt"
+          test -f "$PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR/registry.json"
+          public_key="$(cat "$PROPRIUM_CI_ARTIFACT_ROOT/public-key.txt")"
+          PROPRIUM_PLUGIN_OUTPUT_DIR="$PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR" \
+            PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY="$public_key" \
+            node scripts/verify-plugin-registry.mjs authoring
+          printf 'PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY=%s\nPROPRIUM_SIGNED_AUTHORING_REGISTRY_PUBLIC_KEY=%s\n' "$public_key" "$public_key" >> "$GITHUB_ENV"
+      - name: Build shared TypeScript contracts
+        run: pnpm --filter @scriptorium/contracts build
+      - name: Install desktop and mobile browser engines
+        id: browser_engines
+        run: pnpm exec playwright install --with-deps chromium webkit
       # Explicit environment ports are required: the imported shared
       # Playwright base config populates PROPRIUM_E2E_PORT=4173 before the
       # specialized config chooses its own fallback port. Never rely on
@@ -140,15 +308,6 @@ jobs:
             env:
               PROPRIUM_E2E_PORT: "4282"
             run: pnpm exec playwright test --config tests/browser/authoring-bom-core.playwright.config.ts
-      - name: Exercise signed v2 transport with its fixture setup
-        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
-        run: pnpm exec playwright test --config tests/browser/plugin-runtime-v2.playwright.config.ts
-      - name: Exercise actual signed official plugins through the Host
-        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
-        run: pnpm exec playwright test --config tests/browser/authoring-official.playwright.config.ts
-      - name: Exercise all eight signed installs and persisted activation
-        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
-        run: node scripts/authoring-evidence-e2e.mjs
       # These are separate Playwright processes. Set unique host ports:
       # their default 4173 would otherwise collide; each fixture setup
       # uses a unique temp directory and its own test-result directory.
@@ -190,31 +349,35 @@ jobs:
       - name: Exercise official typed actions through the live Gateway
         if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
         run: pnpm exec playwright test --config tests/browser/authoring-mcp.playwright.config.ts
-      - name: Exercise the production static shell offline
-        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
-        env:
-          PROPRIUM_E2E_GITHUB_TOKEN: ${{ secrets.PROPRIUM_E2E_GITHUB_TOKEN }}
-          PROPRIUM_E2E_GITHUB_OWNER: ${{ vars.PROPRIUM_E2E_GITHUB_OWNER }}
-          PROPRIUM_E2E_GITHUB_REPOSITORY: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY }}
-          PROPRIUM_E2E_GITHUB_REPOSITORY_ID: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY_ID }}
-          PROPRIUM_E2E_GITHUB_BRANCH: ${{ vars.PROPRIUM_E2E_GITHUB_BRANCH }}
-        run: pnpm test:browser:static:e2e
-      - name: Exercise existing Browser Git and Component Worker adapter scenarios
-        if: ${{ !cancelled() && steps.browser_engines.outcome == 'success' }}
-        env:
-          SCRIPTORIUM_GITHUB_LIVE_TEST_TOKEN: ${{ secrets.PROPRIUM_E2E_GITHUB_TOKEN }}
-          SCRIPTORIUM_GITHUB_LIVE_TEST_OWNER: ${{ vars.PROPRIUM_E2E_GITHUB_OWNER }}
-          SCRIPTORIUM_GITHUB_LIVE_TEST_REPOSITORY: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY }}
-          SCRIPTORIUM_GITHUB_LIVE_TEST_REPOSITORY_ID: ${{ vars.PROPRIUM_E2E_GITHUB_REPOSITORY_ID }}
-          SCRIPTORIUM_GITHUB_LIVE_TEST_BRANCH: ${{ vars.PROPRIUM_E2E_GITHUB_BRANCH }}
-        run: pnpm test:browser:adapters
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: proprium-browser-evidence-${{ github.sha }}
+          name: proprium-browser-evidence-lifecycle-${{ github.sha }}
           path: |
             tests/browser/test-results/**
             tests/browser/playwright-report/**
             tests/e2e/test-results/**
           if-no-files-found: ignore
           retention-days: 14
+  verify:
+    # Keep the original required check name even though it is now an aggregate.
+    name: Browser host, Git, plugins and static assets
+    if: ${{ always() }}
+    needs: [prepare, host, authoring, lifecycle]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require all four verification lanes to succeed
+        env:
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          HOST_RESULT: ${{ needs.host.result }}
+          AUTHORING_RESULT: ${{ needs.authoring.result }}
+          LIFECYCLE_RESULT: ${{ needs.lifecycle.result }}
+        run: |
+          set -euo pipefail
+          for lane in PREPARE HOST AUTHORING LIFECYCLE; do
+            variable="${lane}_RESULT"
+            result="${!variable}"
+            echo "$lane: $result"
+            test "$result" = success
+          done
