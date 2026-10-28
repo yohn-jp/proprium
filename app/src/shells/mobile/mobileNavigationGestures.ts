@@ -28,7 +28,7 @@ export function isPageSwipeSurface(target: EventTarget | null): boolean {
     'input, textarea, select, button, a, summary, [role="button"], [role="tab"], ' +
     '[contenteditable], .cm-editor, .manuscript-column, .reading-view, .reading-pager-content, ' +
     '.file-tree, .file-list, .st-workspace-mobile-tabs, .mobile-shell-reference-modal, ' +
-    '.plugin-panel-content, .host-controls, .st-workspace-panel-menu, [data-no-page-swipe]'
+    '.st-workspace-panel-menu, [data-no-page-swipe]'
   )) return false;
   let ancestor: Element | null = target;
   while (ancestor) {
