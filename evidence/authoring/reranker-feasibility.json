@@ -1,10 +1,11 @@
 {
   "schema": "proprium.semantic.reranker-feasibility/v1",
-  "status": "CONDITIONALLY_FEASIBLE_IMPLEMENTATION_UNVERIFIED",
+  "status": "NODE_WASM_INFERENCE_VERIFIED_BROWSER_AND_HOST_INTEGRATION_PENDING",
   "repository_base": {
     "revision": "75816593cec3dbca9080ec7073679ab3998993a7",
     "branch": "feat/authoring-semantic-reranker"
   },
+  "implementation_revision": "8be1b24f5ecb9c687b28574e68eabc9b0f4df5f3",
   "canonical_model": {
     "repository": "mogolloni/bge-reranker-v2-m3-onnx",
     "revision": "e5023553f6c47f09057da7a19cdd79ef850a4985",
@@ -17,41 +18,41 @@
         "path": "onnx/model.onnx",
         "bytes": 489245,
         "sha256": "ed283424d9a40dbd6fe2f3081386848a88cc8057b7ab43e02d84077d6b69ba42",
-        "downloaded_for_metadata": true
+        "downloaded_to_tmp_and_verified": true
       },
       {
         "path": "onnx/model.onnx_data",
         "bytes": 2271088656,
         "sha256": "9a748c82efb2079d24650c489e053dbb3c71d8acbbcf04d7b2340db66f2748f7",
-        "downloaded_for_metadata": false
+        "downloaded_to_tmp_and_verified": true
       },
       {
         "path": "tokenizer.json",
         "bytes": 17082900,
         "sha256": "8bf8afbfd11306bd872018c53bfdf2e160a56f8edbcf49933324404791c148d3",
-        "downloaded_for_metadata": false
+        "downloaded_to_tmp_and_verified": true
       },
       {
         "path": "sentencepiece.bpe.model",
         "bytes": 5069051,
         "sha256": "cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865",
-        "downloaded_for_metadata": false
+        "downloaded_to_tmp_and_verified": false
       }
     ]
   },
   "graph_metadata": {
-    "source": "pinned onnx/model.onnx protobuf external_data fields",
+    "source": "pinned onnx/model.onnx protobuf external_data fields, including graph initializers and node attribute tensors",
     "graph_bytes": 489245,
     "graph_sha256_verified_locally": true,
-    "external_tensor_count": 392,
+    "external_tensor_count": 393,
     "external_file": "model.onnx_data",
     "external_ranges": {
-      "declared_tensor_bytes_sum": 2271023104,
+      "declared_tensor_bytes_sum": 2271088656,
       "coverage_start": 0,
-      "coverage_end": 2271023104,
+      "coverage_end": 2271088656,
       "gaps": 0,
       "overlaps": 0,
-      "unreferenced_file_tail_bytes": 65552
+      "unreferenced_file_tail_bytes": 0
     },
     "largest_tensor": {
       "graph_initializer_index": 0,
@@ -59,34 +60,100 @@
       "offset": 0,
       "bytes": 1024008192
     },
-    "largest_initializer_after_first_bytes": 33562624
+    "largest_initializer_after_first_bytes": 33562624,
+    "external_tensor_types": {
+      "fp32_initializers": 392,
+      "int64_node_attribute_constants": 1
+    }
   },
+  "metadata_correction": "The initial external-range inspection counted graph initializers only. A real tract parse found Constant_586 also references an external int64 TensorProto in its value attribute at offset 2,271,023,104 with length 65,552 bytes. The corrected traversal includes node attribute tensors; all 393 external TensorProtos cover the full external-data file.",
   "current_path": {
-    "status": "UNSUPPORTED_FOR_CANONICAL_EXTERNAL_DATA",
-    "reason": "The Semantic guest buffers each transferred asset as a complete Vec<u8>. tract-onnx external tensor resolution canonicalizes filesystem paths, while model_for_read supplies no model path. Its external-data resolver returns a Vec per tensor and Tensor::from_raw copies that buffer into aligned tensor storage.",
+    "status": "LEGACY_PATH_UNSUPPORTED_FOR_EXTERNAL_MODEL",
+    "reason": "The existing E5 component buffers a single transferred model asset as a complete Vec<u8>; it has no separate external-data asset path. tract-onnx external tensor resolution canonicalizes filesystem paths, while model_for_read supplies no model path. Its external-data resolver returns a Vec per tensor and Tensor::from_raw copies that buffer into aligned tensor storage.",
     "lower_bound_bytes": {
       "retained_external_file": 2271088656,
-      "typed_model_tensors": 2271023104,
-      "sum_before_runtime_or_activations": 4542111760,
+      "typed_model_tensors": 2271088656,
+      "sum_before_runtime_or_activations": 4542177312,
       "wasm32_linear_memory_ceiling": 4294967296,
-      "over_ceiling_bytes": 247144464
+      "over_ceiling_bytes": 247210016
     }
   },
   "bounded_streaming_design": {
-    "status": "FEASIBLE_IN_THEORY_NOT_MEASURED",
-    "method": "Host streams each signed external-data range into an owned per-initializer Vec. A custom tract ModelDataResolver moves each Vec into tract's buffer, avoiding an additional whole-file copy. Tensor::from_raw then makes one final aligned tensor copy and the consumed input Vec is dropped. The largest initializer is first in graph order; subsequent tensors are at most 33,562,624 bytes.",
-    "estimated_peak_bytes": 3295031296,
-    "estimated_peak_formula": "sum of graph-declared external tensor ranges (2,271,023,104) + largest active raw-to-tensor copy (1,024,008,192)",
-    "headroom_below_wasm32_ceiling_bytes": 999936000,
+    "status": "IMPLEMENTED_AND_NODE_WASM_INFERENCE_VERIFIED_BROWSER_AND_HOST_INTEGRATION_PENDING",
+    "method": "The isolated component collects all external TensorProto ranges (392 fp32 graph initializers and one int64 Constant attribute), receives them one at a time in ascending file-offset order, hashes the complete data file, then uses a custom tract ModelDataResolver that moves each owned Vec into tract. The upstream Tensor::from_raw alignment copy remains. A wasm32-unknown-unknown path patch preserves relative path checks and avoids filesystem calls on that target.",
+    "estimated_peak_bytes": 3295096848,
+    "estimated_peak_formula": "sum of graph-declared external tensor ranges (2,271,088,656) + largest active raw-to-tensor copy (1,024,008,192)",
+    "measured_node_wasm_linear_memory_bytes_after_model_load": 3540385792,
+    "measured_node_wasm_linear_memory_bytes_after_scoring": 3540385792,
+    "observed_over_estimate_bytes": 245288944,
+    "headroom_below_wasm32_ceiling_bytes": 754581504,
+    "node_process_rss_bytes_after_scoring": 3685769216,
+    "node_wasm_execution": {
+      "host": "Node v24.21.0 on Linux x86_64, jco 1.39.0 transpiled component",
+      "native_wasm32_component": true,
+      "external_data_sha256_verified_by_component": true,
+      "tokenizer_sha256_verified_by_component": true,
+      "model_load_seconds": 5.929,
+      "query": "Where is the Eiffel Tower located?",
+      "positive_passage_score": 8.533679008483887,
+      "negative_passage_score": -4.4541144371032715,
+      "repeated_positive_score": 8.533679008483887,
+      "finite_scores": true,
+      "positive_ranked_above_negative": true,
+      "repeatable_within_1e-6": true,
+      "host_workspace_asset_read_used": false
+    },
+    "native_execution": {
+      "target": "x86_64-unknown-linux-gnu release",
+      "model_load_seconds": 2.952,
+      "process_vm_hwm_kib": 3537388,
+      "positive_passage_score": 8.53368092,
+      "negative_passage_score": -4.45410824,
+      "repeatable_within_1e-6": true
+    },
+    "host_range_transfer_constraint": {
+      "workspace_asset_read_max_bytes": 262144,
+      "plugin_action_host_call_max": 4096,
+      "reads_required_for_full_external_file_at_maximum_chunk": 8668,
+      "minimum_resumable_actions": 3,
+      "integration_requirement": "The outer Semantic guest must persist tensor/range progress across multiple async action slices while preserving the component worker. Do not change shared limits."
+    },
+    "component_import_contract": {
+      "wit_extraction": "evidence/authoring/validation/reranker-component-wit.txt",
+      "imports": [],
+      "exports": [
+        "proprium:semantic-reranker/inference@1.0.0"
+      ],
+      "final_composed_plugin_import_closure_verified": false
+    },
     "required_changes": [
-      "Add an isolated reranker inference component API that enumerates validated tensor ranges, receives one tensor at a time, and moves its Vec into tract during parse.",
-      "Use existing workspace.asset.read ranges from the outer Semantic guest; do not add a generic Host/WIT operation.",
-      "Add a minimal wasm-only external path resolution patch for tract-onnx while preserving its relative-path validation and the existing non-wasm resolver.",
-      "Decode the pinned graph protobuf and call the public Onnx::parse API with a custom provider; model_for_read is unsuitable because it passes no external-data path.",
-      "Profile optimization and inference peak memory and confirm BGE operator/tokenizer compatibility before declaring the feature available."
+      {
+        "item": "Isolated reranker inference component enumerates ranges, receives each tensor, and moves its Vec into tract.",
+        "status": "implemented"
+      },
+      {
+        "item": "Use existing workspace.asset.read from the outer Semantic guest; do not add generic Host WIT operations.",
+        "status": "integration_pending"
+      },
+      {
+        "item": "Wasm-only tract external path resolution patch with relative path validation and upstream licensing retained.",
+        "status": "implemented"
+      },
+      {
+        "item": "Compile with the Semantic package's unsupported getrandom backend so the inference component imports no ambient JavaScript/WASI entropy API.",
+        "status": "verified_from_semantic_package_working_directory"
+      },
+      {
+        "item": "Decode pinned graph and call public Onnx::parse with the custom provider.",
+        "status": "implemented_and_native_parse_verified"
+      },
+      {
+        "item": "Measure optimization/inference memory and real scoring.",
+        "status": "verified_in_node_wasm_and_native; browser_memory_gate_pending"
+      }
     ],
-    "known_memory_sharing": "tract InferenceFact concrete values and TypedModel constants use Arc<Tensor>, so infer-to-typed translation shares base tensor storage. Optimizer-created transformed constants and real inference buffers have not been measured.",
-    "device_claim": "No browser or mobile peak measurement has been performed. The estimate is a linear-memory allocation model, not a device capability result. Unsupported devices must keep reranking unavailable."
+    "known_memory_sharing": "tract InferenceFact concrete values and TypedModel constants use Arc<Tensor>, so infer-to-typed translation shares base tensor storage. Exact per-op transformed constant allocations are not isolated; the end-to-end Node WASM high-water includes parse, optimization and scoring.",
+    "device_claim": "Node 24.21.0 running the jco 1.39.0 transpiled wasm32 component measured 3,540,385,792 bytes of linear memory after load and scoring. No real browser or mobile measurement has been performed. Keep the feature unavailable until Host integration and target-browser capacity testing pass."
   },
   "repository_sources": [
     "docs/canon/plugins/SEMANTIC.md",
@@ -100,16 +167,30 @@
     "tract-onnx-0.23.9/src/data_resolver.rs",
     "tract-data-0.23.9/src/tensor.rs",
     "tract-hir-0.23.9/src/infer/fact.rs",
-    "tract-core-0.23.9/src/model/typed.rs"
+    "tract-core-0.23.9/src/model/typed.rs",
+    "plugins/semantic/reranker/src/lib.rs",
+    "plugins/semantic/reranker/wit/world.wit",
+    "plugins/semantic/reranker/model-source.json",
+    "plugins/semantic/reranker/README.md",
+    "plugins/semantic/reranker/scripts/wasm-smoke.mjs",
+    "plugins/semantic/reranker/vendor/tract-onnx/PROPRIUM-PATCH.md",
+    "evidence/authoring/validation/reranker-component-wit.txt",
+    "evidence/authoring/validation/reranker-node-wasm.txt"
   ],
   "verification": {
     "metadata_api_checked_at_utc": "2026-10-28",
     "graph_sha256_checked": true,
     "graph_external_ranges_parsed": true,
-    "large_weight_file_downloaded": false,
-    "reranker_inference_run": false,
+    "external_weight_sha256_checked": true,
+    "tokenizer_sha256_checked": true,
+    "large_weight_file_downloaded_to_tmp_not_repository": true,
+    "native_reranker_inference_run": true,
+    "node_wasm_reranker_inference_run": true,
+    "workspace_asset_read_host_integration_run": false,
     "browser_memory_measured": false,
-    "tests_run": false
+    "cargo_test_passed": true,
+    "wasm32_component_build_passed": true,
+    "component_wit_extracted_with_no_imports": true
   },
   "product_identity_policy": "Do not replace this fp32 artifact with quantized or differently sourced weights without an explicit product decision and a new quality/corpus acceptance gate."
 }
