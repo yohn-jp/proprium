@@ -6595,7 +6595,7 @@
           "id": "accept-dia-a12",
           "canon_title": "first-read",
           "canon_reference": "#accept-dia-a12",
-          "canon_requirement": "Only an explicit user-run request with consented Paired Writing provider receives manuscript context. Result identifies the exact chapter and model/provider, labels questions/expectations/confusion as an interpretation, and cites bounded source context. Network/model unavailable returns a recoverable error while ordinary diagnostics remains available; no report is silently persisted.",
+          "canon_requirement": "FROZEN — This is Paired Writing-owned and excluded from the active Diagnostics completion gate while Paired Writing is frozen. Preserve its prior requirement: only an explicit user-run request with consented Paired Writing provider receives manuscript context; result identifies the exact chapter and model/provider, labels questions/expectations/confusion as an interpretation, and cites bounded source context. Network/model unavailable returns a recoverable error while ordinary diagnostics remains available; no report is silently persisted. `FROZEN` is not `PASS` and does not describe implementation evidence.",
           "feature_ids": [
             "DIA-10"
           ],
@@ -6617,13 +6617,21 @@
           "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null,
           "lifecycle": "FROZEN",
-          "pre_freeze_status": "NOT_CHECKED"
+          "pre_freeze_status": "NOT_CHECKED",
+          "superseded_canon_metadata": {
+            "ledger_revision": "c247023424a537c87477c07724ad0f0052c3ccc9",
+            "fields": {
+              "canon_title": "first-read",
+              "canon_reference": "#accept-dia-a12",
+              "canon_requirement": "Only an explicit user-run request with consented Paired Writing provider receives manuscript context. Result identifies the exact chapter and model/provider, labels questions/expectations/confusion as an interpretation, and cites bounded source context. Network/model unavailable returns a recoverable error while ordinary diagnostics remains available; no report is silently persisted."
+            }
+          }
         },
         {
           "id": "accept-dia-a13",
           "canon_title": "contradiction candidates",
           "canon_reference": "#accept-dia-a13",
-          "canon_requirement": "Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale; optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction` remain distinguishable. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact.",
+          "canon_requirement": "Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact. **FROZEN subrequirement:** optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction`; this is excluded from the active Diagnostics completion gate while Paired Writing is frozen. `FROZEN` is not `PASS`.",
           "feature_ids": [
             "DIA-11"
           ],
@@ -6654,7 +6662,15 @@
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null,
-          "lifecycle": "ACTIVE"
+          "lifecycle": "ACTIVE",
+          "superseded_canon_metadata": {
+            "ledger_revision": "c247023424a537c87477c07724ad0f0052c3ccc9",
+            "fields": {
+              "canon_title": "contradiction candidates",
+              "canon_reference": "#accept-dia-a13",
+              "canon_requirement": "Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale; optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction` remain distinguishable. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact."
+            }
+          }
         },
         {
           "id": "accept-dia-a14",
@@ -7578,7 +7594,7 @@
         {
           "feature_id": "DIA-10",
           "source_anchor_state": "UNMAPPED",
-          "author_visible_result": "RECOVERY — Preserve a cross-plugin chapter-level first-read feature that offers questions, expectations and confusion as an interpretive report.",
+          "author_visible_result": "**FROZEN — Paired Writing-owned cross-plugin chapter first-read report.** Preserve the questions, expectations and confusion report as an interpretive feature; this feature is excluded from the active seven-plugin completion gate while Paired Writing is frozen. `FROZEN` is not `PASS`.",
           "source_disposition": "The recovered first-read feature is assigned to `proprium.paired-writing`, which owns the model action and chapter context. Diagnostics has no reader-reaction action or dependency; the result remains in Paired Writing's chapter report.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -7603,13 +7619,19 @@
           "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null,
           "lifecycle": "FROZEN",
-          "pre_freeze_status": "NOT_CHECKED"
+          "pre_freeze_status": "NOT_CHECKED",
+          "superseded_canon_metadata": {
+            "ledger_revision": "c247023424a537c87477c07724ad0f0052c3ccc9",
+            "fields": {
+              "author_visible_result": "RECOVERY — Preserve a cross-plugin chapter-level first-read feature that offers questions, expectations and confusion as an interpretive report."
+            }
+          }
         },
         {
           "feature_id": "DIA-11",
           "source_anchor_state": "TRACEABILITY_MAPPED",
-          "author_visible_result": "RECOVERY — Build evidence-paired contradiction candidates, let an author request optional interpretation, distinguish compatible/insufficient/contradiction and review dismissal against its source scope.",
-          "source_disposition": "Diagnostics owns deterministic declared-state findings and persisted human decisions; Semantic supplies optional embedding candidates; Paired Writing supplies the explicit model verdict. The same finding is normalized once by Diagnostics.",
+          "author_visible_result": "RECOVERY — Build evidence-paired contradiction candidates and review dismissal against its source scope; the optional Paired Writing interpretation is separately frozen.",
+          "source_disposition": "Diagnostics owns deterministic declared-state findings and persisted human decisions; Semantic supplies optional embedding candidates; the Paired Writing model-verdict subrequirement is **FROZEN** while Paired Writing is frozen. The same finding is normalized once by Diagnostics.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
             "edc033c2c9466274a334299dadfa426661d957d9"
@@ -7644,7 +7666,14 @@
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null,
-          "lifecycle": "ACTIVE"
+          "lifecycle": "ACTIVE",
+          "superseded_canon_metadata": {
+            "ledger_revision": "c247023424a537c87477c07724ad0f0052c3ccc9",
+            "fields": {
+              "author_visible_result": "RECOVERY — Build evidence-paired contradiction candidates, let an author request optional interpretation, distinguish compatible/insufficient/contradiction and review dismissal against its source scope.",
+              "source_disposition": "Diagnostics owns deterministic declared-state findings and persisted human decisions; Semantic supplies optional embedding candidates; Paired Writing supplies the explicit model verdict. The same finding is normalized once by Diagnostics."
+            }
+          }
         },
         {
           "feature_id": "DIA-12",
@@ -7708,7 +7737,7 @@
         {
           "feature_id": "DIA-14",
           "source_anchor_state": "TRACEABILITY_MAPPED",
-          "author_visible_result": "`RECOVERY`: Scriptorium `modules/assistant/src/aspect-review.ts:runDeterministicAspectReview`, `normalizeAspectIds`; `actions.ts:runAspectReview`, `previewAspectPrompt`; `actions.test.ts` “aspect review runs the deterministic local source implementation without consent or model access” and preview matrix. This deterministic Assistant feature is relocated here to keep one analysis implementation.",
+          "author_visible_result": "`RECOVERY`: Scriptorium `modules/assistant/src/aspect-review.ts:runDeterministicAspectReview`, `normalizeAspectIds`; `actions.ts:runAspectReview`, `previewAspectPrompt`; `actions.test.ts` “aspect review runs the deterministic local source implementation without consent or model access” and preview matrix. Current implementation: `plugins/diagnostics/guest.ts`, `plugins/diagnostics/plugin.json` surface `diagnostics.chapter-aspects`, and `plugins/diagnostics/tests/aspectGuest.test.ts`; browser acceptance remains unverified. This deterministic Assistant feature is relocated here to keep one analysis implementation.",
           "source_disposition": "`proprium.diagnostics.chapter.aspects.review.v1` / `proprium.diagnostics.chapter.aspects.preview.v1`; [DIA-A16](#accept-dia-a16). Paired retains explicit adapters for `assistant.aspect.review` and `assistant.aspect.review.preview`.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -7752,7 +7781,13 @@
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null,
-          "lifecycle": "ACTIVE"
+          "lifecycle": "ACTIVE",
+          "superseded_canon_metadata": {
+            "ledger_revision": "c247023424a537c87477c07724ad0f0052c3ccc9",
+            "fields": {
+              "author_visible_result": "`RECOVERY`: Scriptorium `modules/assistant/src/aspect-review.ts:runDeterministicAspectReview`, `normalizeAspectIds`; `actions.ts:runAspectReview`, `previewAspectPrompt`; `actions.test.ts` “aspect review runs the deterministic local source implementation without consent or model access” and preview matrix. This deterministic Assistant feature is relocated here to keep one analysis implementation."
+            }
+          }
         }
       ],
       "lifecycle": "ACTIVE"
@@ -8228,7 +8263,7 @@
           "id": "accept-spk-a11",
           "canon_title": null,
           "canon_reference": "#accept-spk-a11",
-          "canon_requirement": "Restore legacy corrections and model using explicit migration. Identical target reports unchanged; conflicting target remains untouched and is reviewable; disabled Speaker makes no proposal. Preserve unknown YAML keys, unknown correction JSON fields, malformed lines, and all original legacy bytes.",
+          "canon_requirement": "From the `speaker.recovery` panel, inspect the legacy correction/model files, then request migration with an idempotency key. Verify only absent targets are proposed through Host review and that proposal operations contain the exact original bytes and source/target revisions. Identical target reports unchanged; conflicting target remains untouched and reviewable; disabled Speaker makes no proposal. Preserve unknown JSON fields, malformed lines and original bytes; reject/stale review leaves all source and target files unchanged.",
           "feature_ids": [
             "SPK-11"
           ],
@@ -8249,7 +8284,15 @@
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null,
-          "lifecycle": "ACTIVE"
+          "lifecycle": "ACTIVE",
+          "superseded_canon_metadata": {
+            "ledger_revision": "c247023424a537c87477c07724ad0f0052c3ccc9",
+            "fields": {
+              "canon_title": null,
+              "canon_reference": "#accept-spk-a11",
+              "canon_requirement": "Restore legacy corrections and model using explicit migration. Identical target reports unchanged; conflicting target remains untouched and is reviewable; disabled Speaker makes no proposal. Preserve unknown YAML keys, unknown correction JSON fields, malformed lines, and all original legacy bytes."
+            }
+          }
         },
         {
           "id": "accept-spk-a12",
@@ -8782,8 +8825,8 @@
         {
           "feature_id": "SPK-11",
           "source_anchor_state": "UNMAPPED",
-          "author_visible_result": "`modules/speaker/src/migration.ts`: `createSpeakerMigrationProducer`; `migration.test.ts` covers byte-for-byte, absent-only restoration and conflict/disabled behavior.",
-          "source_disposition": "Read legacy state without rewriting it; migration is an explicit Host-reviewed operation and retains conflicting or unknown bytes; see [data contract](#data-contract) and [SPK-A11](#accept-spk-a11).",
+          "author_visible_result": "`plugins/speaker/src/migration.ts`: `prepareSpeakerRecovery`; `plugins/speaker/src/guest.ts`: `speaker.recovery.inspect` and `speaker.recovery.propose`; `plugins/speaker/plugin.json`: `speaker.recovery` Host-rendered panel; `plugins/speaker/src/guest.test.ts` covers exact-byte copy, absent-only creation and conflict/identical no-op behavior.",
+          "source_disposition": "Inspect canonical legacy/current paths read-only. Explicit proposal copies original bytes only into absent targets; identical targets are unchanged, conflicting targets are preserved. Host approval and revision compare-and-swap remain required; see [typed actions](#typed-action-contract), [data contract](#data-contract) and [SPK-A11](#accept-spk-a11).",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
             "edc033c2c9466274a334299dadfa426661d957d9"
@@ -8806,7 +8849,14 @@
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null,
-          "lifecycle": "ACTIVE"
+          "lifecycle": "ACTIVE",
+          "superseded_canon_metadata": {
+            "ledger_revision": "c247023424a537c87477c07724ad0f0052c3ccc9",
+            "fields": {
+              "author_visible_result": "`modules/speaker/src/migration.ts`: `createSpeakerMigrationProducer`; `migration.test.ts` covers byte-for-byte, absent-only restoration and conflict/disabled behavior.",
+              "source_disposition": "Read legacy state without rewriting it; migration is an explicit Host-reviewed operation and retains conflicting or unknown bytes; see [data contract](#data-contract) and [SPK-A11](#accept-spk-a11)."
+            }
+          }
         },
         {
           "feature_id": "SPK-12",

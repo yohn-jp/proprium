@@ -305,7 +305,7 @@
     {
       "feature_id": "DIA-10",
       "plugin_id": "proprium.diagnostics",
-      "requirement": "**FROZEN — Paired Writing-owned cross-plugin chapter first-read report.** Preserve the questions, expectations and confusion report as an interpretive feature; this feature is excluded from the active seven-plugin completion gate while Paired Writing is frozen. `FROZEN` is not `PASS`.\naccept-dia-a12 — Only an explicit user-run request with consented Paired Writing provider receives manuscript context. Result identifies the exact chapter and model/provider, labels questions/expectations/confusion as an interpretation, and cites bounded source context. Network/model unavailable returns a recoverable error while ordinary diagnostics remains available; no report is silently persisted.",
+      "requirement": "**FROZEN — Paired Writing-owned cross-plugin chapter first-read report.** Preserve the questions, expectations and confusion report as an interpretive feature; this feature is excluded from the active seven-plugin completion gate while Paired Writing is frozen. `FROZEN` is not `PASS`.\naccept-dia-a12 — FROZEN — This is Paired Writing-owned and excluded from the active Diagnostics completion gate while Paired Writing is frozen. Preserve its prior requirement: only an explicit user-run request with consented Paired Writing provider receives manuscript context; result identifies the exact chapter and model/provider, labels questions/expectations/confusion as an interpretation, and cites bounded source context. Network/model unavailable returns a recoverable error while ordinary diagnostics remains available; no report is silently persisted. `FROZEN` is not `PASS` and does not describe implementation evidence.",
       "status": "FROZEN",
       "implementation_files": [
         "plugins/paired-writing/guest.ts",
@@ -329,12 +329,18 @@
         "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
         "FROZEN mapping recorded in docs/canon/plugins/DIAGNOSTICS.md as DIA-10 / DIA-A12; no active acceptance PASS is claimed.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "superseded_requirements": [
+        {
+          "ledger_revision": "da78cf7df4c5ea78713157ba5aa4b852408a5727",
+          "requirement": "**FROZEN — Paired Writing-owned cross-plugin chapter first-read report.** Preserve the questions, expectations and confusion report as an interpretive feature; this feature is excluded from the active seven-plugin completion gate while Paired Writing is frozen. `FROZEN` is not `PASS`.\naccept-dia-a12 — Only an explicit user-run request with consented Paired Writing provider receives manuscript context. Result identifies the exact chapter and model/provider, labels questions/expectations/confusion as an interpretation, and cites bounded source context. Network/model unavailable returns a recoverable error while ordinary diagnostics remains available; no report is silently persisted."
+        }
       ]
     },
     {
       "feature_id": "DIA-11",
       "plugin_id": "proprium.diagnostics",
-      "requirement": "RECOVERY — Build evidence-paired contradiction candidates, let an author request optional interpretation, distinguish compatible/insufficient/contradiction and review dismissal against its source scope.\naccept-dia-a13 — Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale; optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction` remain distinguishable. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact.\nFROZEN subrequirement: optional Paired Writing verdicts compatible/insufficient/contradiction; deterministic and Semantic evidence plus Diagnostics dismissal remain active.",
+      "requirement": "RECOVERY — Build evidence-paired contradiction candidates and review dismissal against its source scope; the optional Paired Writing interpretation is separately frozen.\naccept-dia-a13 — Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact. **FROZEN subrequirement:** optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction`; this is excluded from the active Diagnostics completion gate while Paired Writing is frozen. `FROZEN` is not `PASS`.",
       "status": "PARTIAL",
       "implementation_files": [
         "plugins/diagnostics/guest.ts",
@@ -364,6 +370,12 @@
         "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "superseded_requirements": [
+        {
+          "ledger_revision": "da78cf7df4c5ea78713157ba5aa4b852408a5727",
+          "requirement": "RECOVERY — Build evidence-paired contradiction candidates, let an author request optional interpretation, distinguish compatible/insufficient/contradiction and review dismissal against its source scope.\naccept-dia-a13 — Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale; optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction` remain distinguishable. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact.\nFROZEN subrequirement: optional Paired Writing verdicts compatible/insufficient/contradiction; deterministic and Semantic evidence plus Diagnostics dismissal remain active."
+        }
       ]
     },
     {
@@ -843,6 +855,12 @@
         "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "superseded_requirements": [
+        {
+          "ledger_revision": "da78cf7df4c5ea78713157ba5aa4b852408a5727",
+          "requirement": "Restore preserved correction/model files (`RECOVERY`)\naccept-spk-a11 — From the `speaker.recovery` panel, inspect the legacy correction/model files, then request migration with an idempotency key. Verify only absent targets are proposed through Host review and that proposal operations contain the exact original bytes and source/target revisions. Identical target reports unchanged; conflicting target remains untouched and reviewable; disabled Speaker makes no proposal. Preserve unknown JSON fields, malformed lines and original bytes; reject/stale review leaves all source and target files unchanged."
+        }
       ]
     },
     {
