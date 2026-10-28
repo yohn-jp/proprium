@@ -748,6 +748,11 @@ ion-modal.mobile-shell-reference-modal {
   outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
+.mobile-shell-settings-card .mobile-shell-shared-header .theme-control,
+.mobile-shell-settings-card .mobile-shell-shared-header .theme-error {
+  display: none;
+}
+/* Appearance is edited in the main Settings form, not duplicated in account tools. */
 .mobile-shell-settings-card .mobile-shell-shared-header {
   display: block;
   margin: 10px 0 18px;
