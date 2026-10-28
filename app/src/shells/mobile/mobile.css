@@ -688,3 +688,32 @@ ion-modal.mobile-shell-reference-modal {
 }
 .mobile-shell-reference-durability strong {font-size:13px;color:var(--mobile-sheet-accent)}
 .mobile-shell-reference-durability span {font-size:12px;line-height:1.6}
+
+/* Mobile primary navigation: direct access without a disclosure menu. */
+.mobile-shell .mobile-shell-navigation {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.mobile-shell-header-settings {
+  display: grid;
+  place-items: center;
+  flex: 0 0 2.75rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  color: var(--ink);
+  background: var(--paper);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+.mobile-shell-header-settings:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Preserve editing space while the soft keyboard or an editor input is active.
+   Leaving the editor restores the navigation; the document remains mounted. */
+.mobile-shell-keyboard-open .mobile-shell-navigation,
+.mobile-shell:has(.cm-editor:focus-within) .mobile-shell-navigation,
+.mobile-shell:has(.manuscript-input:focus) .mobile-shell-navigation {
+  display: none;
+}
