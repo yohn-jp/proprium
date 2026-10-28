@@ -25,6 +25,7 @@ interface SearchHit {
     candidateId: string; entityId: string; sourcePath: string; sourceRevision: string; sentenceIndex?: number;
     text: string; evidence: { path: string; revision: string; start: number; end: number; quote: string }[];
   };
+  semanticCandidateInvalid?: boolean;
   [key: string]: unknown;
 }
 interface FusedResult {
@@ -71,7 +72,7 @@ function validRelativePath(path: string): boolean {
 
 function validSemanticCandidate(value: unknown): SearchHit['semanticCandidate'] | undefined {
   if (!isRecord(value) || typeof value.candidateId !== 'string' || !value.candidateId || value.candidateId.length > 128 ||
-      typeof value.entityId !== 'string' || !value.entityId || typeof value.sourcePath !== 'string' || !value.sourcePath ||
+      typeof value.entityId !== 'string' || !value.entityId || typeof value.sourcePath !== 'string' || !validRelativePath(value.sourcePath) ||
       typeof value.sourceRevision !== 'string' || !value.sourceRevision || typeof value.text !== 'string' || !value.text ||
       (value.sentenceIndex !== undefined && (!Number.isSafeInteger(value.sentenceIndex) || (value.sentenceIndex as number) < 0)) ||
       !Array.isArray(value.evidence) || value.evidence.length === 0 || value.evidence.length > 8 ||
@@ -92,19 +93,48 @@ export function validSearchHits(value: unknown, requireSourceQuote = false): Sea
     if (raw.navigationSpan != null && (!validSourceSpan(raw.navigationSpan) ||
         raw.navigationSpan.path !== raw.path || raw.navigationSpan.revision !== raw.fileRevision ||
         (requireSourceQuote && !raw.navigationSpan.quote))) throw new Error('検索結果の原文位置が不正です。');
-    const semanticCandidate = validSemanticCandidate(raw.semanticCandidate);
+    const rawSemanticCandidate = raw.semanticCandidate;
+    const safeFields = { ...raw };
+    delete safeFields.semanticCandidate;
+    delete safeFields.semanticCandidateInvalid;
+    const semanticCandidate = validSemanticCandidate(rawSemanticCandidate);
     return {
-      ...raw,
+      ...safeFields,
       source: typeof raw.source === 'string' ? raw.source : raw.kind === 'document' ? 'lexical' : 'search',
       scoreFactors: Array.isArray(raw.scoreFactors) ? raw.scoreFactors as string[] : [],
       navigationSpan: raw.navigationSpan == null ? null : raw.navigationSpan as SearchHit['navigationSpan'],
+      ...(rawSemanticCandidate !== undefined && !semanticCandidate ? { semanticCandidateInvalid: true } : {}),
       ...(semanticCandidate ? { semanticCandidate } : {}),
     } as SearchHit;
   });
 }
 
+/** Apply ranks only to evidence-backed semantic rows, leaving lexical-only slots unchanged. */
+export function applySemanticRanks(hits: readonly SearchHit[], rawRows: unknown, eligibleCandidateIds?: readonly string[]): SearchHit[] | null {
+  const eligible = eligibleCandidateIds ? new Set(eligibleCandidateIds) : null;
+  if (eligible && eligible.size !== eligibleCandidateIds?.length) return null;
+  const semantic = hits.flatMap((hit, index) => hit.semanticCandidate && (!eligible || eligible.has(hit.semanticCandidate.candidateId))
+    ? [{ index, candidateId: hit.semanticCandidate.candidateId }] : []);
+  if (semantic.length === 0 || !Array.isArray(rawRows) || rawRows.length !== semantic.length) return null;
+  const expected = new Set(semantic.map(item => item.candidateId));
+  if (expected.size !== semantic.length) return null;
+  const ranks = new Map<string, number>();
+  for (const raw of rawRows) {
+    if (!isRecord(raw) || typeof raw.candidateId !== 'string' || !expected.has(raw.candidateId) ||
+        typeof raw.score !== 'number' || !Number.isFinite(raw.score) || raw.score < 0 || raw.score > 1 ||
+        !Number.isSafeInteger(raw.rank) || (raw.rank as number) < 1 || (raw.rank as number) > semantic.length || ranks.has(raw.candidateId)) return null;
+    ranks.set(raw.candidateId, raw.rank as number);
+  }
+  if (ranks.size !== semantic.length || new Set(ranks.values()).size !== semantic.length) return null;
+  const sortedIds = [...semantic].sort((left, right) => ranks.get(left.candidateId)! - ranks.get(right.candidateId)!).map(item => item.candidateId);
+  const byId = new Map(semantic.map(item => [item.candidateId, hits[item.index]!]));
+  const output = [...hits];
+  semantic.forEach((item, slot) => { output[item.index] = byId.get(sortedIds[slot]!)!; });
+  return output;
+}
+
 function typedResult(result: ActionResult, label: string): { scope: Scope; snapshot: Snapshot; value: Record<string, unknown>; warnings: string[] } {
-  if (!result.ok) throw Object.assign(new Error(result.error.message), { code: result.error.code });
+  if (result.ok === false) throw Object.assign(new Error(result.error.message), { code: result.error.code });
   if (!result.scope || !result.snapshot || !isRecord(result.value)) throw new Error(`${label} の検索結果にワークスペース情報がありません。`);
   return { scope: result.scope, snapshot: result.snapshot, value: result.value,
     warnings: Array.isArray(result.warnings) ? result.warnings.filter((item): item is string => typeof item === 'string') : [] };
@@ -191,7 +221,7 @@ export function ResearchSemanticSearch({ scopeKey, semanticAvailable, invokeRead
           (fusedResult.value.scope ?? null) !== (pathScope.trim() || null)) {
         throw Object.assign(new Error('統合検索結果のスナップショットが古くなりました。'), { code: 'snapshot_stale' });
       }
-      const finalHits = validSearchHits(fusedResult.value.hits, true);
+      let finalHits = validSearchHits(fusedResult.value.hits, true);
       const vectorWarning = typeof vectorResult.value.warning === 'string' ? [vectorResult.value.warning] : [];
       const actionWarnings = [...lexicalResult.warnings, ...vectorResult.warnings, ...fusedResult.warnings];
       const valueWarnings = Array.isArray(fusedResult.value.warnings)
@@ -202,46 +232,51 @@ export function ResearchSemanticSearch({ scopeKey, semanticAvailable, invokeRead
         finalWarnings.push(`表現検索は利用できません: ${typeof expressionStatus.reason === 'string' ? expressionStatus.reason : 'ローカル解析器を利用できません。'}`);
       }
 
-      if (finalHits.some(hit => hit.semanticCandidate)) {
+      if (finalHits.some(hit => hit.semanticCandidate || hit.semanticCandidateInvalid)) {
         try {
           const settings = typedResult(await invokeRead(SEMANTIC, 'proprium.semantic.settings.read', {}, controller.signal), 'Semantic 設定');
           if (!current()) return;
           if (!resultIdentityMatches(lexicalResult, settings)) throw Object.assign(new Error('設定が別のワークスペースを参照しました。'), { code: 'snapshot_stale' });
           if (isRecord(settings.value.preferences) && settings.value.preferences.rerankerEnabled === true) {
-            const candidates = finalHits.map(hit => {
+            let invalidCandidateCount = 0;
+            const candidates = finalHits.flatMap(hit => {
               const candidate = hit.semanticCandidate;
               const span = hit.navigationSpan;
               if (!candidate || !span || candidate.sourcePath !== hit.path || candidate.sourceRevision !== hit.fileRevision ||
                   candidate.text !== span.quote || !candidate.evidence.some(evidence => evidence.path === span.path &&
-                    evidence.revision === span.revision && evidence.start === span.start && evidence.end === span.end && evidence.quote === span.quote)) return undefined;
-              return candidate;
+                    evidence.revision === span.revision && evidence.start === span.start && evidence.end === span.end && evidence.quote === span.quote)) {
+                if (candidate || hit.semanticCandidateInvalid) invalidCandidateCount++;
+                return [];
+              }
+              return [candidate];
             });
-            if (candidates.length !== finalHits.length || candidates.some(candidate => !candidate)) {
-              finalWarnings.push('再順位付けに必要な検証済み文章候補がそろっていません。元の順位を保持しました。');
-            } else {
+            if (invalidCandidateCount > 0) finalWarnings.push(`${invalidCandidateCount} 件の文章候補を検証できず、再順位付けから除外しました。`);
+            if (candidates.length > 0) {
               const rerankedResult = await invokeRead(SEMANTIC, 'proprium.semantic.rerank', {
                 query: trimmed, candidates, limit: Math.min(MAX_HITS, candidates.length),
               }, controller.signal);
               if (!current()) return;
-              if (!rerankedResult.ok) finalWarnings.push(`再順位付けを利用できません。元の順位を保持しました: ${rerankedResult.error.message}`);
+              if (rerankedResult.ok === false) finalWarnings.push(`再順位付けを利用できません。元の順位を保持しました: ${rerankedResult.error.message}`);
               else {
                 const reranked = typedResult(rerankedResult, 'Semantic 再順位付け');
                 const values = reranked.value.results;
-                const candidateIds = new Set(candidates.map(candidate => candidate!.candidateId));
+                const candidateIds = new Set(candidates.map(candidate => candidate.candidateId));
                 if (!resultIdentityMatches(lexicalResult, reranked) || !snapshotMatches(reranked.value.snapshot, reranked.snapshot) ||
-                    !Array.isArray(values) || values.length !== candidates.length ||
-                    values.some(item => !isRecord(item) || typeof item.candidateId !== 'string' || !candidateIds.has(item.candidateId) ||
-                      typeof item.score !== 'number' || !Number.isFinite(item.score) || !Number.isSafeInteger(item.rank))) {
+                    !Array.isArray(values) || values.length !== candidates.length) {
                   finalWarnings.push('再順位付けの対応を検証できません。元の順位を保持しました。');
                 } else {
-                  const ranks = new Map(values.map(item => [(item as Record<string, unknown>).candidateId as string, (item as Record<string, unknown>).rank as number]));
-                  if (new Set(ranks.values()).size !== finalHits.length || [...ranks.values()].some(rank => rank < 1 || rank > finalHits.length)) {
+                  const rerankedHits = applySemanticRanks(finalHits, values, [...candidateIds]);
+                  if (!rerankedHits) {
                     finalWarnings.push('再順位付けの順位が不正です。元の順位を保持しました。');
                   } else {
-                    finalHits.sort((left, right) => ranks.get(left.semanticCandidate!.candidateId)! - ranks.get(right.semanticCandidate!.candidateId)!);
+                    finalHits = rerankedHits;
+                    const lexicalOnlyCount = finalHits.filter(hit => !hit.semanticCandidate && !hit.semanticCandidateInvalid).length;
+                    if (lexicalOnlyCount > 0) finalWarnings.push(`再順位付けは検証済みの意味検索候補だけに適用し、全文検索のみの${lexicalOnlyCount}件は元の順位位置に残しました。`);
                   }
                 }
               }
+            } else if (invalidCandidateCount === 0 && finalHits.length > 0) {
+              finalWarnings.push('再順位付けできる意味検索候補がありません。元の順位を保持しました。');
             }
           }
         } catch (error) {
