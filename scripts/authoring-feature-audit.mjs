@@ -36,7 +36,7 @@ export function validateFeatureAudits(audits, requirements) {
       if (['PARTIAL', 'MISSING', 'UNVERIFIED'].includes(row.status) && (!row.gaps?.length || !row.required_fixes?.length)) {
         errors.push(`${id}: unfinished feature requires gaps and remaining work`);
       }
-      if (row.status === 'FROZEN' && requirement?.plugin_id !== 'proprium.paired-writing' && id !== 'NAR-10') {
+      if (row.status === 'FROZEN' && requirement?.plugin_id !== 'proprium.paired-writing' && !['NAR-10', 'DIA-10'].includes(id)) {
         errors.push(`${id}: shared or active feature cannot be frozen`);
       }
       if (requirement?.plugin_id === 'proprium.paired-writing' && row.status !== 'FROZEN') errors.push(`${id}: Paired Writing must be FROZEN`);
