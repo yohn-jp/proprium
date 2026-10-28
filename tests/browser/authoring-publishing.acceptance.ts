@@ -11,6 +11,8 @@ const fixture: Record<string, string> = {
   'plot/volumes/v/chapters/c/scenes/b.yaml': 'id: s2\ntype: scene\ntitle: 朝の港\nvolume: v1\nchapter: c1\norder: 2\nmanuscript: manuscript/custom/b.md\n',
   'manuscript/custom/a.md': '---\ntitle: draft\nprivate_note: omit\n---\n｜夜《よる》の町で《《雨》》が降った。\n',
   'manuscript/custom/b.md': '海から朝日が昇った。終わり。\n',
+  'meta/publish-episodes.yaml': 'migrationNote: preserve\nepisodes:\n  - id: legacy-episode-1\n    number: 1\n    title: 第一話\n    scope: chapter\n    scopeId: c1\n    futureField: keep\n',
+  'meta/scriptorium/modules/publishing/legacy/share-grants.jsonl': `${JSON.stringify({ id: 'legacy-grant-1', projectId: 'old-scriptorium-project', scope: { kind: 'chapter', id: 'c1', extension: 'preserve' }, label: '校正用', tokenHash: 'a'.repeat(64), createdAt: '2025-01-01T00:00:00.000Z', expiresAt: '2030-01-01T00:00:00.000Z', safeExtension: { note: 'preserve' } })}\n`,
 };
 
 async function install(page: Page, id: string, capabilities: string[]) {
@@ -117,13 +119,14 @@ test('signed Publishing locally exports TXT and EPUB and opens vertical print wi
   page.on('request', request => { if (/github\.com|git-receive-pack/u.test(request.url()) && !['GET', 'HEAD'].includes(request.method())) outboundWrites.push(`${request.method()} ${request.url()}`); });
   await page.goto('/');
   await page.waitForFunction(() => typeof window.propriumHostTest?.openWorkspace === 'function');
-  await page.evaluate(async files => window.propriumHostTest!.openWorkspace({ provider: 'local', name: 'publishing-e2e', branch: 'main', localWorkspaceId: `publishing-${crypto.randomUUID()}` }, files), fixture);
+  const workspace = { origin: 'https://github.com', repositoryId: 301, owner: 'proprium-test', repository: 'publishing-e2e', branch: 'main', localWorkspaceId: `publishing-${crypto.randomUUID()}` };
+  await page.evaluate(async ({ identity, files }) => window.propriumHostTest!.openWorkspace(identity, files), { identity: workspace, files: fixture });
   await showPanel(page, 'review');
   const manager = page.locator('details.plugin-manager-panel');
   await manager.locator('summary').click();
   await page.getByRole('button', { name: 'カタログを表示' }).click();
   await install(page, 'proprium.narrative', ['workspace.change.propose', 'workspace.change.timestamp', 'workspace.file.read', 'workspace.identity.read']);
-  await install(page, 'proprium.publishing', ['workspace.file.read', 'workspace.plugin.invoke', 'artifact.create', 'artifact.append', 'artifact.seal', 'artifact.discard']);
+  await install(page, 'proprium.publishing', ['workspace.file.read', 'workspace.plugin.invoke', 'workspace.change.propose', 'artifact.create', 'artifact.append', 'artifact.seal', 'artifact.discard']);
   const txtPanel = await makeExport(page, '書き出し');
   const txt = await download(page, txtPanel);
   expect(txt.filename).toMatch(/\.txt$/u);
@@ -153,4 +156,67 @@ test('signed Publishing locally exports TXT and EPUB and opens vertical print wi
   await expect(popup.locator('pre')).toContainText('海から朝日が昇った。終わり。');
   expect(await popup.locator('pre').evaluate(element => getComputedStyle(element).writingMode)).toBe('vertical-rl');
   expect(outboundWrites).toEqual([]);
+
+  await openPanel(page, '公開回マッピング');
+  const episodePanel = page.getByRole('tabpanel', { name: '公開回マッピング', exact: true }).first();
+  await episodePanel.getByRole('button', { name: '読み込む', exact: true }).click();
+  await episodePanel.getByRole('tab', { name: '旧データの復旧', exact: true }).click();
+  await episodePanel.getByRole('button', { name: '旧データの復旧を読み込む', exact: true }).click();
+  const recoveryTab = episodePanel.getByRole('tabpanel', { name: '旧データの復旧', exact: true });
+  await recoveryTab.getByRole('tab', { name: '復旧候補', exact: true }).click();
+  await expect(recoveryTab.getByRole('table')).toContainText('ready');
+  await expect(recoveryTab.getByRole('table')).toContainText('meta/publish-episodes.yaml');
+  await recoveryTab.getByRole('tab', { name: '復旧提案', exact: true }).click();
+  await recoveryTab.getByRole('combobox', { name: '復旧元', exact: true }).selectOption('meta/publish-episodes.yaml');
+  await recoveryTab.getByRole('button', { name: '送信', exact: true }).click();
+  const recoveryConfirmation = page.getByRole('dialog', { name: '公開回マップの復旧を提案' });
+  await recoveryConfirmation.getByRole('button', { name: '復旧提案を作成' }).click();
+  await expect(recoveryTab.getByRole('alert')).toHaveCount(0);
+  await showPanel(page, 'review');
+  const review = page.getByRole('region', { name: 'Authoring proposals' });
+  await expect(review.getByRole('button').first()).toBeVisible({ timeout: 30_000 });
+  await review.getByRole('button').first().click();
+  await expect(review).toContainText('meta/scriptorium/modules/publishing/episodes.yaml');
+  await expect(review).toContainText('futureField: keep');
+  await expect(review).toContainText('第一話');
+  await review.getByRole('button', { name: '選択した単位をローカルへ適用' }).click();
+  await expect(review.getByRole('button', { name: /proprium\.publishing · applied/ })).toBeVisible({ timeout: 30_000 });
+
+  await openPanel(page, '公開回マッピング');
+  const episodePanelAgain = page.getByRole('tabpanel', { name: '公開回マッピング', exact: true }).first();
+  await episodePanelAgain.getByRole('tab', { name: '旧データの復旧', exact: true }).click();
+  const recoveryTabAgain = episodePanelAgain.getByRole('tabpanel', { name: '旧データの復旧', exact: true });
+  await recoveryTabAgain.getByRole('tab', { name: '共有権限', exact: true }).click();
+  const grantsTab = recoveryTabAgain.getByRole('tabpanel', { name: '共有権限', exact: true });
+  await grantsTab.getByRole('tab', { name: '保管された権限', exact: true }).click();
+  await expect(grantsTab.getByRole('table')).toContainText('mapping_required');
+  await expect(grantsTab.getByRole('table')).toContainText('old-scriptorium-project');
+  await expect(grantsTab.getByRole('table')).toContainText('301');
+  await expect(grantsTab.getByRole('table')).toContainText('main');
+  await grantsTab.getByRole('tab', { name: '明示対応と提案', exact: true }).click();
+  const grantForm = grantsTab.getByRole('tabpanel', { name: '明示対応と提案', exact: true });
+  await grantForm.getByRole('combobox', { name: '復旧元', exact: true }).selectOption('meta/scriptorium/modules/publishing/legacy/share-grants.jsonl');
+  await grantForm.getByRole('combobox', { name: '旧 projectId', exact: true }).selectOption('old-scriptorium-project');
+  await grantForm.getByRole('spinbutton', { name: 'Host repository ID を再入力', exact: true }).fill('301');
+  await grantForm.getByRole('textbox', { name: 'Host branch を再入力', exact: true }).fill('main');
+  await grantForm.getByRole('button', { name: '送信', exact: true }).click();
+  const grantConfirmation = page.getByRole('dialog', { name: '旧共有権限の復旧を提案' });
+  await grantConfirmation.getByRole('button', { name: '復旧提案を作成' }).click();
+  await expect(grantForm.getByRole('alert')).toHaveCount(0);
+  await showPanel(page, 'review');
+  const grantReview = page.getByRole('region', { name: 'Authoring proposals' });
+  await expect(grantReview.getByRole('button', { name: /proprium\.publishing · proposed/ }).last()).toBeVisible({ timeout: 30_000 });
+  await grantReview.getByRole('button', { name: /proprium\.publishing · proposed/ }).last().click();
+  await expect(grantReview).toContainText('meta/scriptorium/modules/publishing/share-grants.jsonl');
+  await expect(grantReview).toContainText('legacy-grant-1');
+  await expect(grantReview).not.toContainText('share_');
+  await grantReview.getByRole('button', { name: '選択した単位をローカルへ適用' }).click();
+  await expect(grantReview.getByRole('button', { name: /proprium\.publishing · applied/ }).last()).toBeVisible({ timeout: 30_000 });
+
+  await page.reload();
+  await page.waitForFunction(() => typeof window.propriumHostTest?.openWorkspace === 'function');
+  await page.evaluate(async identity => window.propriumHostTest!.openWorkspace(identity), workspace);
+  await showPanel(page, 'review');
+  const reloadedReview = page.getByRole('region', { name: 'Authoring proposals' });
+  await expect(reloadedReview.getByRole('button', { name: /proprium\.publishing · applied/ })).toHaveCount(2);
 });

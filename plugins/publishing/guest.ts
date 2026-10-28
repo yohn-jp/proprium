@@ -26,7 +26,13 @@ const NARRATIVE_ID = "proprium.narrative";
 const TREE_ACTION = "proprium.narrative.hierarchy.tree";
 const EPISODES_PATH = "meta/scriptorium/modules/publishing/episodes.yaml";
 const GRANTS_PATH = "meta/scriptorium/modules/publishing/share-grants.jsonl";
+const EPISODE_RECOVERY_PATHS = [
+  "meta/publish-episodes.yaml",
+  "meta/scriptorium/modules/publishing/legacy/files/meta/publish-episodes.yaml",
+] as const;
+const LEGACY_GRANTS_RECOVERY_PATH = "meta/scriptorium/modules/publishing/legacy/share-grants.jsonl";
 const MAX_PAGE = 200;
+const MAX_RECOVERY_BYTES = 128 * 1024;
 
 type Host = GuestHost;
 type HostGenerator<T> = Generator<HostCall, T, unknown>;
@@ -112,17 +118,108 @@ function parseShareGrant(value: unknown, line: number): Record<string, unknown> 
   const scope = record(item?.scope);
   if (!item || item.version !== 1 || typeof item.id !== "string" || !item.id.trim() || item.id.length > 512 ||
       typeof item.tokenHash !== "string" || !/^[a-f0-9]{64}$/u.test(item.tokenHash) ||
-      !scope || !["volume", "chapter", "scene"].includes(String(scope.kind)) ||
+      !scope || !["project", "volume", "chapter", "scene"].includes(String(scope.kind)) ||
       typeof scope.id !== "string" || !scope.id.trim() || scope.id.length > 512 || typeof item.label !== "string" || item.label.length > 120 ||
+      suspiciousShareLabel(item.label) ||
       typeof item.createdAt !== "string" || !Number.isFinite(Date.parse(item.createdAt)) ||
       typeof item.expiresAt !== "string" || !Number.isFinite(Date.parse(item.expiresAt)) ||
       (item.revokedAt !== undefined && (typeof item.revokedAt !== "string" || !Number.isFinite(Date.parse(item.revokedAt)))) ||
+      (item.lastUsedAt !== undefined && (typeof item.lastUsedAt !== "string" || !Number.isFinite(Date.parse(item.lastUsedAt)))) ||
       (item.repositoryId !== undefined && (!Number.isSafeInteger(item.repositoryId) || (item.repositoryId as number) < 1)) ||
       (item.branch !== undefined && (typeof item.branch !== "string" || !item.branch)) ||
       ((item.repositoryId === undefined) !== (item.branch === undefined))) {
     return fail("unsupported_format", `Invalid share grant descriptor at line ${line}`, { path: GRANTS_PATH, reason: "invalid_source" });
   }
   return item;
+}
+
+function hasUnsafeShareFields(value: unknown): boolean {
+  const unsafe = (key: string): boolean => {
+    const normalized = key.toLowerCase().replace(/[_-]/gu, "");
+    if (key === "tokenHash") return false;
+    return ["token", "owner", "user", "bearer", "secret", "credential", "authorization", "authentication", "account"]
+      .some(prefix => normalized.startsWith(prefix) || (prefix === "authorization" && normalized.startsWith("auth") && !normalized.startsWith("author")));
+  };
+  if (typeof value === "string") return /\bbearer\s+[^\s]{16,}/iu.test(value) ||
+    /\bshare_[A-Za-z0-9_-]{32,}\b/u.test(value) || /\bgithub_pat_[A-Za-z0-9_]{30,}\b/u.test(value) ||
+    /\bgh[pousr]_[A-Za-z0-9]{30,}\b/u.test(value);
+  if (Array.isArray(value)) return value.some(hasUnsafeShareFields);
+  const object = record(value);
+  return Boolean(object && Object.entries(object).some(([key, nested]) => unsafe(key) || hasUnsafeShareFields(nested)));
+}
+
+function suspiciousShareLabel(value: string): boolean {
+  return /\bbearer\s+/iu.test(value) || /\b(?:token|secret|password|credential)\s*[=:]/iu.test(value) ||
+    /^(?:share_)?[A-Za-z0-9_-]{40,}$/u.test(value.trim());
+}
+
+function validLegacyProjectId(value: string): boolean {
+  return Boolean(value.trim()) && value.length <= 512 && !/[\u0000-\u001f\u007f]/u.test(value) && !hasUnsafeShareFields(value);
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  const object = record(value);
+  if (object) return `{${Object.entries(object).sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, nested]) => `${JSON.stringify(key)}:${canonicalJson(nested)}`).join(",")}}`;
+  return JSON.stringify(value);
+}
+
+function legacyShareScope(value: unknown, legacyProjectId: string, repositoryId: number): Record<string, unknown> {
+  if (typeof value === "string") {
+    if (!value.trim()) return { kind: "project", id: String(repositoryId) };
+    const match = /^(vol|ch|sc)-.+/u.exec(value);
+    if (!match) return fail("unsupported_format", "Legacy share scope is not a recognized stable ID", { path: LEGACY_GRANTS_RECOVERY_PATH, reason: "invalid_scope" });
+    const kind = match[1] === "vol" ? "volume" : match[1] === "ch" ? "chapter" : "scene";
+    return { kind, id: value };
+  }
+  const scope = record(value);
+  if (!scope || !["project", "volume", "chapter", "scene"].includes(String(scope.kind)) ||
+      typeof scope.id !== "string" || !scope.id.trim() || scope.id.length > 512) {
+    return fail("unsupported_format", "Legacy share scope is invalid", { path: LEGACY_GRANTS_RECOVERY_PATH, reason: "invalid_scope" });
+  }
+  if (scope.kind === "project") {
+    if (scope.id !== "*" && scope.id !== legacyProjectId && scope.id !== String(repositoryId)) {
+      return fail("ambiguous_identity", "Legacy project scope does not match the explicitly mapped project", { path: LEGACY_GRANTS_RECOVERY_PATH, reason: "foreign_project" });
+    }
+    return { ...scope, id: String(repositoryId) };
+  }
+  return { ...scope };
+}
+
+function mapLegacyShareGrant(value: unknown, line: number, legacyProjectId: string, repositoryId: number, branch: string): Record<string, unknown> {
+  const item = record(value);
+  if (!item || !validLegacyProjectId(legacyProjectId) || item.projectId !== legacyProjectId ||
+      !validLegacyProjectId(String(item.projectId)) || typeof item.id !== "string" || !item.id.trim() || item.id.length > 512 ||
+      typeof item.tokenHash !== "string" || !/^[a-f0-9]{64}$/iu.test(item.tokenHash) ||
+      typeof item.label !== "string" || item.label.length > 120 || suspiciousShareLabel(item.label) ||
+      typeof item.createdAt !== "string" || !Number.isFinite(Date.parse(item.createdAt)) ||
+      typeof item.expiresAt !== "string" || !Number.isFinite(Date.parse(item.expiresAt)) ||
+      (item.revokedAt !== undefined && (typeof item.revokedAt !== "string" || !Number.isFinite(Date.parse(item.revokedAt)))) ||
+      (item.lastUsedAt !== undefined && (typeof item.lastUsedAt !== "string" || !Number.isFinite(Date.parse(item.lastUsedAt)))) ||
+      (item.version !== undefined && item.version !== 1) ||
+      (item.grantVersion !== undefined && (!Number.isSafeInteger(item.grantVersion) || (item.grantVersion as number) < 1)) ||
+      (item.revocationVersion !== undefined && (!Number.isSafeInteger(item.revocationVersion) || (item.revocationVersion as number) < 0))) {
+    return fail("unsupported_format", `Invalid retained share grant at line ${line}`, { path: LEGACY_GRANTS_RECOVERY_PATH, reason: "invalid_source" });
+  }
+  if (hasUnsafeShareFields(item)) {
+    return fail("unsupported_format", `Retained share grant at line ${line} contains account or bearer data`, { path: LEGACY_GRANTS_RECOVERY_PATH, reason: "unsafe_source" });
+  }
+  if ((item.repositoryId !== undefined && item.repositoryId !== repositoryId) ||
+      (item.branch !== undefined && item.branch !== branch)) {
+    return fail("ambiguous_identity", `Retained share grant at line ${line} is already bound to a different repository or branch`, { path: LEGACY_GRANTS_RECOVERY_PATH, reason: "foreign_repository" });
+  }
+  const mapped = {
+    ...item,
+    version: 1,
+    grantVersion: item.grantVersion ?? 1,
+    revocationVersion: item.revocationVersion ?? 0,
+    tokenHash: item.tokenHash.toLowerCase(),
+    scope: legacyShareScope(item.scope, legacyProjectId, repositoryId),
+    repositoryId,
+    branch,
+  };
+  return parseShareGrant(mapped, line);
 }
 
 function decodeUtf8(bytes: Uint8Array, path: string): string {
@@ -175,6 +272,21 @@ function* readOptionalText(host: Host, context: ActionRequest, path: string): Ho
   if (!entry) return { text: "" };
   const source = yield* readFileVersioned(host, context.snapshot, path, entry.revision);
   return { text: decodeUtf8(source.bytes, path), entry };
+}
+
+function* readOptionalBytes(host: Host, context: ActionRequest, path: string): HostGenerator<{ bytes: Uint8Array; entry?: FileEntry }> {
+  const entry = (yield* listFiles(host, context, path)).find(item => item.path === path);
+  if (!entry) return { bytes: new Uint8Array() };
+  const source = yield* readFileVersioned(host, context.snapshot, path, entry.revision);
+  return { bytes: source.bytes, entry };
+}
+
+function* readRecoveryBytes(host: Host, context: ActionRequest, path: string): HostGenerator<{ bytes: Uint8Array; entry?: FileEntry }> {
+  const entry = (yield* listFiles(host, context, path)).find(item => item.path === path);
+  if (!entry) return { bytes: new Uint8Array() };
+  if (entry.byte_length > MAX_RECOVERY_BYTES) return fail("capacity", "Publishing recovery file exceeds the bounded proposal size", { path });
+  const source = yield* readFileVersioned(host, context.snapshot, path, entry.revision);
+  return { bytes: source.bytes, entry };
 }
 
 function* treePage(host: Host, parentId: string | null, cursor: string | null, expectedTreeRevision?: string): HostGenerator<TreePage> {
@@ -551,15 +663,15 @@ function* readEpisodeDocument(host: Host, context: ActionRequest): HostGenerator
   return { document, revision: entry?.revision ?? null, ...(entry ? { entry } : {}) };
 }
 
-function publicEpisode(row: unknown, index: number): EpisodeValue {
-  if (!isMap(row)) return fail("unsupported_format", `Invalid publication episode at index ${index}`, { path: EPISODES_PATH, reason: "invalid_source" });
+function publicEpisode(row: unknown, index: number, path = EPISODES_PATH): EpisodeValue {
+  if (!isMap(row)) return fail("unsupported_format", `Invalid publication episode at index ${index}`, { path, reason: "invalid_source" });
   const data = row.toJSON() as Record<string, unknown>;
   if (typeof data.id !== "string" || !data.id.trim() || !Number.isSafeInteger(data.number) || (data.number as number) < 1 ||
       typeof data.title !== "string" || !data.title.trim() || (data.scope !== "volume" && data.scope !== "chapter") ||
       typeof data.scopeId !== "string" || !data.scopeId.trim() ||
       (data.publishedAt !== undefined && (typeof data.publishedAt !== "string" || !validPublicationDate(data.publishedAt))) ||
       (data.sceneIds !== undefined && (!Array.isArray(data.sceneIds) || data.sceneIds.some(id => typeof id !== "string" || !id.trim()) || new Set(data.sceneIds).size !== data.sceneIds.length))) {
-    return fail("unsupported_format", `Invalid publication episode at index ${index}`, { path: EPISODES_PATH, reason: "invalid_source" });
+    return fail("unsupported_format", `Invalid publication episode at index ${index}`, { path, reason: "invalid_source" });
   }
   return {
     id: data.id,
@@ -572,20 +684,416 @@ function publicEpisode(row: unknown, index: number): EpisodeValue {
   };
 }
 
-function episodeRows(document: ReturnType<typeof parseDocument>): EpisodeValue[] {
-  if (!isMap(document.contents)) return fail("unsupported_format", `Invalid episode metadata in ${EPISODES_PATH}`, { path: EPISODES_PATH, reason: "invalid_source" });
+function episodeRows(document: ReturnType<typeof parseDocument>, path = EPISODES_PATH): EpisodeValue[] {
+  if (!isMap(document.contents)) return fail("unsupported_format", `Invalid episode metadata in ${path}`, { path, reason: "invalid_source" });
   const sequence = document.contents.get("episodes", true);
-  if (sequence !== undefined && !isSeq(sequence)) return fail("unsupported_format", `Episode metadata must contain an episodes sequence`, { path: EPISODES_PATH, reason: "invalid_source" });
-  const rows = sequence && isSeq(sequence) ? sequence.items.map(publicEpisode) : [];
+  if (sequence !== undefined && !isSeq(sequence)) return fail("unsupported_format", `Episode metadata must contain an episodes sequence`, { path, reason: "invalid_source" });
+  const rows = sequence && isSeq(sequence) ? sequence.items.map((row, index) => publicEpisode(row, index, path)) : [];
   const ids = new Set<string>();
   const numbers = new Set<number>();
   for (const episode of rows) {
     if (ids.has(episode.id) || numbers.has(episode.number)) {
-      return fail("unsupported_format", "Episode metadata contains duplicate IDs or numbers", { path: EPISODES_PATH, reason: "invalid_source" });
+      return fail("unsupported_format", "Episode metadata contains duplicate IDs or numbers", { path, reason: "invalid_source" });
     }
     ids.add(episode.id); numbers.add(episode.number);
   }
   return rows.sort((left, right) => left.number - right.number || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
+}
+
+function* recoveryInspect(_input: Record<string, unknown>, context: ActionRequest, host: Host): HostGenerator<unknown> {
+  const active = yield* readOptionalBytes(host, context, EPISODES_PATH);
+  const episode_sources: Array<Record<string, unknown>> = [];
+  const importable_episode_sources: Array<Record<string, unknown>> = [];
+  for (const sourcePath of EPISODE_RECOVERY_PATHS) {
+    const source = yield* readOptionalBytes(host, context, sourcePath);
+    if (!source.entry) {
+      episode_sources.push({ source_path: sourcePath, label: `${sourcePath} — absent`, state: "absent", source_revision: null,
+        target_revision: active.entry?.revision ?? null, episode_count: 0, detail: "" });
+      continue;
+    }
+    let count: number;
+    try {
+      const text = decodeUtf8(source.bytes, sourcePath);
+      const document = parseDocument(text, { strict: true, uniqueKeys: true });
+      if (document.errors.length > 0 || !isMap(document.contents)) throw new Error("Invalid YAML mapping");
+      count = episodeRows(document, sourcePath).length;
+    } catch (error) {
+      const cause = error as { code?: unknown };
+      episode_sources.push({ source_path: sourcePath, label: `${sourcePath} — invalid`, state: "invalid", source_revision: source.entry.revision,
+        target_revision: active.entry?.revision ?? null, episode_count: 0,
+        detail: cause.code === "invalid_encoding" ? "invalid_utf8" : "invalid_episode_map" });
+      continue;
+    }
+    const state = !active.entry ? "ready" : active.bytes.byteLength === source.bytes.byteLength && active.bytes.every((byte, index) => byte === source.bytes[index])
+      ? "already_imported" : "conflict";
+    const summary = { source_path: sourcePath, label: `${sourcePath} — ${state} (${count})`, state,
+      source_revision: source.entry.revision, target_revision: active.entry?.revision ?? null, episode_count: count,
+      detail: "" };
+    episode_sources.push(summary);
+    if (state === "ready") importable_episode_sources.push(summary);
+  }
+  const grantTarget = yield* listFiles(host, context, GRANTS_PATH);
+  const grantTargetEntry = grantTarget.find(item => item.path === GRANTS_PATH);
+  const grantSourcePage = yield* listFiles(host, context, LEGACY_GRANTS_RECOVERY_PATH);
+  const grantSourceEntry = grantSourcePage.find(item => item.path === LEGACY_GRANTS_RECOVERY_PATH);
+  const boundRepositoryId = context.scope.repository_id;
+  const boundBranch = context.scope.branch;
+  const mappingTarget = { repository_id: boundRepositoryId, branch: boundBranch };
+  const grant_sources: Array<Record<string, unknown>> = [];
+  const importable_grant_sources: Array<Record<string, unknown>> = [];
+  const legacy_project_options: Array<{ value: string; label: string }> = [];
+  let grant_import_available = false;
+  if (!grantSourceEntry) {
+    grant_sources.push({ source_path: LEGACY_GRANTS_RECOVERY_PATH, state: "absent", source_revision: null,
+      target_revision: grantTargetEntry?.revision ?? null, grant_count: 0,
+      project_ids: [], target_repository_id: boundRepositoryId, target_branch: boundBranch, detail: "" });
+  } else if (grantSourceEntry.byte_length > MAX_RECOVERY_BYTES || !Number.isSafeInteger(boundRepositoryId) ||
+      (boundRepositoryId as number) < 1 || !boundBranch) {
+    const reason = grantSourceEntry.byte_length > MAX_RECOVERY_BYTES ? "source_too_large" : "repository_not_bound";
+    grant_sources.push({ source_path: LEGACY_GRANTS_RECOVERY_PATH, state: "unavailable", source_revision: grantSourceEntry.revision,
+      target_revision: grantTargetEntry?.revision ?? null, grant_count: 0,
+      project_ids: [], target_repository_id: boundRepositoryId, target_branch: boundBranch, detail: reason });
+  } else {
+    try {
+      const source = yield* readFileVersioned(host, context.snapshot, LEGACY_GRANTS_RECOVERY_PATH, grantSourceEntry.revision);
+      const sourceText = decodeUtf8(source.bytes, LEGACY_GRANTS_RECOVERY_PATH);
+      const idsByProject = new Map<string, Set<string>>();
+      let grantCount = 0;
+      let sourceValid = true;
+      for (const [index, line] of sourceText.split(/\r?\n/u).entries()) {
+        if (!line.trim()) continue;
+        if (grantCount >= 1000) { sourceValid = false; break; }
+        let parsed: unknown;
+        try { parsed = JSON.parse(line) as unknown; }
+        catch { sourceValid = false; break; }
+        const item = record(parsed);
+        if (!item || typeof item.projectId !== "string" || !validLegacyProjectId(item.projectId)) {
+          sourceValid = false; break;
+        }
+        try {
+          const grant = mapLegacyShareGrant(item, index + 1, item.projectId, boundRepositoryId as number, boundBranch);
+          const ids = idsByProject.get(item.projectId) ?? new Set<string>();
+          if (ids.has(grant.id as string)) { sourceValid = false; break; }
+          ids.add(grant.id as string); idsByProject.set(item.projectId, ids); grantCount++;
+        } catch { sourceValid = false; break; }
+      }
+      const projectIds = [...idsByProject.keys()].sort();
+      if (!sourceValid) {
+        grant_sources.push({ source_path: LEGACY_GRANTS_RECOVERY_PATH, state: "invalid", source_revision: grantSourceEntry.revision,
+          target_revision: grantTargetEntry?.revision ?? null, grant_count: 0,
+          project_ids: [], target_repository_id: boundRepositoryId, target_branch: boundBranch,
+          detail: "invalid_jsonl_or_unsafe_grant" });
+      } else if (!grantCount) {
+        grant_sources.push({ source_path: LEGACY_GRANTS_RECOVERY_PATH, state: "empty", source_revision: grantSourceEntry.revision,
+          target_revision: grantTargetEntry?.revision ?? null, grant_count: 0,
+          project_ids: [], target_repository_id: boundRepositoryId, target_branch: boundBranch, detail: "" });
+      } else {
+        const summary = { source_path: LEGACY_GRANTS_RECOVERY_PATH, state: "mapping_required", source_revision: grantSourceEntry.revision,
+          target_revision: grantTargetEntry?.revision ?? null, grant_count: grantCount,
+          project_ids: projectIds, target_repository_id: boundRepositoryId, target_branch: boundBranch,
+          detail: "Confirm the legacy project ID and the displayed Host repository ID and branch before proposing." };
+        grant_sources.push(summary);
+        importable_grant_sources.push({ source_path: LEGACY_GRANTS_RECOVERY_PATH, label: LEGACY_GRANTS_RECOVERY_PATH });
+        for (const projectId of projectIds) {
+          legacy_project_options.push({ value: projectId, label: `${projectId} (${idsByProject.get(projectId)?.size ?? 0})` });
+        }
+        grant_import_available = true;
+      }
+    } catch (error) {
+      const cause = error as { code?: unknown };
+      grant_sources.push({ source_path: LEGACY_GRANTS_RECOVERY_PATH,
+        state: cause.code === "snapshot_stale" ? "unavailable" : "invalid",
+        source_revision: grantSourceEntry.revision, target_revision: grantTargetEntry?.revision ?? null,
+        grant_count: 0, project_ids: [], target_repository_id: boundRepositoryId,
+        target_branch: boundBranch, detail: cause.code === "snapshot_stale" ? "source_changed_during_inspection" : "invalid_encoding_or_source" });
+    }
+  }
+  return {
+    target_path: EPISODES_PATH,
+    episode_sources,
+    importable_episode_sources,
+    import_available: importable_episode_sources.length > 0,
+    grant_sources,
+    importable_grant_sources,
+    legacy_project_options,
+    grant_import_available,
+    mapping_target: mappingTarget,
+    host_recovery_sources: ["app-state/share-tokens.json", "share-tokens.json"].map(source_path => ({
+      source_path, state: "host_recovery_required",
+      detail: "This browser-local source is outside repository file capabilities. Use Host's explicit recovery flow; it submits only sanitized hash-only descriptors for the bound repository and branch.",
+    })),
+  };
+}
+
+function* recoveryGrantPropose(input: Record<string, unknown>, context: ActionRequest, host: Host): HostGenerator<unknown> {
+  const legacyProjectId = input.legacy_project_id;
+  const repositoryConfirmation = input.repository_id_confirmation;
+  const branchConfirmation = input.branch_confirmation;
+  const repositoryId = context.scope.repository_id;
+  const branch = context.scope.branch;
+  if (input.source_path !== LEGACY_GRANTS_RECOVERY_PATH || typeof legacyProjectId !== "string" ||
+      !validLegacyProjectId(legacyProjectId) || !Number.isSafeInteger(repositoryId) ||
+      (repositoryId as number) < 1 || repositoryConfirmation !== repositoryId ||
+      typeof branch !== "string" || !branch || branchConfirmation !== branch) {
+    return fail("ambiguous_identity", "Confirm a listed legacy project ID and the current Host repository ID and branch exactly", {
+      path: LEGACY_GRANTS_RECOVERY_PATH, reason: "explicit_mapping_required",
+    });
+  }
+  if (!context.idempotency_key) return fail("invalid_input", "Publishing recovery requires an idempotency key");
+  const sourceEntry = (yield* listFiles(host, context, LEGACY_GRANTS_RECOVERY_PATH))
+    .find(item => item.path === LEGACY_GRANTS_RECOVERY_PATH);
+  if (!sourceEntry) return fail("file_not_found", "Retained share-grant recovery source is unavailable", {
+    path: LEGACY_GRANTS_RECOVERY_PATH, reason: "missing_source",
+  });
+  if (sourceEntry.byte_length > MAX_RECOVERY_BYTES) return fail("capacity", "Retained share-grant source exceeds the proposal size limit", {
+    path: LEGACY_GRANTS_RECOVERY_PATH,
+  });
+  const source = yield* readFileVersioned(host, context.snapshot, LEGACY_GRANTS_RECOVERY_PATH, sourceEntry.revision);
+  const sourceText = decodeUtf8(source.bytes, LEGACY_GRANTS_RECOVERY_PATH);
+  const mapped: Record<string, unknown>[] = [];
+  const ids = new Set<string>();
+  let sourceProjectFound = false;
+  for (const [index, line] of sourceText.split(/\r?\n/u).entries()) {
+    if (!line.trim()) continue;
+    let parsed: unknown;
+    try { parsed = JSON.parse(line) as unknown; }
+    catch { return fail("unsupported_format", `Invalid retained share-grant JSONL at line ${index + 1}`, {
+      path: LEGACY_GRANTS_RECOVERY_PATH, reason: "invalid_source",
+    }); }
+    const item = record(parsed);
+    if (!item || typeof item.projectId !== "string" || !validLegacyProjectId(item.projectId)) return fail("unsupported_format",
+      `Invalid retained share-grant descriptor at line ${index + 1}`, { path: LEGACY_GRANTS_RECOVERY_PATH, reason: "invalid_source" });
+    if (item.projectId !== legacyProjectId) continue;
+    sourceProjectFound = true;
+    const grant = mapLegacyShareGrant(item, index + 1, legacyProjectId, repositoryId as number, branch);
+    const grantId = grant.id as string;
+    if (ids.has(grantId)) return fail("unsupported_format", `Duplicate retained share grant ID ${grantId}`, {
+      path: LEGACY_GRANTS_RECOVERY_PATH, reason: "duplicate_id",
+    });
+    ids.add(grantId);
+    if (grant.scope && (grant.scope as Record<string, unknown>).kind !== "project") {
+      const scope = grant.scope as { kind: "volume" | "chapter" | "scene"; id: string };
+      yield* validateShareScope(host, context, scope);
+    }
+    mapped.push(grant);
+  }
+  if (!sourceProjectFound || !mapped.length) return fail("ambiguous_identity", "The selected legacy project ID has no importable grant records", {
+    path: LEGACY_GRANTS_RECOVERY_PATH, reason: "foreign_project",
+  });
+  const target = yield* readRecoveryBytes(host, context, GRANTS_PATH);
+  if (target.entry) {
+    const existing: Record<string, unknown>[] = [];
+    const seen = new Set<string>();
+    for (const [index, line] of decodeUtf8(target.bytes, GRANTS_PATH).split(/\r?\n/u).entries()) {
+      if (!line.trim()) continue;
+      let parsed: unknown;
+      try { parsed = JSON.parse(line) as unknown; }
+      catch { return fail("conflict", "Canonical share metadata is malformed; retained grants were not imported", {
+        reason: "metadata_conflict", source_path: LEGACY_GRANTS_RECOVERY_PATH, source_revision: sourceEntry.revision,
+        target_path: GRANTS_PATH, target_revision: target.entry.revision,
+      }); }
+      if (hasUnsafeShareFields(parsed)) return fail("conflict", "Canonical share metadata contains account or bearer data", {
+        reason: "metadata_conflict", source_path: LEGACY_GRANTS_RECOVERY_PATH, source_revision: sourceEntry.revision,
+        target_path: GRANTS_PATH, target_revision: target.entry.revision,
+      });
+      let item: Record<string, unknown>;
+      try { item = parseShareGrant(parsed, index + 1); }
+      catch { return fail("conflict", "Canonical share metadata contains an invalid descriptor", {
+        reason: "metadata_conflict", source_path: LEGACY_GRANTS_RECOVERY_PATH, source_revision: sourceEntry.revision,
+        target_path: GRANTS_PATH, target_revision: target.entry.revision,
+      }); }
+      const grantId = item.id as string;
+      if (seen.has(grantId)) return fail("conflict", "Canonical share metadata contains duplicate grant IDs", {
+        reason: "metadata_conflict", source_path: LEGACY_GRANTS_RECOVERY_PATH, source_revision: sourceEntry.revision,
+        target_path: GRANTS_PATH, target_revision: target.entry.revision,
+      });
+      seen.add(grantId); existing.push(item);
+    }
+    if (canonicalJson(existing) === canonicalJson(mapped)) {
+      return { status: "already_imported", source_path: LEGACY_GRANTS_RECOVERY_PATH, target_path: GRANTS_PATH,
+        grant_count: mapped.length, legacy_project_id: legacyProjectId, repository_id: repositoryId, branch };
+    }
+    return fail("conflict", "A different canonical share-grant file already exists; no metadata was changed", {
+      reason: "metadata_conflict", source_path: LEGACY_GRANTS_RECOVERY_PATH, source_revision: sourceEntry.revision,
+      target_path: GRANTS_PATH, target_revision: target.entry.revision,
+    });
+  }
+  const bytes = new TextEncoder().encode(mapped.map(grant => JSON.stringify(grant)).join("\n") + "\n");
+  const id = `publishing-grant-recovery-${context.idempotency_key}`;
+  const proposal = yield* host.request<{ proposal_id: string }>(HOST_OPERATIONS.propose, {
+    changeset: {
+      id, idempotency_key: context.idempotency_key, scope: context.scope, snapshot: context.snapshot,
+      title: "旧共有権限を復旧",
+      reason: "Restore explicitly mapped hash-only legacy Publishing grants through Host review.",
+      read_set: [
+        { path: LEGACY_GRANTS_RECOVERY_PATH, revision: sourceEntry.revision },
+        { path: GRANTS_PATH, revision: null },
+      ],
+      units: [{
+        id: `publishing-grant-recovery-unit-${context.idempotency_key}`, label: "旧共有権限を復旧", depends_on: [],
+        operations: [{ id: `publishing-grant-recovery-write-${context.idempotency_key}`, kind: "create", path: GRANTS_PATH,
+          expected_revision: null, content: Array.from(bytes) }],
+      }],
+      evidence: [],
+      domain_evidence: [{ kind: "publishing.legacy_share_grants", source_path: LEGACY_GRANTS_RECOVERY_PATH,
+        source_revision: sourceEntry.revision, target_path: GRANTS_PATH, target_revision: null,
+        legacy_project_id: legacyProjectId, repository_id: repositoryId, branch, grant_count: mapped.length }],
+    },
+  });
+  if (!proposal || typeof proposal.proposal_id !== "string") return fail("storage_unknown", "Host did not return a retained share-grant proposal receipt");
+  return { change_set_id: id, proposal_id: proposal.proposal_id, status: "proposed",
+    preview: { source_path: LEGACY_GRANTS_RECOVERY_PATH, target_path: GRANTS_PATH, legacy_project_id: legacyProjectId,
+      repository_id: repositoryId, branch, grant_count: mapped.length } };
+}
+
+function* recoveryHostGrantPropose(input: Record<string, unknown>, context: ActionRequest, host: Host): HostGenerator<unknown> {
+  const sourceName = input.source_name;
+  const sourceSha256 = input.source_sha256;
+  const legacyProjectId = input.legacy_project_id;
+  const repositoryId = context.scope.repository_id;
+  const branch = context.scope.branch;
+  if ((sourceName !== "app-state/share-tokens.json" && sourceName !== "share-tokens.json") ||
+      typeof sourceSha256 !== "string" || !/^[a-f0-9]{64}$/u.test(sourceSha256) ||
+      typeof legacyProjectId !== "string" || !validLegacyProjectId(legacyProjectId) ||
+      !Number.isSafeInteger(repositoryId) || (repositoryId as number) < 1 ||
+      input.repository_id_confirmation !== repositoryId || typeof branch !== "string" || !branch ||
+      input.branch_confirmation !== branch || !Array.isArray(input.grants) || input.grants.length < 1 || input.grants.length > 1000) {
+    return fail("invalid_input", "Host recovery data must include a source digest, explicit legacy project mapping, and bounded hash-only grants", {
+      reason: "invalid_host_recovery_input",
+    });
+  }
+  if (!context.idempotency_key) return fail("invalid_input", "Publishing recovery requires an idempotency key");
+  const grants: Record<string, unknown>[] = [];
+  const ids = new Set<string>();
+  for (const [index, value] of input.grants.entries()) {
+    const item = record(value);
+    if (!item || item.projectId !== legacyProjectId) return fail("ambiguous_identity",
+      `Host recovery grant ${index + 1} does not match the explicitly selected legacy project ID`, { reason: "foreign_project" });
+    const grant = mapLegacyShareGrant(item, index + 1, legacyProjectId, repositoryId as number, branch);
+    const grantId = grant.id as string;
+    if (ids.has(grantId)) return fail("unsupported_format", `Duplicate Host recovery grant ID ${grantId}`, { reason: "duplicate_id" });
+    ids.add(grantId);
+    if ((grant.scope as Record<string, unknown>).kind !== "project") {
+      yield* validateShareScope(host, context, grant.scope as { kind: "volume" | "chapter" | "scene"; id: string });
+    }
+    grants.push(grant);
+  }
+  const target = yield* readRecoveryBytes(host, context, GRANTS_PATH);
+  const existing: Record<string, unknown>[] = [];
+  const existingById = new Map<string, Record<string, unknown>>();
+  for (const [index, line] of decodeUtf8(target.bytes, GRANTS_PATH).split(/\r?\n/u).entries()) {
+    if (!line.trim()) continue;
+    let parsed: unknown;
+    try { parsed = JSON.parse(line) as unknown; }
+    catch { return fail("conflict", "Canonical share metadata is malformed; Host recovery did not change it", {
+      reason: "metadata_conflict", source_name: sourceName, source_sha256: sourceSha256,
+      target_path: GRANTS_PATH, target_revision: target.entry?.revision ?? null,
+    }); }
+    if (hasUnsafeShareFields(parsed)) return fail("conflict", "Canonical share metadata contains account or bearer data", {
+      reason: "metadata_conflict", source_name: sourceName, source_sha256: sourceSha256,
+      target_path: GRANTS_PATH, target_revision: target.entry?.revision ?? null,
+    });
+    let item: Record<string, unknown>;
+    try { item = parseShareGrant(parsed, index + 1); }
+    catch { return fail("conflict", "Canonical share metadata contains an invalid descriptor", {
+      reason: "metadata_conflict", source_name: sourceName, source_sha256: sourceSha256,
+      target_path: GRANTS_PATH, target_revision: target.entry?.revision ?? null,
+    }); }
+    const grantId = item.id as string;
+    if (existingById.has(grantId)) return fail("conflict", "Canonical share metadata contains duplicate grant IDs", {
+      reason: "metadata_conflict", source_name: sourceName, source_sha256: sourceSha256,
+      target_path: GRANTS_PATH, target_revision: target.entry?.revision ?? null,
+    });
+    existingById.set(grantId, item); existing.push(item);
+  }
+  if (target.entry) {
+    if (canonicalJson(existing) === canonicalJson(grants)) return {
+      status: "already_imported", source_name: sourceName, source_sha256: sourceSha256,
+      legacy_project_id: legacyProjectId, repository_id: repositoryId, branch,
+      target_path: GRANTS_PATH, grant_count: grants.length, added_count: 0,
+    };
+    return fail("conflict", "A different canonical share-grant file already exists; Host recovery did not concatenate or overwrite it", {
+      reason: "metadata_conflict", source_name: sourceName, source_sha256: sourceSha256,
+      target_path: GRANTS_PATH, target_revision: target.entry.revision,
+    });
+  }
+  const content = new TextEncoder().encode(grants.map(grant => JSON.stringify(grant)).join("\n") + "\n");
+  if (content.byteLength > MAX_RECOVERY_BYTES) return fail("capacity", "Restored share metadata exceeds the proposal size limit", { path: GRANTS_PATH });
+  const id = `publishing-host-grant-recovery-${context.idempotency_key}`;
+  const proposal = yield* host.request<{ proposal_id: string }>(HOST_OPERATIONS.propose, {
+    changeset: {
+      id, idempotency_key: context.idempotency_key, scope: context.scope, snapshot: context.snapshot,
+      title: "Host-local の旧共有権限を復旧",
+      reason: "Restore explicitly mapped hash-only Host-local Publishing grants through Host review.",
+      read_set: [{ path: GRANTS_PATH, revision: null }],
+      units: [{
+        id: `publishing-host-grant-recovery-unit-${context.idempotency_key}`, label: "旧共有権限を復旧", depends_on: [],
+        operations: [{ id: `publishing-host-grant-recovery-write-${context.idempotency_key}`,
+          kind: "create", path: GRANTS_PATH,
+          expected_revision: null, content: Array.from(content) }],
+      }],
+      evidence: [],
+      domain_evidence: [{ kind: "publishing.host_local_share_grants", source_name: sourceName,
+        source_sha256: sourceSha256, legacy_project_id: legacyProjectId, repository_id: repositoryId,
+        branch, target_path: GRANTS_PATH, target_revision: null,
+        grant_count: grants.length, added_count: grants.length }],
+    },
+  });
+  if (!proposal || typeof proposal.proposal_id !== "string") return fail("storage_unknown", "Host did not return a local share-grant recovery receipt");
+  return { change_set_id: id, proposal_id: proposal.proposal_id, status: "proposed",
+    preview: { source_name: sourceName, source_sha256: sourceSha256, legacy_project_id: legacyProjectId,
+      repository_id: repositoryId, branch, target_path: GRANTS_PATH, grant_count: grants.length, added_count: grants.length } };
+}
+
+function* recoveryPropose(input: Record<string, unknown>, context: ActionRequest, host: Host): HostGenerator<unknown> {
+  const sourcePath = input.source_path;
+  if (typeof sourcePath !== "string" || !EPISODE_RECOVERY_PATHS.includes(sourcePath as typeof EPISODE_RECOVERY_PATHS[number])) {
+    return fail("invalid_input", "Unsupported Publishing recovery source path");
+  }
+  if (!context.idempotency_key) return fail("invalid_input", "Publishing recovery requires an idempotency key");
+  const source = yield* readRecoveryBytes(host, context, sourcePath);
+  if (!source.entry) return fail("file_not_found", `Publishing recovery source is unavailable: ${sourcePath}`, { path: sourcePath, reason: "missing_source" });
+  if (source.bytes.byteLength > MAX_RECOVERY_BYTES) return fail("capacity", "Publishing recovery source exceeds the proposal size limit", { path: sourcePath });
+  const text = decodeUtf8(source.bytes, sourcePath);
+  const document = parseDocument(text, { strict: true, uniqueKeys: true });
+  if (document.errors.length > 0 || !isMap(document.contents)) return fail("unsupported_format", `Invalid episode metadata in ${sourcePath}`, { path: sourcePath, reason: "invalid_source" });
+  const episodes = episodeRows(document, sourcePath);
+  const target = yield* readRecoveryBytes(host, context, EPISODES_PATH);
+  if (target.entry) {
+    const identical = target.bytes.byteLength === source.bytes.byteLength && target.bytes.every((byte, index) => byte === source.bytes[index]);
+    if (identical) return { status: "already_imported", source_path: sourcePath, target_path: EPISODES_PATH, episode_count: episodes.length };
+    return fail("conflict", "A different canonical episode map already exists; no data was changed", {
+      reason: "metadata_conflict", source_path: sourcePath, source_revision: source.entry.revision,
+      target_path: EPISODES_PATH, target_revision: target.entry.revision,
+    });
+  }
+  const id = `publishing-recovery-${context.idempotency_key}`;
+  const proposal = yield* host.request<{ proposal_id: string }>(HOST_OPERATIONS.propose, {
+    changeset: {
+      id, idempotency_key: context.idempotency_key, scope: context.scope, snapshot: context.snapshot,
+      title: "公開回マップを復旧",
+      reason: "Import the exact validated legacy Publishing episode-map bytes through Host review.",
+      read_set: [
+        { path: sourcePath, revision: source.entry.revision },
+        { path: EPISODES_PATH, revision: null },
+      ],
+      units: [{
+        id: `publishing-recovery-unit-${context.idempotency_key}`, label: "公開回マップを復旧", depends_on: [],
+        operations: [{
+          id: `publishing-recovery-write-${context.idempotency_key}`, kind: "create", path: EPISODES_PATH,
+          expected_revision: null, content: Array.from(source.bytes),
+        }],
+      }],
+      evidence: [],
+      domain_evidence: [{ kind: "publishing.legacy_episode_map", source_path: sourcePath,
+        source_revision: source.entry.revision, target_path: EPISODES_PATH, target_revision: null, episode_count: episodes.length }],
+    },
+  });
+  if (!proposal || typeof proposal.proposal_id !== "string") return fail("storage_unknown", "Host did not return a Publishing recovery proposal receipt");
+  return {
+    change_set_id: id, proposal_id: proposal.proposal_id, status: "proposed",
+    preview: { source_path: sourcePath, target_path: EPISODES_PATH, episode_count: episodes.length },
+  };
 }
 
 function validPublicationDate(value: string): boolean {
@@ -1069,6 +1577,10 @@ export const guest = createGuest(PLUGIN_ID, {
   "proprium.publishing.export.vertical-print": exportVerticalPrint,
   "proprium.publishing.episodes.read": episodeRead,
   "proprium.publishing.episodes.propose": episodePropose,
+  "proprium.publishing.recovery.inspect": recoveryInspect,
+  "proprium.publishing.recovery.propose": recoveryPropose,
+  "proprium.publishing.recovery.grants.propose": recoveryGrantPropose,
+  "proprium.publishing.recovery.hostgrants.propose": recoveryHostGrantPropose,
   "proprium.publishing.shares.list": shareList,
   "proprium.publishing.shares.create": shareCreate,
   "proprium.publishing.shares.revoke": shareRevoke,

@@ -1,0 +1,385 @@
+{
+  "schema": "proprium.authoring.feature-audit/v1",
+  "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+  "features": [
+    {
+      "feature_id": "PUB-01",
+      "plugin_id": "proprium.publishing",
+      "requirement": "Read the Narrative work tree and expose ordered all, volume, and chapter scopes from the pinned snapshot.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/publishing/guest.ts",
+        "plugins/publishing/plugin.json",
+        "plugins/publishing/domain.ts",
+        "tests/browser/authoring-publishing.acceptance.ts"
+      ],
+      "host_path": "Publishing project.tree delegates one requested page to proprium.narrative.hierarchy.tree through workspace.plugin.invoke; Host action dispatch binds repository and snapshot in app/src/browser/proprium/authoring/actions.ts and service.ts.",
+      "ui_path": "publishing.scope and the scope tabs in publishing.export.plaintext, publishing.export.epub, and publishing.export.vertical-print; Host renders declarations in app/src/browser/proprium/host/authoring/AuthoringSurface.tsx.",
+      "existing_tests": [
+        "plugins/publishing/guest.test.ts: project tree action forwards one page without eager reordering",
+        "plugins/publishing/guest.test.ts: all-work export preserves Narrative multi-volume page order",
+        "plugins/publishing/guest.test.ts: volume export includes only the selected volume",
+        "tests/browser/authoring-publishing.acceptance.ts: signed Publishing local export flow"
+      ],
+      "gaps": [
+        "Browser acceptance uses a single volume and the all-work scope; volume/chapter selector behavior and editor caret/IME continuity are not proven in browser."
+      ],
+      "required_fixes": [
+        "Extend browser acceptance with multiple volumes and explicit all/volume/chapter selection; verify no tree/snapshot response changes the active editor state."
+      ],
+      "dependencies": [
+        "proprium.narrative.hierarchy.tree",
+        "workspace.file.read",
+        "workspace.plugin.invoke",
+        "Host pinned snapshot and file-list services"
+      ],
+      "priority": "P1 early portability",
+      "verification": [
+        {
+          "command": "pnpm --filter @proprium/plugin-publishing test",
+          "result": "PASS",
+          "evidence": "Fresh run on this worktree; 43 tests passed."
+        },
+        {
+          "command": "pnpm exec playwright test --config tests/browser/authoring-publishing.playwright.config.ts",
+          "result": "NOT_CHECKED",
+          "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
+        }
+      ]
+    },
+    {
+      "feature_id": "PUB-02",
+      "plugin_id": "proprium.publishing",
+      "requirement": "Download raw, stripped, Kakuyomu, or Narou UTF-8 text for the selected work/volume/chapter scope without frontmatter or workspace writes.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/publishing/guest.ts",
+        "plugins/publishing/domain.ts",
+        "plugins/publishing/artifacts.ts",
+        "plugins/publishing/plugin.json",
+        "plugins/publishing/domain.test.ts",
+        "plugins/publishing/guest.test.ts",
+        "tests/browser/authoring-publishing.acceptance.ts"
+      ],
+      "host_path": "Guest streams UTF-8 chunks through artifact.create/append/seal/discard. app/src/browser/proprium/authoring/actions.ts and service.ts route those calls to the Host ArtifactBroker; Host download is a separate gesture in AuthoringSurface.tsx.",
+      "ui_path": "publishing.export.plaintext scope and markup form; Host artifact result and preflight dialog.",
+      "existing_tests": [
+        "plugins/publishing/domain.test.ts: TXT raw, stripped, Kakuyomu and Narou modes",
+        "plugins/publishing/guest.test.ts: export action reads only its pinned linked manuscript and seals Host artifact bytes",
+        "app/src/browser/proprium/authoring/brokers.test.ts: artifact size/digest/sequence checks",
+        "tests/browser/authoring-publishing.acceptance.ts: raw signed TXT download"
+      ],
+      "gaps": [
+        "Browser acceptance exercises raw mode only and does not compare the other three downloaded byte sequences or volume/chapter results."
+      ],
+      "required_fixes": [
+        "Exercise all four visible modes, selected volume and chapter, exact UTF-8 output and deterministic rerun in browser acceptance."
+      ],
+      "dependencies": [
+        "PUB-01",
+        "Narrative explicit manuscript paths",
+        "Host artifact broker and fresh download gesture"
+      ],
+      "priority": "P1 early portability",
+      "verification": [
+        {
+          "command": "pnpm --filter @proprium/plugin-publishing test",
+          "result": "PASS",
+          "evidence": "Fresh run on this worktree; 43 tests passed."
+        },
+        {
+          "command": "pnpm exec playwright test --config tests/browser/authoring-publishing.playwright.config.ts",
+          "result": "NOT_CHECKED",
+          "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
+        }
+      ]
+    },
+    {
+      "feature_id": "PUB-03",
+      "plugin_id": "proprium.publishing",
+      "requirement": "Create a deterministic EPUB3 ZIP for selected scope with navigation, ordered XHTML, ruby/bouten, optional safe cover, and optional ID-bearing Knowledge appendix.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/publishing/guest.ts",
+        "plugins/publishing/domain.ts",
+        "plugins/publishing/artifacts.ts",
+        "plugins/publishing/plugin.json",
+        "plugins/publishing/domain.test.ts",
+        "plugins/publishing/guest.test.ts",
+        "tests/browser/authoring-publishing.acceptance.ts"
+      ],
+      "host_path": "Guest streams stored ZIP records to the request-scoped ArtifactBroker; Host verifies bytes and exposes an explicit download. Optional Knowledge files are read from the same pinned workspace snapshot.",
+      "ui_path": "publishing.export.epub form for scope/title/subtitle/cover/appendix, followed by Host preflight and download.",
+      "existing_tests": [
+        "plugins/publishing/domain.test.ts: real deterministic EPUB3 ZIP with appendix and cover bytes",
+        "plugins/publishing/domain.test.ts: traversal cover rejection and unsupported MIME warning",
+        "plugins/publishing/guest.test.ts: EPUB action streams a real EPUB3 package through artifact continuation",
+        "tests/browser/authoring-publishing.acceptance.ts: downloaded EPUB ZIP/XHTML smoke check"
+      ],
+      "gaps": [
+        "Browser run does not open the file in an EPUB reader or cover all scopes, cover states, Knowledge unavailable, appendix filtering, and reader validation requirements."
+      ],
+      "required_fixes": [
+        "Add signed browser fixtures for scope, cover/appendix and missing optional Knowledge; open the downloaded EPUB in a browser-compatible EPUB validation/reader harness and assert referenced ZIP entries."
+      ],
+      "dependencies": [
+        "PUB-01",
+        "Host artifact broker",
+        "Optional Knowledge-owned files"
+      ],
+      "priority": "P1 early portability",
+      "verification": [
+        {
+          "command": "pnpm --filter @proprium/plugin-publishing test",
+          "result": "PASS",
+          "evidence": "Fresh run on this worktree; 43 tests passed."
+        },
+        {
+          "command": "pnpm exec playwright test --config tests/browser/authoring-publishing.playwright.config.ts",
+          "result": "NOT_CHECKED",
+          "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
+        }
+      ]
+    },
+    {
+      "feature_id": "PUB-04",
+      "plugin_id": "proprium.publishing",
+      "requirement": "Preview and print selected Japanese text in vertical mode with bunko, web-novel, and genko Host presets after a user gesture.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/publishing/guest.ts",
+        "plugins/publishing/domain.ts",
+        "plugins/publishing/plugin.json",
+        "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx",
+        "tests/browser/authoring-publishing.acceptance.ts"
+      ],
+      "host_path": "Guest seals plain UTF-8 text; Host-only artifact.preview_text streams to an escaped, text-only vertical renderer and opens native print after a fresh gesture.",
+      "ui_path": "publishing.export.vertical-print scope form, Host preview action, print preset select, and native print dialog.",
+      "existing_tests": [
+        "plugins/publishing/domain.test.ts: vertical print preserves canonical scene order",
+        "plugins/publishing/guest.test.ts: vertical print action seals ordered text for Host-only preview",
+        "tests/browser/authoring-publishing.acceptance.ts: vertical preview and print popup use vertical-rl"
+      ],
+      "gaps": [
+        "Browser test covers only the default bunko preset and does not test cancel, missing print capability, ruby/punctuation across all presets, or Mobile return/focus behavior."
+      ],
+      "required_fixes": [
+        "Run desktop and mobile WebKit scenarios for all three presets, print cancel, missing browser print state, and restoration of the same editor selection/caret."
+      ],
+      "dependencies": [
+        "PUB-01",
+        "Host safe artifact preview/print",
+        "Fresh native print gesture"
+      ],
+      "priority": "P2",
+      "verification": [
+        {
+          "command": "pnpm --filter @proprium/plugin-publishing test",
+          "result": "PASS",
+          "evidence": "Fresh run on this worktree; 43 tests passed."
+        },
+        {
+          "command": "pnpm exec playwright test --config tests/browser/authoring-publishing.playwright.config.ts",
+          "result": "NOT_CHECKED",
+          "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
+        }
+      ]
+    },
+    {
+      "feature_id": "PUB-05",
+      "plugin_id": "proprium.publishing",
+      "requirement": "Show five non-blocking preflight checks before TXT, EPUB, and print; reset on reopen; cancel without action or persisted checklist state.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/publishing/domain.ts",
+        "plugins/publishing/plugin.json",
+        "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx",
+        "tests/browser/authoring-publishing.acceptance.ts"
+      ],
+      "host_path": "Host AuthoringSurface owns ExportPreflightDialog and invokes download/print only after explicit continue; Publishing does not persist checklist state.",
+      "ui_path": "Host output confirmation dialog reached from TXT/EPUB download and vertical print controls.",
+      "existing_tests": [
+        "plugins/publishing/domain.test.ts: vertical print preserves canonical scene order and preflight stays non-blocking",
+        "tests/browser/authoring-publishing.acceptance.ts: explicit continue with unchecked items for TXT/EPUB/print"
+      ],
+      "gaps": [
+        "The browser scenario does not verify check order, checking all items, reset on reopen, or cancel preventing export/print."
+      ],
+      "required_fixes": [
+        "Exercise checklist order, warning count, all-checked state, reset, cancel, and no effect on cancelled actions in desktop and mobile browser tests."
+      ],
+      "dependencies": [
+        "Host preflight dialog",
+        "PUB-02",
+        "PUB-03",
+        "PUB-04"
+      ],
+      "priority": "P2",
+      "verification": [
+        {
+          "command": "pnpm --filter @proprium/plugin-publishing test",
+          "result": "PASS",
+          "evidence": "Fresh run on this worktree; 43 tests passed."
+        },
+        {
+          "command": "pnpm exec playwright test --config tests/browser/authoring-publishing.playwright.config.ts",
+          "result": "NOT_CHECKED",
+          "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
+        }
+      ]
+    },
+    {
+      "feature_id": "PUB-06",
+      "plugin_id": "proprium.publishing",
+      "requirement": "Read, create, edit, reorder, clear, and remove episode map entries through one revision-guarded Host proposal preserving unknown YAML and unrelated metadata.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/publishing/guest.ts",
+        "plugins/publishing/plugin.json",
+        "plugins/publishing/guest.test.ts"
+      ],
+      "host_path": "episodes.propose reads exact episode-map and hierarchy revisions and calls workspace.change.propose; app/src/browser/proprium/authoring/service.ts routes to Host writer/review/apply.",
+      "ui_path": "publishing.episode-map scope and record-list form; Host AuthoringReview displays and applies or rejects the proposal.",
+      "existing_tests": [
+        "plugins/publishing/guest.test.ts: episode proposal preserves unknown YAML fields and proposes one guarded metadata write",
+        "plugins/publishing/guest.test.ts: episode form blanks clear only publication dates and scene annotations",
+        "plugins/publishing/guest.test.ts: episode read presents records by episode number then ID"
+      ],
+      "gaps": [
+        "Browser acceptance now proposes and applies an exact legacy episode-map recovery, but does not cover ordinary episode editing/reordering/removal, review rejection/stale-read handling, or reload of user-edited mappings."
+      ],
+      "required_fixes": [
+        "Extend signed Desktop/Mobile browser coverage for episode read/edit/reorder/clear/remove, review rejection and stale-read behavior, then reload the approved mapping."
+      ],
+      "dependencies": [
+        "Narrative hierarchy tree",
+        "workspace.change.propose",
+        "Host review/apply"
+      ],
+      "priority": "P2",
+      "verification": [
+        {
+          "command": "pnpm --filter @proprium/plugin-publishing test",
+          "result": "PASS",
+          "evidence": "Fresh run on this worktree; 43 tests passed."
+        },
+        {
+          "command": "pnpm exec playwright test --config tests/browser/authoring-publishing.playwright.config.ts",
+          "result": "NOT_CHECKED",
+          "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
+        }
+      ]
+    },
+    {
+      "feature_id": "PUB-07",
+      "plugin_id": "proprium.publishing",
+      "requirement": "Manage scoped read-only grants with hash-only metadata and remote-confirmed activation/revocation; reader exposes only current authorized published scope when a provider is configured.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/publishing/guest.ts",
+        "plugins/publishing/plugin.json",
+        "app/src/browser/proprium/host/ReadonlyPublishingReader.tsx",
+        "app/src/browser/proprium/authoring/secrets.ts",
+        "plugins/publishing/guest.test.ts",
+        "app/src/browser/proprium/authoring/secrets.test.ts"
+      ],
+      "host_path": "Guest grant actions use Host capabilities, secret-token broker, change proposal and identity readers; readonly route uses the fixed-origin PublishingShareReaderAdapter. No provider is deployed by this repository or the Gateway.",
+      "ui_path": "publishing.share-links owner panel is available only when service configuration is trusted; Host ReadonlyPublishingReader serves the fixed read-only route.",
+      "existing_tests": [
+        "plugins/publishing/guest.test.ts: no-provider create makes no secret/proposal/network call",
+        "plugins/publishing/guest.test.ts: exact remote revision controls active status",
+        "plugins/publishing/guest.test.ts: hashed descriptor proposal never returns Host handle",
+        "app/src/browser/proprium/authoring/secrets.test.ts: fixed-origin reader transport and secret redaction tests"
+      ],
+      "gaps": [
+        "No Proprium browser proof for configured test provider, one-time reveal, reader navigation, non-disclosing invalid/expired/revoked responses, or remote-confirmed revocation transition."
+      ],
+      "required_fixes": [
+        "Add browser-only controlled test provider fixtures for owner consent/create/reveal/revoke and the Host read-only route; keep live provider claims separate."
+      ],
+      "dependencies": [
+        "workspace.identity.read",
+        "workspace.change.propose",
+        "secret.token.create",
+        "optional publishing.share-reader.v1 provider configuration and consent"
+      ],
+      "priority": "P2 conditional sharing",
+      "verification": [
+        {
+          "command": "pnpm --filter @proprium/plugin-publishing test",
+          "result": "PASS",
+          "evidence": "Fresh run on this worktree; 43 tests passed."
+        },
+        {
+          "command": "pnpm --filter @proprium/host test:proprium",
+          "result": "NOT_CHECKED",
+          "evidence": "This Publishing lane did not rerun the broad Host suite; only Publishing package tests ran."
+        }
+      ]
+    },
+    {
+      "feature_id": "PUB-08",
+      "plugin_id": "proprium.publishing",
+      "requirement": "Inspect and recover exact legacy episode maps and hashed grant descriptors through explicit review, preserving original sources, conflicts, unknown fields and repository/branch identity; surface global token-map recovery to Host.",
+      "status": "PARTIAL",
+      "implementation_files": [
+        "plugins/publishing/guest.ts",
+        "plugins/publishing/plugin.json",
+        "plugins/publishing/guest.test.ts",
+        "tests/browser/authoring-publishing.acceptance.ts",
+        "app/src/browser/proprium/host/authoring/PublishingHostTokenRecovery.tsx",
+        "app/src/browser/proprium/host/authoring/PublishingHostTokenRecovery.test.ts"
+      ],
+      "host_path": "Repository-retained episode/grant recovery uses pinned workspace.file.read and one workspace.change.propose ChangeSet with source and target preconditions. Retained grants require exact legacy projectId plus typed confirmation of current numeric repository ID and branch; safe extensions survive, sensitive fields/raw bearer-shaped values are rejected, and hierarchy scopes are checked. A separate Host-local importer component parses a user-selected JSON file in memory, strips owner/token-prefix fields and calls the declared hash-only recovery.hostgrants.propose action with the raw-file SHA-256. That action is present and tested in the plugin, but the Host component is not yet mounted or connected to the action dispatcher.",
+      "ui_path": "publishing.episode-map → 旧データの復旧 lists repository-scoped episode/grant sources and offers reviewed proposals. The `PublishingHostTokenRecovery` component has an accessible file picker and explicit mapping controls, but no Host surface currently mounts it, so browser-local token-map recovery has no reachable user flow yet.",
+      "existing_tests": [
+        "plugins/publishing/guest.test.ts: legacy episode recovery proposes exact source bytes with source and absent-target guards",
+        "plugins/publishing/guest.test.ts: retained hashed grants require an explicit repository and branch mapping and use a guarded Host proposal",
+        "plugins/publishing/guest.test.ts: retained grant mapping rejects foreign IDs, raw secrets, and repository or branch ambiguity",
+        "plugins/publishing/guest.test.ts: retained grant recovery recognizes an exact mapped target and rejects a divergent target",
+        "plugins/publishing/guest.test.ts: Host-local grant import accepts hash-only rows, preserves safe extensions and uses the existing broker",
+        "plugins/publishing/guest.test.ts: Host-local grant import refuses secrets, foreign mappings and divergent IDs",
+        "tests/browser/authoring-publishing.acceptance.ts: signed retained episode and grant recovery controls submit reviewed proposals"
+      ],
+      "gaps": [
+        "Host token-recovery component is not mounted and its inspect/propose callbacks are not connected to `recovery.hostgrants.propose`; local-source recovery is not yet usable from the Host UI.",
+        "The updated signed Publishing browser acceptance has been listed but not run in Chromium or Mobile WebKit on the integrated signed registry.",
+        "No real browser/e2e run has verified install, approval, apply, reload and offline recovery for the retained grant import path."
+      ],
+      "required_fixes": [
+        "Mount the Host-owned local file recovery component in an appropriate Host UI and connect its callbacks to the UI-only Publishing action under the exact Host scope and fresh gesture.",
+        "Run the signed Publishing browser acceptance in Chromium and Mobile WebKit and inspect both ChangeSet diffs."
+      ],
+      "dependencies": [
+        "workspace.file.read",
+        "workspace.change.propose",
+        "Host snapshot source/target revision guards",
+        "Host-owned explicit file selection and sanitized hash-only local-store recovery",
+        "Host-bound numeric repository identity and exact branch"
+      ],
+      "priority": "P2",
+      "verification": [
+        {
+          "command": "pnpm --filter @proprium/plugin-publishing test",
+          "result": "PASS",
+          "evidence": "Fresh run on this worktree; 43 tests passed."
+        },
+        {
+          "command": "pnpm --filter @proprium/plugin-publishing typecheck",
+          "result": "PASS",
+          "evidence": "Fresh strict TypeScript check on this worktree."
+        },
+        {
+          "command": "pnpm exec playwright test --config tests/browser/authoring-publishing.playwright.config.ts --list",
+          "result": "PASS",
+          "evidence": "The signed Publishing acceptance is registered for desktop Chromium and Mobile WebKit. Listing is not execution."
+        },
+        {
+          "command": "pnpm exec playwright test --config tests/browser/authoring-publishing.playwright.config.ts",
+          "result": "NOT_CHECKED",
+          "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
+        }
+      ]
+    }
+  ]
+}
