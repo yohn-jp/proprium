@@ -16,6 +16,7 @@ interface Fixture {
   ref: AssetGroupRef;
   scope: Scope;
   source: MemoryAssetSource;
+  store: MemoryAssetGroupStore;
   mintGesture(): object;
   setCapacity(patch: Partial<AssetCapacityMeasurement>): void;
   setRef(ref: AssetGroupRef): void;
@@ -29,6 +30,21 @@ class MemoryAssetSource implements AssetArtifactSource {
     const bytes = this.objects.get(path);
     if (!bytes || bytes.byteLength > max_bytes) throw new Error("missing source object");
     return Uint8Array.from(bytes);
+  }
+}
+
+class CountingAssetGroupStore extends MemoryAssetGroupStore {
+  loads = 0;
+  beforeGetChunk?: () => Promise<void>;
+  corruptReads = false;
+  override async getChunk(groupKey: string, path: string) {
+    this.loads += 1;
+    await this.beforeGetChunk?.();
+    const record = await super.getChunk(groupKey, path);
+    if (!record || !this.corruptReads) return record;
+    const bytes = Uint8Array.from(record.bytes);
+    bytes[0] = bytes[0]! ^ 0xff;
+    return { ...record, bytes };
   }
 }
 
@@ -67,7 +83,7 @@ function assetBundle(options: { bytes: Uint8Array; chunkBytes?: number; declared
   return { ref, objects, chunks, file_path: manifest.files[0]!.path };
 }
 
-function fixture(options: { bytes?: Uint8Array; chunkBytes?: number; declaredFileSha?: string } = {}): Fixture {
+function fixture(options: { bytes?: Uint8Array; chunkBytes?: number; declaredFileSha?: string; store?: MemoryAssetGroupStore } = {}): Fixture {
   const bundle = assetBundle({ bytes: options.bytes ?? new TextEncoder().encode("A😀B/漢字/café"), ...options });
   const source = new MemoryAssetSource();
   for (const [path, bytes] of bundle.objects) source.objects.set(path, bytes);
@@ -77,15 +93,16 @@ function fixture(options: { bytes?: Uint8Array; chunkBytes?: number; declaredFil
     device_requirements: ["Host policy permits this group on the current device"], memory_required_bytes: 24 * 1024 * 1024,
   };
   const minted = new WeakSet<object>();
+  const store = options.store ?? new MemoryAssetGroupStore();
   const broker = new AssetGroupBroker({
     resolver: { resolve: async (requestedPlugin, requestedGroup) => requestedPlugin === plugin_id && requestedGroup === idFor(currentRef) ? currentRef : undefined },
     source,
-    store: new MemoryAssetGroupStore(),
+    store,
     capacity: { measure: async () => structuredClone(capacity) },
     gestures: { consume: token => { if (!minted.has(token)) return false; minted.delete(token); return true; } },
   });
   return {
-    broker, ref: bundle.ref, scope, source,
+    broker, ref: bundle.ref, scope, source, store,
     mintGesture() { const token = {}; minted.add(token); return token; },
     setCapacity(patch) { capacity = { ...capacity, ...patch }; },
     setRef(ref) { currentRef = ref; },
@@ -251,6 +268,139 @@ test("plugin revocation and explicit cache clearing remove read leases and cache
   const token = instance.mintGesture();
   const cleared = await instance.broker.clearGroupCache(plugin_id, group_id, token);
   assert.ok(cleared.deleted_bytes > 0);
+});
+
+test("verified chunk lease reuses broker-owned bytes while checking current signed ref for every range", async () => {
+  const bytes = Uint8Array.from({ length: 1024 * 1024 }, (_, index) => (index * 17 + 3) & 255);
+  const store = new CountingAssetGroupStore();
+  const instance = fixture({ bytes, chunkBytes: bytes.byteLength, store });
+  await inspectAndAdmit(instance);
+  store.loads = 0;
+
+  const subtle = globalThis.crypto.subtle;
+  const originalDigest = subtle.digest;
+  const nativeDigest = originalDigest.bind(subtle);
+  let digestCalls = 0;
+  let digestBytes = 0;
+  subtle.digest = (async (algorithm: AlgorithmIdentifier, data: BufferSource) => {
+    digestCalls += 1;
+    digestBytes += data.byteLength;
+    return nativeDigest(algorithm, data);
+  }) as SubtleCrypto["digest"];
+  try {
+    for (let index = 0; index < 12; index += 1) {
+      const offset = index * 64 * 1024;
+      const result = await instance.broker.read(plugin_id, "plugin", scope, {
+        group_id, file_path: "onnx/tokenizer.json", offset, length: 32 * 1024,
+      });
+      assert.deepEqual(Uint8Array.from(result.bytes), bytes.subarray(offset, offset + result.bytes.length));
+    }
+  } finally {
+    subtle.digest = originalDigest;
+  }
+  assert.equal(store.loads, 1, "the verified chunk should be fetched from Host storage once for the active grant");
+  assert.equal(digestCalls, 1, "the full chunk should be hashed once, not once per engine range");
+  assert.equal(digestBytes, bytes.byteLength);
+
+  const changed = assetBundle({ bytes: new TextEncoder().encode("updated signed bytes"), id: group_id });
+  instance.setRef(changed.ref);
+  await assert.rejects(() => instance.broker.read(plugin_id, "plugin", scope, { group_id, file_path: "onnx/tokenizer.json" }),
+    (error: unknown) => error instanceof AssetBrokerError && error.code === "provider_unavailable" && error.details?.reason === "group_reference_changed");
+});
+
+test("verified chunk cache is isolated by scoped grant and caller result mutation", async () => {
+  const bytes = Uint8Array.from({ length: 128 * 1024 }, (_, index) => index & 255);
+  const store = new CountingAssetGroupStore();
+  const instance = fixture({ bytes, chunkBytes: bytes.byteLength, store });
+  await inspectAndAdmit(instance);
+  store.loads = 0;
+  const first = await instance.broker.read(plugin_id, "plugin", scope, { group_id, file_path: "onnx/tokenizer.json", length: 1024 });
+  first.bytes[0] = (first.bytes[0]! + 1) & 255;
+  const next = await instance.broker.read(plugin_id, "plugin", scope, { group_id, file_path: "onnx/tokenizer.json", length: 1024 });
+  assert.equal(next.bytes[0], bytes[0], "plugin-owned response arrays cannot mutate the broker's verified bytes");
+  assert.equal(store.loads, 1);
+
+  const otherScope: Scope = { ...scope, workspace_id: "workspace-b" };
+  const preview = await instance.broker.inspect(plugin_id, group_id, otherScope);
+  await instance.broker.admit(plugin_id, group_id, {
+    scope: otherScope, manifest_sha256: preview.manifest_sha256,
+    capacity_consent: { accepted: true, manifest_sha256: preview.manifest_sha256, storage_bytes: preview.storage_required_bytes, transfer_bytes: preview.transfer_required_bytes },
+    gesture: instance.mintGesture(),
+  });
+  store.loads = 0;
+  await instance.broker.read(plugin_id, "plugin", otherScope, { group_id, file_path: "onnx/tokenizer.json", length: 1024 });
+  assert.equal(store.loads, 1, "a separate workspace grant must verify its own scoped lease");
+  instance.broker.revokeScope(scope);
+  await assert.rejects(() => instance.broker.read(plugin_id, "plugin", scope, { group_id, file_path: "onnx/tokenizer.json" }),
+    (error: unknown) => error instanceof AssetBrokerError && error.code === "capability_denied");
+  await instance.broker.read(plugin_id, "plugin", otherScope, { group_id, file_path: "onnx/tokenizer.json", length: 1024 });
+  assert.equal(store.loads, 1, "revoking one scope must preserve another active scope's cache lease");
+});
+
+test("corrupt stored chunk bytes are never leased and revoke that scoped grant", async () => {
+  const store = new CountingAssetGroupStore();
+  const instance = fixture({ store });
+  await inspectAndAdmit(instance);
+  store.corruptReads = true;
+  await assert.rejects(() => instance.broker.read(plugin_id, "plugin", scope, { group_id, file_path: "onnx/tokenizer.json" }),
+    (error: unknown) => error instanceof AssetBrokerError && error.code === "provider_unavailable" && error.details?.reason === "asset_cache_missing_or_corrupt");
+  store.corruptReads = false;
+  await assert.rejects(() => instance.broker.read(plugin_id, "plugin", scope, { group_id, file_path: "onnx/tokenizer.json" }),
+    (error: unknown) => error instanceof AssetBrokerError && error.code === "capability_denied");
+});
+
+test("verified chunk LRU stays within its 32 MiB cap", async () => {
+  const chunkBytes = 9 * 1024 * 1024;
+  const bytes = new Uint8Array(chunkBytes * 4);
+  for (let chunk = 0; chunk < 4; chunk += 1) bytes.fill(chunk + 1, chunk * chunkBytes, (chunk + 1) * chunkBytes);
+  const store = new CountingAssetGroupStore();
+  const instance = fixture({ bytes, chunkBytes, store });
+  await inspectAndAdmit(instance);
+  store.loads = 0;
+
+  for (let index = 0; index < 4; index += 1) {
+    const result = await instance.broker.read(plugin_id, "plugin", scope, {
+      group_id, file_path: "onnx/tokenizer.json", offset: index * chunkBytes, length: 1,
+    });
+    assert.equal(result.bytes[0], index + 1);
+  }
+  await instance.broker.read(plugin_id, "plugin", scope, { group_id, file_path: "onnx/tokenizer.json", length: 1 });
+  assert.equal(store.loads, 5, "the oldest 9 MiB lease is evicted once four chunks exceed the 32 MiB bound");
+});
+
+test("plugin revocation denies a late chunk read that was waiting on storage", async () => {
+  const store = new CountingAssetGroupStore();
+  const instance = fixture({ store });
+  await inspectAndAdmit(instance);
+  let release!: () => void;
+  let entered!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  store.beforeGetChunk = async () => { store.beforeGetChunk = undefined; entered(); await gate; };
+  const pending = instance.broker.read(plugin_id, "plugin", scope, { group_id, file_path: "onnx/tokenizer.json" });
+  await started;
+  instance.broker.revokePlugin(plugin_id);
+  release();
+  await assert.rejects(() => pending,
+    (error: unknown) => error instanceof AssetBrokerError && error.code === "capability_denied");
+});
+
+test("explicit cache clearing invalidates a pending chunk read before storage completes", async () => {
+  const store = new CountingAssetGroupStore();
+  const instance = fixture({ store });
+  await inspectAndAdmit(instance);
+  let release!: () => void;
+  let entered!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  store.beforeGetChunk = async () => { store.beforeGetChunk = undefined; entered(); await gate; };
+  const pending = instance.broker.read(plugin_id, "plugin", scope, { group_id, file_path: "onnx/tokenizer.json" });
+  await started;
+  const cleared = instance.broker.clearGroupCache(plugin_id, group_id, instance.mintGesture());
+  await cleared;
+  release();
+  await assert.rejects(() => pending,
+    (error: unknown) => error instanceof AssetBrokerError && error.code === "capability_denied");
 });
 
 test("a missing signed model group stays unavailable and never reports a synthetic ready result", async () => {

@@ -4,6 +4,7 @@ import type { Caller, Scope } from "./types.js";
 const ASSET_SCHEMA = "proprium.assets/v1";
 const MAX_ASSET_MANIFEST_BYTES = 512 * 1024;
 const MAX_ASSET_CHUNK_BYTES = 16 * 1024 * 1024;
+const MAX_VERIFIED_CHUNK_CACHE_BYTES = 32 * 1024 * 1024;
 const DEFAULT_READ_BYTES = 64 * 1024;
 const MAX_READ_BYTES = 256 * 1024;
 const MAX_JSON_WIRE_BYTES = 1024 * 1024;
@@ -200,6 +201,12 @@ interface AssetGrant {
   readonly parsed: ParsedManifest;
 }
 
+interface VerifiedChunkLease {
+  readonly grant: AssetGrant;
+  readonly sha256: string;
+  readonly bytes: Uint8Array;
+}
+
 /** Fetches only relative immutable paths from a trusted Host-configured artifact base. */
 export class FetchAssetArtifactSource implements AssetArtifactSource {
   private readonly base: URL;
@@ -369,7 +376,11 @@ export class MemoryAssetGroupStore implements AssetGroupStore {
 /** Consent-gated transfer and scoped reads for signed optional asset groups. */
 export class AssetGroupBroker {
   private readonly grants = new Map<string, AssetGrant>();
+  /** LRU leases are scoped to one exact grant and hold broker-owned verified bytes only. */
+  private readonly verifiedChunks = new Map<string, VerifiedChunkLease>();
+  private verifiedChunkCacheBytes = 0;
   private readonly transfers = new Map<string, AbortController>();
+  private readonly clearingGroups = new Set<string>();
   private readonly pluginEpochs = new Map<string, number>();
   private readonly maxReadBytes: number;
   private readonly now: () => number;
@@ -411,9 +422,10 @@ export class AssetGroupBroker {
         !Number.isSafeInteger(input.capacity_consent.transfer_bytes) || input.capacity_consent.transfer_bytes < 0) {
       throw invalid("Explicit asset capacity consent is required");
     }
+    const transferKey = groupIdentity(plugin_id, group_id);
+    if (this.clearingGroups.has(transferKey)) throw new AssetBrokerError("capacity", "Asset cache is being cleared", { reason: "cache_clear_active" }, true);
     if (!this.options.gestures.consume(input.gesture)) throw denied("A fresh trusted Host gesture is required to transfer assets");
 
-    const transferKey = groupIdentity(plugin_id, group_id);
     if (this.transfers.has(transferKey)) throw new AssetBrokerError("capacity", "This asset group already has an active transfer", { reason: "transfer_active" }, true);
     const controller = new AbortController();
     const linked = linkAbortSignals(controller, input.signal);
@@ -484,7 +496,10 @@ export class AssetGroupBroker {
       if ((this.pluginEpochs.get(plugin_id) ?? 0) !== epoch) throw cancelled("Plugin was disabled during asset transfer");
       await this.assertStillCurrent(parsed, signal);
       const grant: AssetGrant = { plugin_id, group_id, ref: parsed.ref, scope: structuredClone(input.scope), parsed };
-      this.grants.set(grantIdentity(plugin_id, group_id, input.scope), grant);
+      const grantKey = grantIdentity(plugin_id, group_id, input.scope);
+      const priorGrant = this.grants.get(grantKey);
+      if (priorGrant) this.clearVerifiedChunksForGrant(priorGrant);
+      this.grants.set(grantKey, grant);
       progress("verify", true);
       return {
         group_id, role: parsed.ref.role, manifest_sha256: parsed.ref.sha256,
@@ -512,8 +527,16 @@ export class AssetGroupBroker {
     const grant = this.grants.get(key);
     if (!grant) throw denied("Asset group has not been explicitly admitted for this plugin scope");
     if (!sameScope(grant.scope, scope)) { this.grants.delete(key); throw denied("Asset group grant belongs to another workspace generation"); }
+    const pluginEpoch = this.pluginEpochs.get(plugin_id) ?? 0;
     try { await this.assertStillCurrent(grant.parsed); }
-    catch (error) { this.grants.delete(key); throw error; }
+    catch (error) {
+      if (this.grants.get(key) === grant) {
+        this.grants.delete(key);
+        this.clearVerifiedChunksForGrant(grant);
+      }
+      throw error;
+    }
+    this.assertReadLease(key, grant, pluginEpoch);
     const file = grant.parsed.manifest.files.find(item => item.path === request.file_path);
     if (!file) throw new AssetBrokerError("file_not_found", "Asset file is not declared in the admitted group");
     if (request.offset > file.bytes) throw invalid("Asset range starts beyond end of file");
@@ -525,14 +548,30 @@ export class AssetGroupBroker {
       const start = Math.max(request.offset, chunk.offset);
       const end = Math.min(rangeEnd, chunk.offset + chunk.bytes);
       if (end <= start) continue;
-      const record = await this.getChunk(grant.parsed, chunk.path);
-      if (!record || !await validStoredChunk(record, grant.parsed, chunk)) {
-        await this.options.store.deleteChunk(grant.parsed.group_key, chunk.path).catch(() => undefined);
-        this.grants.delete(key);
-        throw unavailable("Verified asset bytes are no longer available in Host storage", { reason: "asset_cache_missing_or_corrupt", path: chunk.path });
+      this.assertReadLease(key, grant, pluginEpoch);
+      let verifiedBytes = this.getVerifiedChunk(grant, chunk);
+      if (!verifiedBytes) {
+        const stored = await this.getChunk(grant.parsed, chunk.path);
+        this.assertReadLease(key, grant, pluginEpoch);
+        const snapshot = stored?.bytes instanceof Uint8Array ? Uint8Array.from(stored.bytes) : undefined;
+        const record = stored && snapshot ? { ...stored, bytes: snapshot } : stored;
+        const valid = Boolean(record && await validStoredChunk(record, grant.parsed, chunk));
+        this.assertReadLease(key, grant, pluginEpoch);
+        if (!valid || !record || !snapshot) {
+          await this.options.store.deleteChunk(grant.parsed.group_key, chunk.path).catch(() => undefined);
+          this.assertReadLease(key, grant, pluginEpoch);
+          if (this.grants.get(key) === grant) {
+            this.grants.delete(key);
+            this.clearVerifiedChunksForGrant(grant);
+          }
+          throw unavailable("Verified asset bytes are no longer available in Host storage", { reason: "asset_cache_missing_or_corrupt", path: chunk.path });
+        }
+        verifiedBytes = this.rememberVerifiedChunk(grant, chunk, snapshot);
       }
-      range.set(record.bytes.subarray(start - chunk.offset, end - chunk.offset), start - request.offset);
+      this.assertReadLease(key, grant, pluginEpoch);
+      range.set(verifiedBytes.subarray(start - chunk.offset, end - chunk.offset), start - request.offset);
     }
+    this.assertReadLease(key, grant, pluginEpoch);
     const result = fitAssetReadWire({
       group_id: request.group_id,
       file_path: request.file_path,
@@ -549,6 +588,7 @@ export class AssetGroupBroker {
   revokePlugin(plugin_id: string): void {
     this.pluginEpochs.set(plugin_id, (this.pluginEpochs.get(plugin_id) ?? 0) + 1);
     for (const [key, grant] of this.grants) if (grant.plugin_id === plugin_id) this.grants.delete(key);
+    this.clearVerifiedChunks(lease => lease.grant.plugin_id === plugin_id);
     for (const [key, controller] of this.transfers) if (key.startsWith(`${encodeURIComponent(plugin_id)}/`)) controller.abort();
   }
 
@@ -556,6 +596,7 @@ export class AssetGroupBroker {
   revokeScope(scope: Scope): void {
     assertScope(scope);
     for (const [key, grant] of this.grants) if (sameScope(grant.scope, scope)) this.grants.delete(key);
+    this.clearVerifiedChunks(lease => sameScope(lease.grant.scope, scope));
   }
 
   /** Explicit Host UI cache clearing; plugin callers cannot purge shared immutable assets. */
@@ -565,11 +606,73 @@ export class AssetGroupBroker {
     if (!this.options.gestures.consume(gesture)) throw denied("A fresh trusted Host gesture is required to clear asset cache");
     const transferKey = groupIdentity(plugin_id, group_id);
     if (this.transfers.has(transferKey)) throw new AssetBrokerError("capacity", "Asset cache cannot be cleared during a transfer", { reason: "transfer_active" }, true);
-    const ref = await this.resolveRef(plugin_id, group_id);
-    const groupKey = makeGroupKey(plugin_id, ref);
-    for (const [key, grant] of this.grants) if (grant.plugin_id === plugin_id && grant.group_id === group_id) this.grants.delete(key);
-    try { return { deleted_bytes: await this.options.store.deleteGroup(groupKey) }; }
-    catch { throw storageError("Asset cache could not be cleared"); }
+    if (this.clearingGroups.has(transferKey)) throw new AssetBrokerError("capacity", "Asset cache is already being cleared", { reason: "cache_clear_active" }, true);
+    this.clearingGroups.add(transferKey);
+    this.revokeGroup(plugin_id, group_id);
+    try {
+      const ref = await this.resolveRef(plugin_id, group_id);
+      const groupKey = makeGroupKey(plugin_id, ref);
+      try { return { deleted_bytes: await this.options.store.deleteGroup(groupKey) }; }
+      catch { throw storageError("Asset cache could not be cleared"); }
+    } finally {
+      this.clearingGroups.delete(transferKey);
+    }
+  }
+
+  private assertReadLease(key: string, grant: AssetGrant, pluginEpoch: number): void {
+    if (this.grants.get(key) !== grant || (this.pluginEpochs.get(grant.plugin_id) ?? 0) !== pluginEpoch) {
+      throw denied("Asset group read lease was revoked during the request");
+    }
+  }
+
+  private getVerifiedChunk(grant: AssetGrant, chunk: AssetManifestChunk): Uint8Array | undefined {
+    const key = verifiedChunkIdentity(grant, chunk.path);
+    const lease = this.verifiedChunks.get(key);
+    if (!lease) return undefined;
+    if (lease.grant !== grant || lease.sha256 !== chunk.sha256 || lease.bytes.byteLength !== chunk.bytes) {
+      this.deleteVerifiedChunk(key);
+      return undefined;
+    }
+    this.verifiedChunks.delete(key);
+    this.verifiedChunks.set(key, lease);
+    return lease.bytes;
+  }
+
+  private rememberVerifiedChunk(grant: AssetGrant, chunk: AssetManifestChunk, bytes: Uint8Array): Uint8Array {
+    if (bytes.byteLength > MAX_VERIFIED_CHUNK_CACHE_BYTES) return bytes;
+    const key = verifiedChunkIdentity(grant, chunk.path);
+    this.deleteVerifiedChunk(key);
+    const lease: VerifiedChunkLease = { grant, sha256: chunk.sha256, bytes };
+    this.verifiedChunks.set(key, lease);
+    this.verifiedChunkCacheBytes += bytes.byteLength;
+    while (this.verifiedChunkCacheBytes > MAX_VERIFIED_CHUNK_CACHE_BYTES) {
+      const oldest = this.verifiedChunks.keys().next().value as string | undefined;
+      if (oldest === undefined) break;
+      this.deleteVerifiedChunk(oldest);
+    }
+    return bytes;
+  }
+
+  private clearVerifiedChunksForGrant(grant: AssetGrant): void {
+    this.clearVerifiedChunks(lease => lease.grant === grant);
+  }
+
+  private clearVerifiedChunks(matches: (lease: VerifiedChunkLease) => boolean): void {
+    for (const [key, lease] of this.verifiedChunks) if (matches(lease)) this.deleteVerifiedChunk(key);
+  }
+
+  private deleteVerifiedChunk(key: string): void {
+    const lease = this.verifiedChunks.get(key);
+    if (!lease) return;
+    this.verifiedChunks.delete(key);
+    this.verifiedChunkCacheBytes -= lease.bytes.byteLength;
+  }
+
+  private revokeGroup(plugin_id: string, group_id: string): void {
+    for (const [key, grant] of this.grants) {
+      if (grant.plugin_id === plugin_id && grant.group_id === group_id) this.grants.delete(key);
+    }
+    this.clearVerifiedChunks(lease => lease.grant.plugin_id === plugin_id && lease.grant.group_id === group_id);
   }
 
   private async loadCurrentManifest(plugin_id: string, group_id: string, signal?: AbortSignal): Promise<ParsedManifest> {
@@ -868,6 +971,9 @@ function scopeKey(scope: Scope): string { return JSON.stringify([scope.workspace
 function groupIdentity(pluginId: string, groupId: string): string { return `${encodeURIComponent(pluginId)}/${encodeURIComponent(groupId)}`; }
 function makeGroupKey(pluginId: string, ref: AssetGroupRef): string { return `${groupIdentity(pluginId, ref.id)}/${ref.sha256}`; }
 function grantIdentity(pluginId: string, groupId: string, scope: Scope): string { return `${groupIdentity(pluginId, groupId)}/${encodeURIComponent(scopeKey(scope))}`; }
+function verifiedChunkIdentity(grant: AssetGrant, path: string): string {
+  return `${grantIdentity(grant.plugin_id, grant.group_id, grant.scope)}/${encodeURIComponent(path)}`;
+}
 function chunkRecordKey(groupKey: string, path: string): string { return `${groupKey}/${encodeURIComponent(path)}`; }
 function sameAssetRef(left: AssetGroupRef, right: AssetGroupRef): boolean {
   return left.id === right.id && left.manifest_path === right.manifest_path && left.sha256 === right.sha256 &&

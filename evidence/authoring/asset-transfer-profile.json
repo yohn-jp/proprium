@@ -1,0 +1,87 @@
+{
+  "schema": "proprium.asset-transfer-profile/v1",
+  "measured_at_utc": "2026-10-28T22:47:43Z",
+  "scope": "Synthetic AssetGroupBroker range-read microbenchmark; not a full browser or model-inference benchmark.",
+  "environment": {
+    "runtime": "Node.js v24.21.0",
+    "digest": "WebCrypto SHA-256",
+    "baseline_commit": "75816593cec3dbca9080ec7073679ab3998993a7",
+    "baseline": "AssetGroupBroker before scoped verified-chunk LRU",
+    "optimized": "AssetGroupBroker with 32 MiB grant-scoped verified-chunk LRU"
+  },
+  "method": {
+    "chunk_bytes": 16777216,
+    "chunk_source": "Deterministic synthetic immutable 16 MiB chunk, admitted and verified before timing each run.",
+    "request_offsets": "Contiguous, non-overlapping ranges beginning at offset zero in the same chunk.",
+    "checks": [
+      "Every returned byte in every measured range was compared with the deterministic source bytes.",
+      "The output checksum matched between baseline and optimized runs for each workload.",
+      "Store getChunk calls and returned bytes were counted after admission.",
+      "WebCrypto SHA-256 calls and input bytes were counted during range reads."
+    ],
+    "limits": [
+      "Synthetic range sizes approximate repeated engine reads; they are not captured E5/BGE runtime traces.",
+      "The profile measures the broker path in Node.js. It does not establish browser IndexedDB latency, browser memory pressure, model download time, or inference latency."
+    ]
+  },
+  "workloads": [
+    {
+      "name": "e5-shaped",
+      "read_count": 1900,
+      "range_bytes": 8192,
+      "requested_and_served_bytes": 15564800,
+      "response_checksum": 1984512000,
+      "baseline": {
+        "elapsed_ms": 40601.08,
+        "store_loads": 1900,
+        "store_bytes_loaded": 31876710400,
+        "sha256_calls": 1900,
+        "sha256_input_bytes": 31876710400
+      },
+      "optimized": {
+        "elapsed_ms": 594.1,
+        "store_loads": 1,
+        "store_bytes_loaded": 16777216,
+        "sha256_calls": 1,
+        "sha256_input_bytes": 16777216
+      },
+      "elapsed_speedup": 68.34
+    },
+    {
+      "name": "bge-shaped",
+      "read_count": 9000,
+      "range_bytes": 1024,
+      "requested_and_served_bytes": 9216000,
+      "response_checksum": 1175040000,
+      "baseline": {
+        "elapsed_ms": 157205.82,
+        "store_loads": 9000,
+        "store_bytes_loaded": 150994944000,
+        "sha256_calls": 9000,
+        "sha256_input_bytes": 150994944000
+      },
+      "optimized": {
+        "elapsed_ms": 387.91,
+        "store_loads": 1,
+        "store_bytes_loaded": 16777216,
+        "sha256_calls": 1,
+        "sha256_input_bytes": 16777216
+      },
+      "elapsed_speedup": 405.26
+    }
+  ],
+  "security_checks": [
+    "Signed manifest current-reference resolution remains on every plugin read.",
+    "Cache entries are keyed by exact plugin, group, scope, grant instance, and chunk path and are discarded on plugin/scope revocation or explicit group clear.",
+    "A late asynchronous read is denied after plugin revocation or cache clear.",
+    "Corrupt stored bytes are not cached and invalidate the scoped grant.",
+    "Plugin response-array mutation cannot modify broker-owned cached bytes.",
+    "LRU storage is capped at 33554432 bytes."
+  ],
+  "verification": {
+    "tests": "pnpm exec node --import tsx --test src/browser/proprium/authoring/assets.test.ts",
+    "test_result": "16 passed",
+    "typecheck": "pnpm --dir packages/contracts build && pnpm --dir app typecheck",
+    "typecheck_result": "passed"
+  }
+}
