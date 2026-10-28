@@ -8,8 +8,8 @@
     "build:proprium": "vite build --config vite.proprium.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.proprium.json",
     "typecheck:proprium": "tsc --noEmit -p tsconfig.proprium.json",
-    "test": "node --import tsx --test 'src/browser/proprium/**/*.test.ts'",
-    "test:proprium": "node --import tsx --test 'src/browser/proprium/**/*.test.ts'"
+    "test": "node --import tsx --test 'src/browser/proprium/**/*.test.ts' 'src/browser/proprium/**/*.test.tsx'",
+    "test:proprium": "node --import tsx --test 'src/browser/proprium/**/*.test.ts' 'src/browser/proprium/**/*.test.tsx'"
   },
   "dependencies": {
     "@bytecodealliance/jco-transpile": "0.20.0",
