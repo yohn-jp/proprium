@@ -180,6 +180,7 @@ export function SceneEditor({
   onCheckpointScratch,
   registerScratchFlush,
   registerNavigationFlush,
+  registerQuickAppend,
   scratchBusy,
   pendingCount,
 }: {
@@ -233,6 +234,7 @@ export function SceneEditor({
   onCheckpointScratch: (entry: JournalEntry) => Promise<void>;
   registerScratchFlush: (flush: (() => Promise<JournalEntry | null>) | null) => void;
   registerNavigationFlush: (flush: (() => Promise<string | null>) | null) => void;
+  registerQuickAppend?: (append: ((text: string) => string | null) | null) => void;
   scratchBusy: boolean;
   pendingCount: number;
 }) {
@@ -270,6 +272,12 @@ export function SceneEditor({
     registerNavigationFlush(() => editorRef.current?.flushComposition() ?? Promise.resolve(null));
     return () => registerNavigationFlush(null);
   }, [registerNavigationFlush]);
+
+  useEffect(() => {
+    if (!registerQuickAppend) return;
+    registerQuickAppend(text => editorRef.current?.appendAtEnd(text) ?? null);
+    return () => registerQuickAppend(null);
+  }, [registerQuickAppend]);
 
   const onEditorTextChange = useCallback((next: string) => {
     pendingEditorTextRef.current = next;

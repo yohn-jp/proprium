@@ -35,6 +35,7 @@ function positionScrollContainer(view: EditorView): HTMLElement {
 export interface ManuscriptInputHandle {
   focus(): void;
   flushComposition(): Promise<string>;
+  appendAtEnd(text: string): string;
   insert(symbol: WritingSymbolId): void;
   selectRange(start: number, end: number): boolean;
   restorePosition(position: { cursorSentenceIndex: number | null; scrollTop: number; selection?: { anchor: number; head: number } }): boolean;
@@ -124,6 +125,19 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
           throw new Error("日本語入力の変換が完了していません。変換を確定してから画面を切り替えてください。");
         }
       }
+      return view.state.doc.toString();
+    },
+    appendAtEnd(text) {
+      const view = viewRef.current;
+      if (!view) throw new Error("原稿エディターを利用できません。");
+      if (isViewComposing(view)) throw new Error("日本語入力の変換が完了していません。");
+      const current = view.state.doc.toString();
+      const newline = current.includes("\r\n") ? "\r\n" : "\n";
+      const separator = !current ? "" : current.endsWith(newline + newline) ? "" : current.endsWith(newline) ? newline : newline + newline;
+      const insert = separator + text;
+      const end = view.state.doc.length;
+      view.dispatch({ changes: { from: end, insert }, selection: { anchor: end + insert.length }, userEvent: "input.type" });
+      view.focus();
       return view.state.doc.toString();
     },
     insert(symbol) {

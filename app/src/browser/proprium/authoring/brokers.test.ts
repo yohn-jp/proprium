@@ -18,14 +18,53 @@ test("artifact MIME supports canonical UTF-8 text without accepting header injec
   }
 });
 
-test("derived cache is namespaced, snapshot-keyed, and supports eviction", async () => {
+test("derived cache binds the Host workspace and snapshot and supports same-branch previous reads", async () => {
   const store = new MemoryBrokerStore(); const broker = new DerivedCacheBroker(store);
-  assert.deepEqual(await broker.get("proprium.research", cacheKey), { found: false });
-  assert.deepEqual(await broker.put("proprium.research", cacheKey, { terms: ["章", "scene"] }), { stored: true });
-  assert.deepEqual(await broker.get("proprium.research", cacheKey), { found: true, value: { terms: ["章", "scene"] } });
-  await assert.rejects(() => broker.get("proprium.speaker", cacheKey), (error: unknown) => error instanceof BrokerError && error.code === "invalid_input");
-  assert.deepEqual(await broker.evict("proprium.research", cacheKey), { evicted: true });
-  assert.deepEqual(await broker.get("proprium.research", cacheKey), { found: false });
+  assert.deepEqual(await broker.get("proprium.research", scope, snapshot, cacheKey), { found: false });
+  assert.deepEqual(await broker.put("proprium.research", scope, snapshot, cacheKey, { terms: ["章", "scene"] }), { stored: true });
+  assert.deepEqual(await broker.get("proprium.research", scope, snapshot, cacheKey), { found: true, value: { terms: ["章", "scene"] } });
+  const nextSnapshot: Snapshot = { id: "snap-b", local_commit: null, worktree_generation: "g2", draft_generation: null };
+  const nextKey = { ...cacheKey, snapshot: nextSnapshot };
+  assert.deepEqual(await broker.put("proprium.research", scope, nextSnapshot, nextKey, { terms: ["unchanged", "vector"] }), { stored: true });
+  assert.deepEqual(await broker.getPrevious("proprium.research", scope, nextSnapshot, {
+    schema_version: 1, config_digest: "cfg", key: "terms",
+  }), { found: true, snapshot, value: { terms: ["章", "scene"] } });
+  await assert.rejects(() => broker.get("proprium.research", scope, nextSnapshot, cacheKey),
+    (error: unknown) => error instanceof BrokerError && error.code === "capability_denied");
+  const otherScope = { ...scope, repository_id: 2 };
+  assert.deepEqual(await broker.getPrevious("proprium.research", otherScope, nextSnapshot, {
+    schema_version: 1, config_digest: "cfg", key: "terms",
+  }), { found: false });
+  await assert.rejects(() => broker.get("proprium.speaker", scope, snapshot, cacheKey),
+    (error: unknown) => error instanceof BrokerError && error.code === "invalid_input");
+  assert.deepEqual(await broker.evict("proprium.research", scope, nextSnapshot, nextKey), { evicted: true });
+  assert.deepEqual(await broker.get("proprium.research", scope, nextSnapshot, nextKey), { found: false });
+});
+
+test("cache prefix cleanup is bounded to Host-pinned current or previous generations", async () => {
+  const store = new MemoryBrokerStore(); const broker = new DerivedCacheBroker(store);
+  const semanticKey = (bound: Snapshot, key: string) => ({ plugin_id: "proprium.semantic", snapshot: bound,
+    schema_version: 3, config_digest: "cfg", model_digest: "model", key });
+  const previous = { ...snapshot, id: "semantic-before" };
+  const current = { ...snapshot, id: "semantic-current", worktree_generation: "g2" };
+  const later = { ...scope, generation: "g2" };
+  await broker.put("proprium.semantic", scope, previous, semanticKey(previous, "semantic-index-v3-page-abc-0"), { page: 1 });
+  await broker.put("proprium.semantic", scope, previous, semanticKey(previous, "semantic-index-v3-page-abc-1"), { page: 2 });
+  await broker.put("proprium.semantic", later, current, semanticKey(current, "semantic-index-v3-page-abc-0"), { page: 3 });
+  const selector = { schema_version: 3, config_digest: "cfg", model_digest: "model", key_prefix: "semantic-index-v3-page-abc-" };
+  assert.deepEqual(await broker.evictPreviousPrefix("proprium.semantic", later, current, selector), { evicted: true, count: 2 });
+  assert.deepEqual(await broker.getPrevious("proprium.semantic", later, current, { ...selector, key: "semantic-index-v3-page-abc-0" }),
+    { found: false });
+  assert.deepEqual(await broker.get("proprium.semantic", later, current,
+    semanticKey(current, "semantic-index-v3-page-abc-0")), { found: true, value: { page: 3 } });
+  await broker.put("proprium.semantic", later, current, semanticKey(current, "semantic-index-v3-staging-chunk-0"), { chunk: 1 });
+  assert.deepEqual(await broker.evictPrefix("proprium.semantic", later, current, {
+    schema_version: 3, config_digest: "cfg", model_digest: "model", key_prefix: "semantic-index-v3-staging-",
+  }), { evicted: true, count: 1 });
+  assert.deepEqual(await broker.evictPrevious("proprium.semantic", later, current,
+    { schema_version: 3, config_digest: "cfg", model_digest: "model", key: "semantic-index-v3-page-abc-0" }), { evicted: false });
+  assert.deepEqual(await broker.evictPreviousPrefix("proprium.semantic", { ...later, repository_id: 2 }, current, selector),
+    { evicted: false, count: 0 });
 });
 
 test("preference writes require a fresh consumed gesture and manifest schema validation", async () => {

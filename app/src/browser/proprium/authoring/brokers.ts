@@ -2,6 +2,9 @@ import type { ArtifactMetadata, CacheKey, Scope, Snapshot } from "./types.js";
 
 const DB_NAME = "proprium-authoring-brokers-v1";
 const CACHE_LIMIT = 64 * 1024 * 1024;
+const SEMANTIC_CACHE_LIMIT = 192 * 1024 * 1024;
+const CACHE_ENTRY_LIMIT = 64 * 1024 * 1024;
+const CACHE_PREFIX_EVICT_LIMIT = 20_000;
 const PREFERENCE_LIMIT = 64 * 1024;
 const ARTIFACT_LIMIT = 128 * 1024 * 1024;
 const CHUNK_LIMIT = 256 * 1024;
@@ -18,6 +21,28 @@ export interface CacheRecord {
   readonly bytes: number;
   readonly value: unknown;
   readonly touched_at: number;
+  /** Host-issued ownership metadata; older cache rows without it are never addressable. */
+  readonly scope?: DerivedCacheScope;
+  readonly snapshot?: Snapshot;
+  readonly selector?: DerivedCacheSelector;
+}
+
+export interface DerivedCacheScope {
+  readonly workspace_id: string;
+  readonly repository_id: number | null;
+  readonly branch: string;
+}
+export interface DerivedCacheSelector {
+  readonly schema_version: number;
+  readonly config_digest: string;
+  readonly model_digest?: string;
+  readonly key: string;
+}
+export interface DerivedCachePrefixSelector {
+  readonly schema_version: number;
+  readonly config_digest: string;
+  readonly model_digest?: string;
+  readonly key_prefix: string;
 }
 export interface PreferenceRecord {
   readonly key: string;
@@ -51,6 +76,7 @@ export interface BrokerStore {
   listCache(pluginId: string): Promise<CacheRecord[]>;
   putCacheBounded(record: CacheRecord, limit: number): Promise<void>;
   evictCache(pluginId: string, key?: string): Promise<boolean>;
+  evictCacheKeys(pluginId: string, keys: readonly string[]): Promise<number>;
   getPreference(key: string): Promise<PreferenceRecord | undefined>;
   listPreferences(pluginId: string, userPartition?: string): Promise<PreferenceRecord[]>;
   putPreference(record: PreferenceRecord): Promise<void>;
@@ -116,6 +142,18 @@ export class IndexedDbBrokerStore implements BrokerStore {
     let evicted = false; const request = store.getAll();
     request.onsuccess = () => {
       for (const item of request.result as CacheRecord[]) if (item.plugin_id === pluginId && (key === undefined || item.key === key)) { store.delete(item.key); evicted = true; }
+    };
+    await this.done(tx); return evicted;
+  }
+  async evictCacheKeys(pluginId: string, keys: readonly string[]): Promise<number> {
+    if (!keys.length) return 0;
+    const wanted = new Set(keys); const db = await this.open();
+    const tx = db.transaction("cache", "readwrite"); const store = tx.objectStore("cache");
+    let evicted = 0; const request = store.getAll();
+    request.onsuccess = () => {
+      for (const item of request.result as CacheRecord[]) {
+        if (item.plugin_id === pluginId && wanted.has(item.key)) { store.delete(item.key); evicted++; }
+      }
     };
     await this.done(tx); return evicted;
   }
@@ -206,6 +244,14 @@ export class MemoryBrokerStore implements BrokerStore {
     for (const [entryKey, item] of this.cache) if (item.plugin_id === plugin && (key === undefined || item.key === key)) { removed = true; this.cache.delete(entryKey); }
     return removed;
   }
+  async evictCacheKeys(plugin: string, keys: readonly string[]) {
+    let removed = 0;
+    for (const key of keys) {
+      const record = this.cache.get(key);
+      if (record?.plugin_id === plugin) { this.cache.delete(key); removed++; }
+    }
+    return removed;
+  }
   async getPreference(key: string) { const r = this.preferences.get(key); return r && structuredClone(r); }
   async listPreferences(plugin: string, user?: string) { return [...this.preferences.values()].filter(r => r.plugin_id === plugin && (user === undefined || r.user_partition === user)).map(r => structuredClone(r)); }
   async putPreference(record: PreferenceRecord) {
@@ -227,32 +273,119 @@ export class MemoryBrokerStore implements BrokerStore {
 
 export class DerivedCacheBroker {
   constructor(private readonly store: BrokerStore, private readonly now = () => Date.now()) {}
-  async get(pluginId: string, key: CacheKey): Promise<{ found: boolean; value?: unknown }> {
-    this.validateKey(pluginId, key);
-    const storageKey = cacheKey(key); const record = await this.store.getCache(storageKey);
+  async get(pluginId: string, scope: Scope, snapshot: Snapshot, key: CacheKey): Promise<{ found: boolean; value?: unknown }> {
+    this.validateKey(pluginId, scope, snapshot, key);
+    const owner = cacheScope(scope);
+    const selector = cacheSelector(key);
+    const storageKey = cacheKey(key, owner); const record = await this.store.getCache(storageKey);
     if (!record) return { found: false };
-    if (record.plugin_id !== pluginId || record.key !== storageKey || record.bytes !== jsonSize(record.value)) {
+    if (record.plugin_id !== pluginId || record.key !== storageKey || !cacheRecordSizeMatches(record) ||
+        !sameJson(record.scope, owner) || !sameJson(record.snapshot, snapshot) || !sameJson(record.selector, selector)) {
       await this.store.evictCache(pluginId, storageKey);
       return { found: false };
     }
     await this.store.touchCache(storageKey, this.now());
     return { found: true, value: structuredClone(record.value) };
   }
-  async put(pluginId: string, key: CacheKey, value: unknown): Promise<{ stored: true }> {
-    this.validateKey(pluginId, key); const encoded = canonicalJson(value); const size = new TextEncoder().encode(encoded).byteLength;
-    if (size > CACHE_LIMIT) throw new BrokerError("capacity", "A derived cache item exceeds the per-plugin quota");
-    const storageKey = cacheKey(key);
-    await this.store.putCacheBounded({ key: storageKey, plugin_id: pluginId, bytes: size, value: JSON.parse(encoded) as unknown, touched_at: this.now() }, CACHE_LIMIT);
+  async getPrevious(pluginId: string, scope: Scope, snapshot: Snapshot, selector: DerivedCacheSelector): Promise<
+    { found: false } | { found: true; snapshot: Snapshot; value: unknown }> {
+    this.validateSelector(pluginId, scope, snapshot, selector);
+    const owner = cacheScope(scope);
+    const candidates = (await this.store.listCache(pluginId))
+      .filter(record => record.plugin_id === pluginId && sameJson(record.scope, owner) &&
+        record.snapshot && !sameJson(record.snapshot, snapshot) && sameJson(record.selector, selector))
+      .sort((left, right) => right.touched_at - left.touched_at);
+    for (const record of candidates) {
+      if (!record.snapshot || record.key !== cacheKey({ ...selector, plugin_id: pluginId, snapshot: record.snapshot }, owner) ||
+          !cacheRecordSizeMatches(record)) {
+        await this.store.evictCache(pluginId, record.key);
+        continue;
+      }
+      await this.store.touchCache(record.key, this.now());
+      return { found: true, snapshot: structuredClone(record.snapshot), value: structuredClone(record.value) };
+    }
+    return { found: false };
+  }
+  async evictPrevious(pluginId: string, scope: Scope, snapshot: Snapshot, selector: DerivedCacheSelector): Promise<{ evicted: boolean }> {
+    this.validateSelector(pluginId, scope, snapshot, selector);
+    const owner = cacheScope(scope);
+    const candidate = (await this.store.listCache(pluginId)).filter(record => record.plugin_id === pluginId &&
+      sameJson(record.scope, owner) && record.snapshot && !sameJson(record.snapshot, snapshot) &&
+      sameJson(record.selector, selector) && record.key === cacheKey({ ...selector, plugin_id: pluginId, snapshot: record.snapshot }, owner))
+      .sort((left, right) => right.touched_at - left.touched_at)[0];
+    return { evicted: candidate ? (await this.store.evictCacheKeys(pluginId, [candidate.key])) > 0 : false };
+  }
+  async evictPrefix(pluginId: string, scope: Scope, snapshot: Snapshot,
+    selector: DerivedCachePrefixSelector): Promise<{ evicted: boolean; count: number }> {
+    this.validatePrefixSelector(pluginId, scope, snapshot, selector);
+    const owner = cacheScope(scope);
+    const keys = this.prefixKeys(await this.store.listCache(pluginId), pluginId, owner, snapshot, selector, false);
+    if (keys.length > CACHE_PREFIX_EVICT_LIMIT) throw new BrokerError("capacity", "Too many cache entries share this prefix");
+    const count = await this.store.evictCacheKeys(pluginId, keys);
+    return { evicted: count > 0, count };
+  }
+  async evictPreviousPrefix(pluginId: string, scope: Scope, snapshot: Snapshot,
+    selector: DerivedCachePrefixSelector): Promise<{ evicted: boolean; count: number }> {
+    this.validatePrefixSelector(pluginId, scope, snapshot, selector);
+    const owner = cacheScope(scope);
+    const keys = this.prefixKeys(await this.store.listCache(pluginId), pluginId, owner, snapshot, selector, true);
+    if (keys.length > CACHE_PREFIX_EVICT_LIMIT) throw new BrokerError("capacity", "Too many previous cache entries share this prefix");
+    const count = await this.store.evictCacheKeys(pluginId, keys);
+    return { evicted: count > 0, count };
+  }
+  async put(pluginId: string, scope: Scope, snapshot: Snapshot, key: CacheKey, value: unknown): Promise<{ stored: true }> {
+    this.validateKey(pluginId, scope, snapshot, key); const encoded = canonicalJson(value); const size = new TextEncoder().encode(encoded).byteLength;
+    if (size > CACHE_ENTRY_LIMIT) throw new BrokerError("capacity", "A derived cache item exceeds the per-entry quota");
+    const owner = cacheScope(scope); const selector = cacheSelector(key);
+    const storageKey = cacheKey(key, owner);
+    await this.store.putCacheBounded({ key: storageKey, plugin_id: pluginId, scope: owner, snapshot: structuredClone(snapshot),
+      selector, bytes: size, value: JSON.parse(encoded) as unknown, touched_at: this.now() }, cacheLimit(pluginId));
     return { stored: true };
   }
-  async evict(pluginId: string, key?: CacheKey): Promise<{ evicted: boolean }> {
-    if (key) { this.validateKey(pluginId, key); return { evicted: await this.store.evictCache(pluginId, cacheKey(key)) }; }
-    return { evicted: await this.store.evictCache(pluginId) };
+  async evict(pluginId: string, scope: Scope, snapshot: Snapshot, key?: CacheKey): Promise<{ evicted: boolean }> {
+    if (!validScopeSnapshot(scope, snapshot)) throw new BrokerError("invalid_input", "Derived cache scope or snapshot is invalid");
+    const owner = cacheScope(scope);
+    if (key) { this.validateKey(pluginId, scope, snapshot, key); return { evicted: await this.store.evictCache(pluginId, cacheKey(key, owner)) }; }
+    let evicted = false;
+    for (const record of await this.store.listCache(pluginId)) {
+      if (sameJson(record.scope, owner)) evicted = await this.store.evictCache(pluginId, record.key) || evicted;
+    }
+    return { evicted };
   }
-  private validateKey(plugin: string, key: CacheKey) {
-    if (!key || key.plugin_id !== plugin || !key.snapshot?.id || !Number.isSafeInteger(key.schema_version) || key.schema_version < 1 ||
-        !key.config_digest || key.config_digest.length > 256 || !key.key || key.key.length > 1024 ||
-        (key.model_digest !== undefined && key.model_digest.length > 256)) throw new BrokerError("invalid_input", "Derived cache key is invalid or outside this plugin namespace");
+  private prefixKeys(records: readonly CacheRecord[], pluginId: string, owner: DerivedCacheScope, snapshot: Snapshot,
+    selector: DerivedCachePrefixSelector, previous: boolean): string[] {
+    const matching = records.filter(record => {
+      if (record.plugin_id !== pluginId || !sameJson(record.scope, owner) ||
+          !record.snapshot || !validScopeSnapshot({ ...owner, generation: snapshot.worktree_generation }, record.snapshot)) return false;
+      const isCurrent = canonicalJson(record.snapshot) === canonicalJson(snapshot);
+      if (previous ? isCurrent : !isCurrent) return false;
+      if (!record.selector || typeof record.selector.key !== "string" || record.selector.schema_version !== selector.schema_version ||
+          record.selector.config_digest !== selector.config_digest || record.selector.model_digest !== selector.model_digest ||
+          !record.selector.key.startsWith(selector.key_prefix)) return false;
+      return record.key === cacheKey({ plugin_id: pluginId, snapshot: record.snapshot,
+        schema_version: record.selector.schema_version, config_digest: record.selector.config_digest,
+        ...(record.selector.model_digest === undefined ? {} : { model_digest: record.selector.model_digest }),
+        key: record.selector.key }, owner);
+    });
+    if (!previous || matching.length === 0) return matching.map(record => record.key);
+    const selectedSnapshot = matching.sort((left, right) => right.touched_at - left.touched_at)[0]?.snapshot;
+    return matching.filter(record => sameJson(record.snapshot, selectedSnapshot)).map(record => record.key);
+  }
+  private validatePrefixSelector(plugin: string, scope: Scope, snapshot: Snapshot, selector: DerivedCachePrefixSelector) {
+    this.validateSelector(plugin, scope, snapshot, { ...selector, key: selector.key_prefix });
+    if (typeof selector.key_prefix !== "string" || selector.key_prefix.length < 1 || selector.key_prefix.length > 1024) {
+      throw new BrokerError("invalid_input", "Derived cache prefix is invalid");
+    }
+  }
+  private validateKey(plugin: string, scope: Scope, snapshot: Snapshot, key: CacheKey) {
+    this.validateSelector(plugin, scope, snapshot, key);
+    if (!key.snapshot?.id || canonicalJson(key.snapshot) !== canonicalJson(snapshot)) throw new BrokerError("capability_denied", "Derived cache snapshot differs from the Host-pinned request");
+  }
+  private validateSelector(plugin: string, scope: Scope, snapshot: Snapshot, selector: DerivedCacheSelector & { plugin_id?: string }) {
+    if (!validScopeSnapshot(scope, snapshot) || (selector.plugin_id !== undefined && selector.plugin_id !== plugin) ||
+        !Number.isSafeInteger(selector.schema_version) || selector.schema_version < 1 ||
+        !selector.config_digest || selector.config_digest.length > 256 || !selector.key || selector.key.length > 1024 ||
+        (selector.model_digest !== undefined && selector.model_digest.length > 256)) throw new BrokerError("invalid_input", "Derived cache key is invalid or outside this plugin namespace");
   }
 }
 
@@ -429,7 +562,26 @@ export class ArtifactBroker {
   }
 }
 
-export function cacheKey(key: CacheKey): string { return `cache:${encodeURIComponent(key.plugin_id)}:${encodeURIComponent(canonicalJson(key))}`; }
+export function cacheKey(key: CacheKey, scope?: DerivedCacheScope): string {
+  return `cache:${encodeURIComponent(key.plugin_id)}:${encodeURIComponent(canonicalJson({ scope: scope ?? null, key }))}`;
+}
+function cacheLimit(pluginId: string): number {
+  return pluginId === "proprium.semantic" ? SEMANTIC_CACHE_LIMIT : CACHE_LIMIT;
+}
+function sameJson(left: unknown, right: unknown): boolean {
+  try { return canonicalJson(left) === canonicalJson(right); } catch { return false; }
+}
+function cacheRecordSizeMatches(record: CacheRecord): boolean {
+  try { return Number.isSafeInteger(record.bytes) && record.bytes >= 0 && record.bytes === jsonSize(record.value); }
+  catch { return false; }
+}
+function cacheScope(scope: Scope): DerivedCacheScope {
+  return { workspace_id: scope.workspace_id, repository_id: scope.repository_id, branch: scope.branch };
+}
+function cacheSelector(key: CacheKey): DerivedCacheSelector {
+  return { schema_version: key.schema_version, config_digest: key.config_digest,
+    ...(key.model_digest === undefined ? {} : { model_digest: key.model_digest }), key: key.key };
+}
 function preferenceKey(plugin: string, user: string, key: string) { return `preference:${encodeURIComponent(plugin)}:${encodeURIComponent(user)}:${encodeURIComponent(key)}`; }
 function chunkKey(id: string, sequence: number) { return `${id}:${sequence.toString().padStart(8, "0")}`; }
 function validateIdentifier(value: string, name: string) { if (typeof value !== "string" || !value.trim() || value.length > 256 || /[\0\r\n]/u.test(value)) throw new BrokerError("invalid_input", `Invalid ${name} identity`); }
