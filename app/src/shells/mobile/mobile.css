@@ -778,7 +778,19 @@ ion-modal.mobile-shell-reference-modal {
   display: none;
 }
 /* Mobile is single-task; the desktop arrangement toolbar is unnecessary chrome. */
-.mobile-shell .st-workspace-mobile-tabs { display: none; }
+.mobile-shell .mobile-shell-workspace-view[data-active-view="writing"] .st-workspace-mobile-tabs,
+.mobile-shell .mobile-shell-workspace-view[data-active-view="library"] .st-workspace-mobile-tabs,
+.mobile-shell .mobile-shell-workspace-view[data-active-view="inspection"] .st-workspace-mobile-tabs { display: none; }
+.mobile-shell .mobile-change-publish {
+  display:grid;gap:11px;margin-top:15px;padding:17px;
+  border:1px solid var(--mobile-line);border-radius:12px;background:var(--mobile-paper);
+}
+.mobile-shell .mobile-change-publish h2 { margin:0;font-size:17px; }
+.mobile-shell .mobile-change-publish p { margin:0;font-size:12px;line-height:1.6;color:var(--mobile-muted); }
+.mobile-shell .mobile-change-publish .sync-actions { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px; }
+.mobile-shell .mobile-change-publish .sync-actions button { min-height:44px;padding:9px; }
+.mobile-shell .mobile-change-publish .sync-actions .publish-button { grid-column:1/-1; }
+
 @media (max-width: 359px) {
   .mobile-shell .mobile-shell-identity-bar { gap: 5px; padding-inline: 9px; }
   .mobile-shell .mobile-shell-nav-content { font-size: 10px; }
