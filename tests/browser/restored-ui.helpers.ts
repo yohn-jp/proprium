@@ -3,8 +3,7 @@ export async function showPanel(page: Page, panel: "outline" | "editor" | "inspe
   const names = { outline: "作品と構成", editor: "ワークスペース", inspector: "文書と保存状態", history: "履歴", review: "レビューとツール" };
   const desktop = page.getByRole("button", { name: `パネル：${names[panel]}`, exact: true });
   if (await desktop.isVisible()) { await desktop.click(); return; }
-  const mobileFooter = page.locator(".mobile-shell-footer");
-  if (await mobileFooter.isVisible()) {
+  if (await page.locator(".mobile-shell").count()) {
     if (panel === "history") {
       await showPanel(page, "inspector");
       await page.getByRole("button", { name: "履歴", exact: true }).click();
@@ -12,19 +11,13 @@ export async function showPanel(page: Page, panel: "outline" | "editor" | "inspe
       return;
     }
     const panelNames = { outline: "作品と構成", editor: "原稿", inspector: "文書と保存状態", review: "レビューとツール" };
-    const panelTab = page.getByRole("tab", { name: panelNames[panel], exact: true });
-    await expect(page.getByRole("region", { name: "Composable workspace", exact: true })).toBeVisible();
-    if (panel !== "review") await expect(panelTab).toBeVisible();
-    if (await panelTab.isVisible()) {
-      if ((await panelTab.getAttribute("aria-selected")) !== "true") await panelTab.click();
-      await expect(page.getByRole("tabpanel", { name: panelNames[panel], exact: true })).toBeVisible();
-      return;
-    }
-    const navigation = page.getByRole("navigation", { name: "モバイル画面" });
+    const labels = { outline: "作品", editor: "書く", inspector: "変更", review: "ツール" };
+    const navigation = page.getByRole("navigation", { name: "モバイルの主要画面" });
     if (!(await navigation.isVisible())) {
-      await page.locator('summary[aria-label="別の画面へ移動"]').click();
+      const reveal = page.getByRole("button", { name: "画面の切替を表示" });
+      if (await reveal.isVisible()) await reveal.click();
     }
-    const labels = { outline: "作品", editor: "書く", inspector: "確認", review: "道具" };
+    await expect(navigation).toBeVisible();
     const target = navigation.getByRole("button", { name: labels[panel], exact: true });
     await target.click();
     await expect(page.getByRole("tabpanel", { name: panelNames[panel], exact: true })).toBeVisible();
