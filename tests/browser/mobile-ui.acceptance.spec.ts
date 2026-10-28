@@ -101,3 +101,26 @@ test("Mobile WebKit keeps workspace panels, routes Settings separately, and revi
   await showPanel(page, "history");
   await expect(page.locator("#git-history-heading")).toBeVisible();
 });
+
+
+test("Mobile WebKit long press opens the same file action sheet without selecting or mutating the document", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-webkit", "Long press is a touch interaction");
+  await page.goto("/mobile?view=library");
+  await page.waitForFunction(() => typeof window.propriumHostTest?.openWorkspace === "function");
+  await page.evaluate(async () => {
+    await window.propriumHostTest!.openWorkspace({
+      provider: "local", name: "long-press-acceptance", branch: "main",
+      localWorkspaceId: `press-${crypto.randomUUID()}`,
+    }, { "note.md": "内容は変更しない。\\n" });
+  });
+  const file = page.getByRole("list", { name: "Repository files" }).getByRole("button", { name: "note.md", exact: true });
+  await expect(file).toBeVisible();
+  await file.dispatchEvent("pointerdown", { pointerId: 2, pointerType: "touch", clientX: 130, clientY: 150, bubbles: true });
+  await page.waitForTimeout(560);
+  const sheet = page.getByRole("dialog", { name: "ファイルの操作" });
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByLabel("名前・保存先を変更")).toHaveValue("note.md");
+  await sheet.getByRole("button", { name: "操作メニューを閉じる" }).click();
+  await expect(sheet).toBeHidden();
+  await expect(page.locator(".file-row[aria-current='page']")).toHaveCount(0);
+});

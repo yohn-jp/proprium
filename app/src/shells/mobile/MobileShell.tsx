@@ -454,7 +454,7 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
             <div className="mobile-shell-workspace-view" data-active-view={activeView}
               onTouchStartCapture={event => {
                 swipeStart.current = null;
-                if (activeView === "writing" || referenceSheet || event.touches.length !== 1 || !isPageSwipeSurface(event.target)) return;
+                if (activeView === "writing" || activeView === "settings" || referenceSheet || event.touches.length !== 1 || !isPageSwipeSurface(event.target)) return;
                 const touch = event.touches[0];
                 if (touch) swipeStart.current = { x: touch.clientX, y: touch.clientY, view: activeView, scope: workspaceScope };
               }}

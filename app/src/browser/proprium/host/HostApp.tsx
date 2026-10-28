@@ -1094,7 +1094,21 @@ export function HostApp(): ReactElement {
               : <p className="sidebar-empty">このWorkspaceはこのブラウザー内だけに保存されます。GitHub同期は設定されていません。</p>}
           </section>
 </div> : mode === "desktop" ? <div className="host-controls">{recentCard}</div> : picker;
-  const tools = <div className="host-controls">{authoring && <>
+  const tools = <div className="host-controls">{git && workspace && <PluginPanel
+            manager={pluginManager}
+            workspaceId={activeWorkspaceId!}
+            activationScope={{ workspace_id: workspace.identity.localWorkspaceId,
+              repository_id: isGitHubWorkspaceIdentity(workspace.identity) ? workspace.identity.repositoryId : null,
+              branch: workspace.identity.branch }}
+            git={git}
+            revisionKey={pluginRevisionKey}
+            canApplyChanges={!currentFile?.dirty}
+            hostBusy={busy}
+            onBusyChange={setBusy}
+            onWorkspaceChanged={refreshAfterPlugin}
+            onRegisterLiveInvoker={registerLivePluginInvoker}
+            onAuthoringSurfacesChanged={refreshAuthoring}
+          />}{authoring && <>
     {authoringRegistrations.some(row=>row.pluginId==="proprium.semantic"&&row.status==="ready") && <details><summary>Semantic のローカル設定</summary><SemanticPreferences key={`semantic-prefs:${workspaceGeneration}:${preferences.email}`} scopeKey={authoring.localPreferenceScope()}
       readLocal={async(signal)=>{if(signal.aborted)throw new Error("cancelled");const value=await authoring.readLocalPreference(authoring.localPreferenceScope(),"proprium.semantic","reranker.enabled",1);if(signal.aborted)throw new Error("cancelled");return value;}}
       read={async(signal)=>{const result=await authoring.invokeRead("proprium.semantic","proprium.semantic.settings.read",{},signal);if(!result.ok)throw new Error(result.error.message);return result.value as unknown as SemanticSettingsValue;}}
@@ -1116,21 +1130,7 @@ export function HostApp(): ReactElement {
         const value=result.value as unknown as PairedPreferenceSnapshot;
         return {...value,local:local.found?local.value as Record<string,unknown>:{}};
       }} save={(event,expectedScope,value)=>authoring.writeLocalPreference(event,expectedScope,"proprium.paired-writing","model-settings",1,value)} onChanged={refreshAuthoring} /></details>}
-    <AuthoringReview key={workspaceGeneration} service={authoring} epoch={authoringEpoch} onApplied={refreshAfterPlugin} /><AuthoringAssets key={`assets:${workspaceGeneration}`} manager={pluginManager} service={authoring} epoch={authoringEpoch} /></>}<AuthoringCommandMenu registrations={contextualAuthoringRegistrations} invoke={invokeAuthoring} read={readAuthoring} navigate={navigateAuthoring} />{git && workspace && <PluginPanel
-            manager={pluginManager}
-            workspaceId={activeWorkspaceId!}
-            activationScope={{ workspace_id: workspace.identity.localWorkspaceId,
-              repository_id: isGitHubWorkspaceIdentity(workspace.identity) ? workspace.identity.repositoryId : null,
-              branch: workspace.identity.branch }}
-            git={git}
-            revisionKey={pluginRevisionKey}
-            canApplyChanges={!currentFile?.dirty}
-            hostBusy={busy}
-            onBusyChange={setBusy}
-            onWorkspaceChanged={refreshAfterPlugin}
-            onRegisterLiveInvoker={registerLivePluginInvoker}
-            onAuthoringSurfacesChanged={refreshAuthoring}
-          />}
+    <AuthoringReview key={workspaceGeneration} service={authoring} epoch={authoringEpoch} onApplied={refreshAfterPlugin} /><AuthoringAssets key={`assets:${workspaceGeneration}`} manager={pluginManager} service={authoring} epoch={authoringEpoch} /></>}<AuthoringCommandMenu registrations={contextualAuthoringRegistrations} invoke={invokeAuthoring} read={readAuthoring} navigate={navigateAuthoring} />
           {git && workspace && isGitHubWorkspaceIdentity(workspace.identity) && <LiveMcpPanel
             key={`${workspaceGeneration}:${gatewayDraft}`}
             repositories={recent}
