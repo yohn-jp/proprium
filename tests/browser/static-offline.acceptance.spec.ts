@@ -150,7 +150,7 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
   await showPanel(page, "review");
   await expect(panel).toBeVisible();
   await panel.locator("summary").click();
-  await page.getByRole("button", { name: "信頼済みカタログを表示" }).click();
+  await page.getByRole("button", { name: "カタログを表示" }).click();
   await page.getByRole("button", { name: `${staticPluginId} ${staticPluginVersion} の署名済みプレビューを確認`, exact: true }).click();
   const preview = page.getByRole("region", { name: "インストールプレビュー" });
   await expect(preview).toContainText(`${staticPluginId}@${staticPluginVersion}`);
@@ -159,10 +159,10 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
   const panelNotice = panel.getByRole("status");
   await expect(panelNotice).toContainText("署名とダイジェストを検証し、無効状態でインストールしました");
   const plugin = panel.getByRole("listitem").filter({ hasText: staticPluginId }).filter({ hasText: `v${staticPluginVersion}` });
-  await plugin.getByRole("button", { name: "Enable" }).click();
+  await plugin.getByRole("button", { name: "有効化" }).click();
   await expect(panelNotice).toContainText(`${staticPluginId}@${staticPluginVersion} is enabled`);
   await page.getByLabel("プラグイン入力（テキスト）", { exact: false }).fill(JSON.stringify({ left: 20, right: 22 }));
-  await plugin.getByRole("button", { name: "Run" }).click();
+  await plugin.getByRole("button", { name: "実行" }).click();
   await expect(page.getByLabel(`${staticPluginId} output`)).toHaveText('{"result":42}');
   await plugin.getByRole("button", { name: "Stop" }).click();
   await expect(plugin).toContainText(`v${staticPluginVersion} · installed, disabled`);
@@ -218,9 +218,9 @@ test("static Host imports a GitHub REST commit, reloads offline, and edits with 
   await reopenedPluginPanel.locator("summary").click();
   const reopenedPlugin = reopenedPluginPanel.getByRole("listitem").filter({ hasText: staticPluginId }).filter({ hasText: `v${staticPluginVersion}` });
   await expect(reopenedPlugin).toContainText(`v${staticPluginVersion} · installed, disabled`);
-  await reopenedPlugin.getByRole("button", { name: "Enable" }).click();
+  await reopenedPlugin.getByRole("button", { name: "有効化" }).click();
   await page.getByLabel("プラグイン入力（テキスト）", { exact: false }).fill(JSON.stringify({ left: 19, right: 23 }));
-  await reopenedPlugin.getByRole("button", { name: "Run" }).click();
+  await reopenedPlugin.getByRole("button", { name: "実行" }).click();
   await expect(page.getByLabel(`${staticPluginId} output`)).toHaveText('{"result":42}');
   await reopenedPlugin.getByRole("button", { name: "Stop" }).click();
   expect(pluginRequestCount).toBe(pluginRequestsAfterInstall);
