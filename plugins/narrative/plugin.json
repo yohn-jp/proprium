@@ -5575,7 +5575,7 @@
               "fields": [
                 {
                   "id": "ordered_ids",
-                  "label": "順序（1 行に 1 件）",
+                  "label": "章の順序",
                   "type": "ordered-list",
                   "required": true,
                   "initial_value": {
@@ -5615,7 +5615,7 @@
               "fields": [
                 {
                   "id": "ordered_ids",
-                  "label": "順序（1 行に 1 件）",
+                  "label": "シーンの順序",
                   "type": "ordered-list",
                   "required": true,
                   "initial_value": {
@@ -5926,7 +5926,7 @@
           },
           {
             "id": "ordered_ids",
-            "label": "並べ替え後の ID",
+            "label": "章の順序",
             "type": "ordered-list",
             "required": true,
             "placeholder": "1 行に 1 件の ID"
@@ -5980,7 +5980,7 @@
           },
           {
             "id": "ordered_ids",
-            "label": "並べ替え後の ID",
+            "label": "シーンの順序",
             "type": "ordered-list",
             "required": true,
             "placeholder": "1 行に 1 件の ID"

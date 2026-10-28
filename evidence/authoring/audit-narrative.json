@@ -171,15 +171,16 @@
       "ui_path": "Accessible chapter/scene move controls and declarative reorder forms in Work Outline.",
       "existing_tests": [
         "plugins/narrative/src/actions.test.ts: manifest action inventory and closed output schemas match the guest contract",
-        "plugins/narrative/src/actions.test.ts: hierarchy keeps tied and missing order rows accessible with diagnostics"
+        "plugins/narrative/src/actions.test.ts: hierarchy keeps tied and missing order rows accessible with diagnostics",
+        "app/src/browser/proprium/host/authoring/AuthoringSurface.test.ts: ordered-list controls expose accessible adjacent moves and retain complete IDs (companion Host commit 966b44bbf217480d0f15e464e62fe4c6fdb66b1d)",
+        "tests/browser/authoring-official.acceptance.spec.ts: signed Narrative reorders chapters and scenes with accessible move controls"
       ],
       "gaps": [
-        "The Narrative reorder forms use ordered-list, which the Host currently renders as a plain textarea; the canon-required accessible sibling move-up/move-down control is absent.",
-        "No fresh signed browser test currently demonstrates the reorder action, proposal diff and persisted sibling order."
+        "The accessible Host ordered-list controls are implemented in companion commit 966b44bbf217480d0f15e464e62fe4c6fdb66b1d but are not yet integrated into this Narrative worktree.",
+        "The new signed browser test has only been parsed by Playwright; the review/apply and persisted sibling order path is not yet run."
       ],
       "required_fixes": [
-        "Add accessible move-up/move-down controls for Narrative chapter and scene sibling ordering while preserving complete-set validation and the same structure.reorder action.",
-        "Add or run signed browser acceptance for chapter and scene ordering and verify the saved order."
+        "Integrate the companion Host commit and run the signed browser acceptance for accessible chapter and scene ordering, review and saved order."
       ],
       "dependencies": [
         "NAR-02",
@@ -189,7 +190,7 @@
       "priority": "P0",
       "verification": [
         "PASS: Narrative action/schema tests",
-        "GAP: ordered-list form is a plain textarea without accessible move controls",
+        "PASS: companion Host commit 966b44bbf217480d0f15e464e62fe4c6fdb66b1d unit tests 19/19, typecheck, and diff check; not yet integrated",
         "NOT_RUN: signed accessible reorder browser acceptance"
       ]
     },

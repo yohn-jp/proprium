@@ -7,6 +7,21 @@ async function showNarrativeOutline(page: import("@playwright/test").Page): Prom
   await page.getByRole("tabpanel", { name: "Work outline", exact: true }).first().getByRole("tab", { name: "構成", exact: true }).click();
 }
 
+async function activateNarrativeOutline(page: import("@playwright/test").Page): Promise<import("@playwright/test").Locator> {
+  let tab = page.getByRole("tab", { name: "Work outline", exact: true }).first();
+  if (!(await tab.isVisible())) {
+    const configuration = page.locator(".st-workspace-configuration");
+    if (await configuration.getAttribute("open") === null) await configuration.locator(":scope > summary").click();
+    const menu = page.locator(".st-workspace-panel-menu");
+    if (await menu.getAttribute("open") === null) await menu.locator(":scope > summary").click();
+    await page.getByRole("button", { name: "Work outlineを表示する", exact: true }).click();
+    if (await configuration.getAttribute("open") !== null) await configuration.locator(":scope > summary").click();
+    tab = page.getByRole("tab", { name: "Work outline", exact: true }).first();
+  }
+  if (await tab.isVisible() && await tab.getAttribute("aria-selected") !== "true") await tab.click();
+  return page.getByRole("tabpanel", { name: "Work outline", exact: true }).first();
+}
+
 // These are actual Narrative sources and actual signed registry artifacts. Only
 // repository provisioning and the test registry HTTP transport are fixtures.
 test("signed Narrative installs and navigates a large work in the real Host", async ({ page }) => {
@@ -102,6 +117,100 @@ test("signed Narrative explains an unrecognized repository and leaves generic Fi
   await outline.getByRole("button", { name: "読み込む", exact: true }).click();
   await expect(outline.getByRole("status")).toContainText("作品構成は見つかりません。通常のファイル表示はそのまま利用でき", { timeout: 60_000 });
   await expect(page.getByRole("list", { name: "Repository files" }).getByRole("button", { name: "README.md" })).toBeVisible();
+});
+
+test("signed Narrative reorders chapters and scenes with accessible move controls", async ({ page }) => {
+  const root = resolve(process.env.PROPRIUM_OFFICIAL_E2E_DIR!);
+  const origin = new URL(test.info().project.use.baseURL!).origin;
+  await page.route(`${origin}/plugin-fixture/**`, async route => {
+    const relative = decodeURIComponent(new URL(route.request().url()).pathname.slice("/plugin-fixture/".length));
+    const path = resolve(root, relative);
+    if (!path.startsWith(root + sep)) return route.fulfill({ status: 404 });
+    try { await route.fulfill({ body: await readFile(path), contentType: path.endsWith(".json") ? "application/json" : "application/octet-stream" }); }
+    catch { await route.fulfill({ status: 404 }); }
+  });
+  const identity = { origin: "https://github.com" as const, repositoryId: 923456791, owner: "proprium-test", repository: "reorder-e2e", branch: "main", localWorkspaceId: `reorder-${crypto.randomUUID()}` };
+  const files: Record<string, string> = {
+    "plot/volumes/v/volume.yaml": "id: volume-1\ntype: volume\ntitle: Volume One\norder: 1\n",
+    "plot/volumes/v/chapters/a/chapter.yaml": "id: chapter-one\ntype: chapter\ntitle: Chapter One\nvolume: volume-1\norder: 1\n",
+    "plot/volumes/v/chapters/b/chapter.yaml": "id: chapter-two\ntype: chapter\ntitle: Chapter Two\nvolume: volume-1\norder: 2\n",
+    "plot/volumes/v/chapters/a/scenes/one.yaml": "id: scene-one\ntype: scene\ntitle: Scene One\nvolume: volume-1\nchapter: chapter-one\norder: 1\nmanuscript: manuscript/one.md\n",
+    "plot/volumes/v/chapters/a/scenes/two.yaml": "id: scene-two\ntype: scene\ntitle: Scene Two\nvolume: volume-1\nchapter: chapter-one\norder: 2\nmanuscript: manuscript/two.md\n",
+    "manuscript/one.md": "First scene.\n",
+    "manuscript/two.md": "Second scene.\n",
+  };
+  await page.goto("/");
+  await page.waitForFunction(() => typeof window.propriumHostTest?.openWorkspace === "function");
+  await page.evaluate(async ({ identity, files }) => window.propriumHostTest!.openWorkspace(identity, files), { identity, files });
+  await showPanel(page, "review");
+  const manager = page.locator("details.plugin-manager-panel");
+  await manager.locator("summary").click();
+  await page.getByRole("button", { name: "カタログを表示" }).click();
+  await page.getByRole("button", { name: "proprium.narrative v0.1.0 の導入内容と署名を確認" }).click();
+  await page.getByRole("button", { name: "ダウンロードして無効状態でインストール" }).click();
+  await expect(manager.getByRole("status")).toContainText("署名とダイジェストを検証し、無効状態でインストールしました");
+  const plugin = page.locator(".installed-plugins > li").filter({ hasText: "proprium.narrative" }).filter({ hasText: "v0.1.0" });
+  for (const capability of ["workspace.change.propose", "workspace.change.timestamp", "workspace.file.read", "workspace.identity.read"]) await plugin.getByRole("checkbox", { name: capability, exact: true }).check();
+  await plugin.getByRole("button", { name: "有効化" }).click();
+  await expect(manager.getByRole("status")).toContainText("proprium.narrative@0.1.0 is enabled");
+
+  let outline = await activateNarrativeOutline(page);
+  await outline.getByRole("button", { name: "読み込む", exact: true }).click();
+  await showNarrativeOutline(page);
+  await outline.getByRole("button", { name: "Volume One を編集対象に選択", exact: true }).click();
+  await outline.getByRole("tab", { name: "章を並べ替え", exact: true }).click();
+  const chapterOrder = outline.getByRole("textbox", { name: "章の順序（1行に1件）", exact: true });
+  await expect(chapterOrder).toHaveValue("chapter-one\nchapter-two");
+  const chapterMove = outline.getByRole("button", { name: "章の順序 2行目を上へ移動", exact: true });
+  if (await page.locator(".mobile-shell").count()) await chapterMove.click();
+  else { await chapterMove.focus(); await page.keyboard.press("Enter"); }
+  await expect(chapterOrder).toHaveValue("chapter-two\nchapter-one");
+  await outline.getByRole("button", { name: "送信", exact: true }).click();
+  await expect(outline.locator(".authoring-surface-body")).toHaveAttribute("aria-busy", "false", { timeout: 60_000 });
+  await expect(outline.getByRole("alert")).toHaveCount(0);
+  await showPanel(page, "review");
+  const review = page.getByRole("region", { name: "Authoring proposals" });
+  await review.getByRole("button", { name: /proprium\.narrative · proposed/u }).last().click();
+  await expect(review).toContainText("chapter-two");
+  await expect(review).toContainText("order: 1");
+  await review.getByRole("checkbox").last().check();
+  await review.getByRole("button", { name: "選択した単位をローカルへ適用" }).last().click();
+  await expect(review.getByRole("button", { name: /proprium\.narrative · applied/u })).toHaveCount(1, { timeout: 60_000 });
+
+  await showPanel(page, "outline");
+  outline = await activateNarrativeOutline(page);
+  await outline.getByRole("button", { name: "読み込む", exact: true }).click();
+  await showNarrativeOutline(page);
+  await outline.getByRole("button", { name: "Chapter One を編集対象に選択", exact: true }).click();
+  await outline.getByRole("tab", { name: "シーンを並べ替え", exact: true }).click();
+  const sceneOrder = outline.getByRole("textbox", { name: "シーンの順序（1行に1件）", exact: true });
+  await expect(sceneOrder).toHaveValue("scene-one\nscene-two");
+  const sceneMove = outline.getByRole("button", { name: /2行目を上へ移動/u });
+  await sceneMove.click();
+  await expect(sceneOrder).toHaveValue("scene-two\nscene-one");
+  await outline.getByRole("button", { name: "送信", exact: true }).click();
+  await expect(outline.locator(".authoring-surface-body")).toHaveAttribute("aria-busy", "false", { timeout: 60_000 });
+  await expect(outline.getByRole("alert")).toHaveCount(0);
+  await showPanel(page, "review");
+  await review.getByRole("button", { name: /proprium\.narrative · proposed/u }).last().click();
+  await expect(review).toContainText("scene-two");
+  await review.getByRole("checkbox").last().check();
+  await review.getByRole("button", { name: "選択した単位をローカルへ適用" }).last().click();
+  await expect(review.getByRole("button", { name: /proprium\.narrative · applied/u })).toHaveCount(2, { timeout: 60_000 });
+
+  const saved = await page.evaluate(async identity => {
+    const { BrowserLocalGit } = await import(/* @vite-ignore */ new URL("/src/browser/proprium/git/index.ts", location.origin).href);
+    const git = new BrowserLocalGit(identity); await git.init();
+    const paths = ["plot/volumes/v/chapters/a/chapter.yaml", "plot/volumes/v/chapters/b/chapter.yaml", "plot/volumes/v/chapters/a/scenes/one.yaml", "plot/volumes/v/chapters/a/scenes/two.yaml"];
+    const values: Record<string, string> = {};
+    for (const path of paths) { const file = await git.read(path); if (!file.data) throw new Error(`Saved source missing: ${path}`); values[path] = new TextDecoder().decode(file.data); }
+    git.close();
+    return values;
+  }, identity);
+  expect(saved["plot/volumes/v/chapters/a/chapter.yaml"]).toContain("order: 2");
+  expect(saved["plot/volumes/v/chapters/b/chapter.yaml"]).toContain("order: 1");
+  expect(saved["plot/volumes/v/chapters/a/scenes/one.yaml"]).toContain("order: 2");
+  expect(saved["plot/volumes/v/chapters/a/scenes/two.yaml"]).toContain("order: 1");
 });
 
 test("signed Narrative proposes and applies a reviewed volume", async ({ page }) => {
