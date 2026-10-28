@@ -86,12 +86,17 @@ export async function reviewChangedFiles(page: Page): Promise<void> {
       const textDiff = detail.locator(".text-diff");
       await expect(textDiff).toBeVisible();
       const rows = textDiff.locator(".text-diff-lines .text-diff-line");
-      if (await rows.count()) {
-        await expect(rows.first()).toBeVisible();
+      const columns = textDiff.locator(".text-diff-columns");
+      // The diff is computed asynchronously after the file tab is selected.
+      // A synchronous count() can observe zero rows before the projection
+      // renders, incorrectly assuming that this is a two-column diff.
+      await expect.poll(async () =>
+        (await rows.first().isVisible()) || (await columns.isVisible()),
+      ).toBe(true);
+      if (await rows.first().isVisible()) {
         const displayedLines = (await rows.allTextContents()).join("").trim();
         expect(displayedLines.length).toBeGreaterThan(0);
       } else {
-        const columns = textDiff.locator(".text-diff-columns");
         await expect(columns).toBeVisible();
         await expect(columns.locator("section")).toHaveCount(2);
         await expect(columns.locator("pre")).toHaveCount(2);

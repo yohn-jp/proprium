@@ -99,7 +99,14 @@ test('signed Publishing locally exports TXT and EPUB and opens vertical print wi
   const registryDir = resolve(directory);
   const registryUrl = new URL(process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_URL!);
   const registryPrefix = registryUrl.pathname.slice(0, registryUrl.pathname.lastIndexOf('/') + 1);
-  await page.route(`${registryUrl.origin}${registryPrefix}**`, async route => {
+  // Serve only the signed fixture's registry and pinned artifact origins.
+  // In CI they may use different ports when browser suites run concurrently.
+  const artifactOrigin = process.env.PROPRIUM_AUTHORING_TEST_ARTIFACT_BASE
+    ? new URL(process.env.PROPRIUM_AUTHORING_TEST_ARTIFACT_BASE).origin
+    : registryUrl.origin;
+  await page.route(url =>
+    (url.origin === registryUrl.origin || url.origin === artifactOrigin) &&
+    url.pathname.startsWith(registryPrefix), async route => {
     const relative = decodeURIComponent(new URL(route.request().url()).pathname.slice(registryPrefix.length));
     const path = resolve(registryDir, relative);
     if (!path.startsWith(registryDir + sep)) return route.fulfill({ status: 404 });
