@@ -76,7 +76,7 @@ jobs:
         run: |
           node scripts/verify-authoring-canon.mjs
           node scripts/build-authoring-evidence.mjs --check
-          node --test scripts/build-authoring-evidence.test.mjs scripts/authoring-feature-audit.test.mjs
+          node --test scripts/build-authoring-evidence.test.mjs scripts/authoring-feature-audit.test.mjs scripts/authoring-evidence-metadata.test.mjs
           node scripts/authoring-feature-audit.mjs --check
       - name: Build and verify all signed authoring components
         env:

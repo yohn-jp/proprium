@@ -768,28 +768,50 @@
     {
       "feature_id": "KNO-24",
       "plugin_id": "proprium.knowledge",
-      "requirement": "Paired Writing optional dialogue line/topic provider generation route only; shared source-bound suggestion ingestion/review remains active under KNO-05/KNO-23",
-      "status": "FROZEN",
-      "implementation_files": [],
+      "requirement": "Optional dialogue line/topic generation is Paired-owned and FROZEN; shared source-revision-bound Dialogue Sketch suggestion ingestion and review remain active.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/plugin.json"
+      ],
       "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
-      "ui_path": "No Knowledge provider-generation UI is implemented or required; the Paired Writing product route is frozen. Shared Knowledge suggestion review remains in plugins/knowledge/plugin.json#knowledge.proposals.",
+      "ui_path": "Knowledge proposal/suggestion surfaces in plugins/knowledge/plugin.json; manual Dialogue Sketch CRUD and source-bound suggestion review remain active under KNO-05/KNO-23.",
       "existing_tests": [
         "plugins/knowledge/src/actions.test.ts"
       ],
       "gaps": [
-        "The Paired-specific generation route is intentionally FROZEN and is not a PASS. Do not freeze manual dialogue-sketch CRUD or knowledge.suggestions.create review; those remain active in KNO-05/KNO-23."
+        "Shared saved-sketch suggestion ingestion/review exists but has not been proved against the current signed Browser Host artifact. Paired-only generation stays FROZEN."
       ],
       "required_fixes": [
-        "No KNO-24 provider-generation implementation while frozen. Reopening requires explicit product decision. Continue KNO-05/KNO-23 shared acceptance."
+        "Run signed Browser source-bound Dialogue Sketch suggestion preview, review/apply, stale evidence rejection and reload; keep Paired-only generation frozen."
       ],
       "dependencies": [
-        "Paired Writing frozen product decision",
-        "KNO-05 shared suggestion review"
+        "KNO-05 shared suggestion review",
+        "KNO-23 manual Dialogue Sketch assets",
+        "Host source-revision and ChangeSet review"
       ],
       "priority": "P2",
       "verification": [
         "Status is FROZEN for Paired provider generation only; shared suggestion ingestion/review is active and separately audited.",
         "No frozen state is used to change another feature status or hide failed/unverified shared evidence."
+      ],
+      "assessment_history": [
+        {
+          "audit_revision": "829c69e19aa504cccb1622cdbaa832b963ea99a7",
+          "status": "FROZEN",
+          "requirement": "Paired Writing optional dialogue line/topic provider generation route only; shared source-bound suggestion ingestion/review remains active under KNO-05/KNO-23",
+          "reason": "KNO-24 is mixed scope: only Paired generation is frozen; shared Knowledge ingestion remains active."
+        }
+      ],
+      "subrequirements": [
+        {
+          "scope": "Paired provider-backed generation",
+          "status": "FROZEN"
+        },
+        {
+          "scope": "Knowledge source-bound suggestion ingestion and review",
+          "status": "UNVERIFIED"
+        }
       ]
     },
     {

@@ -2242,9 +2242,9 @@
         },
         {
           "id": "accept-kno-a15",
-          "canon_title": "Lens design target",
+          "canon_title": "Shared scene cursor",
           "canon_reference": "#accept-kno-a15",
-          "canon_requirement": "After graph/map/timeline gates independently pass, move one shared scene cursor through a synthetic multi-scene work. Location, event, appearances, thread state and reader disclosure all update from the same pinned snapshot; unresolved/unknown fields remain labeled. This case certifies the DESIGN_TARGET only and does not reclassify a historical feature as recovered.",
+          "canon_requirement": "After graph/map/timeline gates independently pass, move one shared scene cursor through a synthetic multi-scene work on signed desktop and mobile artifacts. Location, event, appearances, thread state, timeline and reader disclosure all update from the same pinned snapshot; unresolved/unknown fields remain labeled. This gate verifies the current Proprium implementation; it does not reclassify the historical source feature from DESIGN_TARGET to RECOVERY.",
           "feature_ids": [
             "KNO-20"
           ],
@@ -2265,7 +2265,16 @@
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null,
-          "lifecycle": "ACTIVE"
+          "lifecycle": "ACTIVE",
+          "canon_metadata_history": [
+            {
+              "ledger_revision": "829c69e19aa504cccb1622cdbaa832b963ea99a7",
+              "fields": {
+                "canon_title": "Lens design target",
+                "canon_requirement": "After graph/map/timeline gates independently pass, move one shared scene cursor through a synthetic multi-scene work. Location, event, appearances, thread state and reader disclosure all update from the same pinned snapshot; unresolved/unknown fields remain labeled. This case certifies the DESIGN_TARGET only and does not reclassify a historical feature as recovered."
+              }
+            }
+          ]
         },
         {
           "id": "accept-kno-a16",
@@ -3609,7 +3618,7 @@
           "id": "accept-res-a001",
           "canon_title": null,
           "canon_reference": "#accept-res-a001",
-          "canon_requirement": "In an offline local repository with no plugins beyond Research, create 300+ Markdown/text/YAML fixtures under supported roots plus excluded hidden/binary/out-of-scope files. Search lexical, exact phrase/title and prefix, scope, next page; repeat after file change/delete. | Expected hits appear in deterministic order with correct revisions/ranges/snippets; hidden and out-of-scope paths are absent; pagination has no gaps/duplicates; current coverage is shown; explicit index rebuild status/progress is observable; deletion/revision invalidates only affected derived data; editor remains writable throughout.",
+          "canon_requirement": "In an offline local repository with no plugins beyond Research, create 300+ Markdown/text/YAML fixtures under supported roots plus excluded hidden/binary/out-of-scope files. Search lexical, exact phrase/title and prefix, scope, next page; repeat after file change/delete. In a second run, explicitly install and enable Semantic with an admitted local embedding model, then search the same query in semantic, hybrid and expression modes; change the Host snapshot between provider calls in one run. | Expected lexical hits appear in deterministic order with correct revisions/ranges/snippets; hidden and out-of-scope paths are absent; pagination has no gaps/duplicates; current coverage is shown; explicit index rebuild status/progress is observable; deletion/revision invalidates only affected derived data; editor remains writable throughout. Semantic and hybrid results use exact-snapshot source spans and deterministic RRF provenance; mismatched Host scope/snapshot/query results are rejected. Expression mode uses the admitted Research tokenizer; when its asset is missing or denied, the UI states that expression ranking is unavailable and preserves the standard results.",
           "feature_ids": [
             "RES-001"
           ],
@@ -3647,7 +3656,15 @@
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null,
-          "lifecycle": "ACTIVE"
+          "lifecycle": "ACTIVE",
+          "canon_metadata_history": [
+            {
+              "ledger_revision": "829c69e19aa504cccb1622cdbaa832b963ea99a7",
+              "fields": {
+                "canon_requirement": "In an offline local repository with no plugins beyond Research, create 300+ Markdown/text/YAML fixtures under supported roots plus excluded hidden/binary/out-of-scope files. Search lexical, exact phrase/title and prefix, scope, next page; repeat after file change/delete. | Expected hits appear in deterministic order with correct revisions/ranges/snippets; hidden and out-of-scope paths are absent; pagination has no gaps/duplicates; current coverage is shown; explicit index rebuild status/progress is observable; deletion/revision invalidates only affected derived data; editor remains writable throughout."
+              }
+            }
+          ]
         },
         {
           "id": "accept-res-a002",
@@ -4138,7 +4155,7 @@
         {
           "feature_id": "RES-001",
           "source_anchor_state": "TRACEABILITY_MAPPED",
-          "author_visible_result": "Search Markdown/text and supported YAML/JSON workspace documents by full text, exact phrase/title and prefix; scope by repository-relative path; deterministic ranking and bounded pagination.",
+          "author_visible_result": "Search Markdown/text and supported YAML/JSON workspace documents by full text, exact phrase/title and prefix; scope by repository-relative path; deterministic ranking and bounded pagination. When Semantic is explicitly available, Host may submit its sentence results with canonical Research results to the UI-only `research.search.fuse` action, which revalidates exact Host scope/snapshot and source spans and fuses document/passage ranks with deterministic reciprocal-rank fusion. Expression ranking uses the admitted Research tokenizer over candidate sentences; if unavailable, report that state and preserve the standard search results.",
           "source_disposition": "RECOVERY + DESIGN_TARGET pagination and phrase semantics",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -4183,7 +4200,15 @@
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null,
-          "lifecycle": "ACTIVE"
+          "lifecycle": "ACTIVE",
+          "canon_metadata_history": [
+            {
+              "ledger_revision": "829c69e19aa504cccb1622cdbaa832b963ea99a7",
+              "fields": {
+                "author_visible_result": "Search Markdown/text and supported YAML/JSON workspace documents by full text, exact phrase/title and prefix; scope by repository-relative path; deterministic ranking and bounded pagination."
+              }
+            }
+          ]
         },
         {
           "feature_id": "RES-002",
@@ -8922,7 +8947,7 @@
           "id": "accept-sem-a1",
           "canon_title": "Index lifecycle and data isolation",
           "canon_reference": "#accept-sem-a1",
-          "canon_requirement": "With a synthetic work containing 120 passages across story and manuscript files, status initially reports missing without loading the model. The author explicitly starts indexing; progress reaches 120 and final status is ready for the selected snapshot. A second build reuses unchanged vectors and replaces only the edited passage. A changed branch/worktree generation returns no old hit as current; a stale/missing/corrupt cache rebuilds from Git source. Cancel mid-batch, Worker termination, tab reload, storage quota failure, offline missing model, plugin disable and re-enable each preserve the previous complete generation and source files; tasks stop and leases release. Repository A's cache never appears in repository B.",
+          "canon_requirement": "With a synthetic work containing 120 passages across story and manuscript files, status initially reports missing without loading the model. The author explicitly starts indexing; progress reaches 120 and final status is ready for the selected snapshot. A second build reuses unchanged vectors and replaces only the edited passage. A changed branch/worktree generation returns no old hit as current; a stale/missing/corrupt cache rebuilds from Git source. Cancel mid-batch, Worker termination, tab reload, storage quota failure, offline missing model, plugin disable and re-enable each preserve the previous complete generation and source files; same-snapshot staged vectors are resumed only after their source/model/config hashes are revalidated, otherwise discarded. A current index with an unloaded model starts a warm-only job and does not re-embed passages. Tasks stop and leases release. Repository A's cache never appears in repository B.",
           "feature_ids": [
             "SEM-01"
           ],
@@ -8983,13 +9008,21 @@
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null,
-          "lifecycle": "ACTIVE"
+          "lifecycle": "ACTIVE",
+          "canon_metadata_history": [
+            {
+              "ledger_revision": "829c69e19aa504cccb1622cdbaa832b963ea99a7",
+              "fields": {
+                "canon_requirement": "With a synthetic work containing 120 passages across story and manuscript files, status initially reports missing without loading the model. The author explicitly starts indexing; progress reaches 120 and final status is ready for the selected snapshot. A second build reuses unchanged vectors and replaces only the edited passage. A changed branch/worktree generation returns no old hit as current; a stale/missing/corrupt cache rebuilds from Git source. Cancel mid-batch, Worker termination, tab reload, storage quota failure, offline missing model, plugin disable and re-enable each preserve the previous complete generation and source files; tasks stop and leases release. Repository A's cache never appears in repository B."
+              }
+            }
+          ]
         },
         {
           "id": "accept-sem-a2",
           "canon_title": "Search and reranking",
           "canon_reference": "#accept-sem-a2",
-          "canon_requirement": "From Research, run a Japanese lexical query while Semantic is absent/disabled/offline; lexical result appears immediately with no model request. Enable hybrid mode and query a known fixture; Research combines lexical and vector ranks by RRF with component scores, cites exact current revision and opens the exact sentence. An outdated response after editing or switching branch is marked stale and cannot navigate. Request reranking only after explicit opt-in; a valid local run returns finite model-tagged scores, while unavailable artifact/device/cancellation returns original order plus a visible warning and preserves editing. Repeat the same query/snapshot/model produces same ordering and does not leak across repositories.",
+          "canon_requirement": "From Research, run a Japanese lexical query while Semantic is absent/disabled/offline; lexical result appears immediately with no model request. Enable hybrid mode and query a known fixture; Research combines lexical and vector ranks by RRF with component scores, cites exact current revision and opens the exact sentence. An outdated response after editing or switching branch is marked stale and cannot navigate. Request reranking only after explicit opt-in; a valid local run returns finite model-tagged scores, while unavailable artifact/device/cancellation returns original order plus a visible warning and preserves editing. Repeat the same query/snapshot/model produces same ordering and does not leak across repositories. The pinned BGE model must complete an exact-byte local runtime test before this gate is considered passed. A fail-fast unavailable response is safe behavior but does not satisfy the reranking requirement.",
           "feature_ids": [
             "SEM-02"
           ],
@@ -9029,7 +9062,15 @@
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null,
-          "lifecycle": "ACTIVE"
+          "lifecycle": "ACTIVE",
+          "canon_metadata_history": [
+            {
+              "ledger_revision": "829c69e19aa504cccb1622cdbaa832b963ea99a7",
+              "fields": {
+                "canon_requirement": "From Research, run a Japanese lexical query while Semantic is absent/disabled/offline; lexical result appears immediately with no model request. Enable hybrid mode and query a known fixture; Research combines lexical and vector ranks by RRF with component scores, cites exact current revision and opens the exact sentence. An outdated response after editing or switching branch is marked stale and cannot navigate. Request reranking only after explicit opt-in; a valid local run returns finite model-tagged scores, while unavailable artifact/device/cancellation returns original order plus a visible warning and preserves editing. Repeat the same query/snapshot/model produces same ordering and does not leak across repositories."
+              }
+            }
+          ]
         },
         {
           "id": "accept-sem-a3",
@@ -9245,8 +9286,8 @@
         {
           "feature_id": "SEM-01",
           "source_anchor_state": "TRACEABILITY_MAPPED",
-          "author_visible_result": "Build, inspect and cancel the snapshot index (`semantic.index.rebuild`, `.status`, `semantic.task.status`, `.cancel`)",
-          "source_disposition": "Semantic provider; Research shows current model, snapshot, indexed passage count and progress; author can start, cancel and retry indexing",
+          "author_visible_result": "Build, inspect, cancel and resume the snapshot index (`semantic.index.rebuild`, `.step`, `.status`, `semantic.task.status`, `.cancel`)",
+          "source_disposition": "Semantic provider; Research shows current model, snapshot, indexed passage count and durable progress; author can start, cancel and retry indexing",
           "canon_source_revisions": [
             "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -9316,7 +9357,16 @@
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null,
-          "lifecycle": "ACTIVE"
+          "lifecycle": "ACTIVE",
+          "canon_metadata_history": [
+            {
+              "ledger_revision": "829c69e19aa504cccb1622cdbaa832b963ea99a7",
+              "fields": {
+                "author_visible_result": "Build, inspect and cancel the snapshot index (`semantic.index.rebuild`, `.status`, `semantic.task.status`, `.cancel`)",
+                "source_disposition": "Semantic provider; Research shows current model, snapshot, indexed passage count and progress; author can start, cancel and retry indexing"
+              }
+            }
+          ]
         },
         {
           "feature_id": "SEM-02",
