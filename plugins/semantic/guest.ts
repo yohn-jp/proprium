@@ -2,8 +2,8 @@ import { createGuest, type Handler } from "../shared/guest.ts";
 import { HOST_OPERATIONS, type FileChunk, type FilePage } from "../shared/operations.ts";
 import type { ActionRequest } from "../../app/src/browser/proprium/authoring/types.js";
 import { clusterTerms, EMBEDDING_MODEL, RERANKER_MODEL, type CandidateTerm } from "./core.ts";
-import { E5_MODEL, embedPassages, embeddingLoaded, ensureEmbedding, releaseEmbedding } from "./inference.ts";
-import { loadIndex, rebuildIndex, queryIndex, contradictionPage } from "./index-operations.ts";
+import { E5_MODEL, embedPassages, embeddingLoaded, ensureEmbedding, ensureEmbeddingStep, releaseEmbedding } from "./inference.ts";
+import { loadIndex, releaseSemanticIndex, startIndexBuild, stepIndexBuild, queryIndex, contradictionPage } from "./index-operations.ts";
 import { cancelSemanticTask, endSemanticTask, semanticTasks } from "./tasks.ts";
 
 function fail(code: string, message: string): Error {
@@ -44,7 +44,7 @@ function unavailableModel(role: "embedding" | "reranker") {
   };
 }
 
-const semanticEngine = { ensure: ensureEmbedding, embed: embedPassages, model: () => unavailableModel("embedding") };
+const semanticEngine = { ensure: ensureEmbedding, ensureStep: ensureEmbeddingStep, embed: embedPassages, model: () => unavailableModel("embedding") };
 const indexStatus: Handler = function* (raw, context, host) {
   parseEmpty(raw);
   let index;
@@ -57,7 +57,12 @@ const indexStatus: Handler = function* (raw, context, host) {
 };
 const indexRebuild: Handler = function* (raw, context, host) {
   const input = exactObject(raw, ["taskId"], "input");
-  return yield* rebuildIndex({ taskId: safeTaskId(input.taskId) }, context as ActionRequest, host, semanticEngine);
+  return yield* startIndexBuild({ taskId: safeTaskId(input.taskId) }, context as ActionRequest, host, semanticEngine);
+};
+const indexStep: Handler = function* (raw, context, host) {
+  const input = exactObject(raw, ["taskId", "sequence"], "input");
+  if (!Number.isSafeInteger(input.sequence) || (input.sequence as number) < 0 || (input.sequence as number) > 1_000_000) throw fail("invalid_input", "sequence must be an integer from 0 to 1000000");
+  return yield* stepIndexBuild({ taskId: safeTaskId(input.taskId), sequence: input.sequence as number }, context as ActionRequest, host, semanticEngine);
 };
 
 function queryInput(raw: unknown): { query: string; granularity: "scene" | "sentence"; limit: number; excludeSceneIds?: string[] } {
@@ -123,7 +128,7 @@ function parseTerms(raw: unknown): { candidates: CandidateTerm[]; useEmbedding: 
 const clusterTermsAction: Handler = function* (raw, context, host) {
   const { candidates, useEmbedding } = parseTerms(raw);
   if (useEmbedding) {
-    yield* ensureEmbedding(host);
+    if (!embeddingLoaded()) throw fail("provider_unavailable", "Use the explicit Semantic index action to load the pinned local model before embedding term candidates");
     const vectors = embedPassages(candidates.map((candidate) => candidate.term));
     const results = clusterTerms(candidates, vectors).map((cluster) => ({ ...cluster, semanticOnly: cluster.semanticOnly === true }));
     return { snapshot: context.snapshot, model: unavailableModel("embedding"), results };
@@ -212,6 +217,7 @@ const taskCancel: Handler = (raw, context) => {
 const implementation = createGuest("proprium.semantic", {
   "proprium.semantic.index.status": indexStatus,
   "proprium.semantic.index.rebuild": indexRebuild,
+  "proprium.semantic.index.step": indexStep,
   "proprium.semantic.passages.query": passageQuery,
   "proprium.semantic.rerank": rerank,
   "proprium.semantic.terms.cluster": clusterTermsAction,
@@ -228,6 +234,7 @@ export const guest = {
   dispose(): void {
     endSemanticTask();
     releaseEmbedding();
+    releaseSemanticIndex();
     implementation.dispose();
   },
 };

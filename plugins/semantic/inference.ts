@@ -36,9 +36,17 @@ export interface InferenceBindings {
 }
 
 const ASSET_READ = "workspace.asset.read";
-const ASSET_CHUNK_BYTES = 128 * 1024;
+// The Host asset broker and WASM append binding both accept up to 256 KiB.
+// Use the negotiated ceiling to halve RPC/JSON hand-offs for the 470 MB E5
+// model while keeping each transfer bounded by the shared protocol limit.
+const ASSET_CHUNK_BYTES = 256 * 1024;
 const ASSET_MAX_CHUNK_BYTES = 256 * 1024;
 const MAX_EMBEDDING_BATCH = 32;
+const E5_ASSETS = [
+  { path: E5_MODEL.model_path, bytes: E5_MODEL.model_bytes, digest: E5_MODEL.model_sha256 },
+  { path: E5_MODEL.tokenizer_path, bytes: E5_MODEL.tokenizer_bytes, digest: E5_MODEL.tokenizer_sha256 },
+] as const;
+export const E5_ASSET_TOTAL_BYTES = E5_ASSETS.reduce((total, asset) => total + asset.bytes, 0);
 const CANONICAL_ERRORS = new Set([
   "invalid_input", "plugin_unavailable", "dependency_unavailable", "capability_denied",
   "provider_unavailable", "snapshot_stale", "index_missing", "index_stale", "task_exists",
@@ -48,6 +56,9 @@ const CANONICAL_ERRORS = new Set([
 let bindings: InferenceBindings | undefined;
 let ready = false;
 let loading = false;
+let assetIndex = 0;
+let assetOffset = 0;
+let assetStarted = false;
 
 export function setInferenceBindings(value: InferenceBindings): void {
   if (bindings) throw new Error("Semantic inference bindings are already installed");
@@ -97,51 +108,54 @@ function validateRange(value: AssetReadResult, path: string, offset: number): vo
   }
 }
 
-function* loadAsset(
-  host: GuestHost,
-  path: string,
-  byteLength: number,
-  expectedDigest: string,
-): Generator<import("../shared/guest.ts").HostCall, void, unknown> {
-  const engine = expectBindings();
-  let offset = 0;
-  let started = false;
-  while (true) {
-    const range = yield* host.request<AssetReadResult>(ASSET_READ, {
-      group_id: E5_ASSET_GROUP_ID,
-      file_path: path,
-      offset,
-      length: ASSET_CHUNK_BYTES,
-    });
-    validateRange(range, path, offset);
-    if (range.total_bytes !== byteLength || range.sha256 !== expectedDigest) {
-      throw failure("model_unavailable", "The admitted model metadata does not match the pinned E5 release");
-    }
-    if (!started) {
-      engine.beginAsset(E5_ASSET_GROUP_ID, path, range.total_bytes, range.sha256);
-      started = true;
-    }
-    engine.appendAsset(E5_ASSET_GROUP_ID, path, offset, Uint8Array.from(range.bytes));
-    offset += range.bytes.length;
-    if (range.next_offset === null) break;
-    if (range.next_offset <= offset - range.bytes.length) throw failure("model_unavailable", "The Host model asset cursor did not advance");
-    offset = range.next_offset;
-  }
-  engine.finishAsset(E5_ASSET_GROUP_ID, path);
+export function* ensureEmbedding(host: GuestHost): Generator<import("../shared/guest.ts").HostCall, void, unknown> {
+  while (!ready) yield* ensureEmbeddingStep(host, 4);
 }
 
-export function* ensureEmbedding(host: GuestHost): Generator<import("../shared/guest.ts").HostCall, void, unknown> {
-  if (ready) return;
+/** Transfer a bounded number of verified artifact chunks for scheduler-backed work. */
+export function* ensureEmbeddingStep(host: GuestHost, maxChunks = 4): Generator<import("../shared/guest.ts").HostCall, { ready: boolean; completed: number; total: number }, unknown> {
+  if (ready) return { ready: true, completed: E5_ASSET_TOTAL_BYTES, total: E5_ASSET_TOTAL_BYTES };
+  if (!Number.isSafeInteger(maxChunks) || maxChunks < 1 || maxChunks > 16) throw failure("invalid_input", "Semantic model-load step is outside the supported bound");
   if (loading) throw failure("capacity", "Semantic model loading is already in progress");
   const engine = expectBindings();
   loading = true;
   try {
-    yield* loadAsset(host, E5_MODEL.model_path, E5_MODEL.model_bytes, E5_MODEL.model_sha256);
-    yield* loadAsset(host, E5_MODEL.tokenizer_path, E5_MODEL.tokenizer_bytes, E5_MODEL.tokenizer_sha256);
-    engine.loadEmbedding();
-    ready = true;
+    if (assetIndex === E5_ASSETS.length) {
+      engine.loadEmbedding();
+      ready = true;
+      return { ready: true, completed: E5_ASSET_TOTAL_BYTES, total: E5_ASSET_TOTAL_BYTES };
+    }
+    let chunks = 0;
+    while (assetIndex < E5_ASSETS.length && chunks < maxChunks) {
+      const asset = E5_ASSETS[assetIndex]!;
+      if (!assetStarted) {
+        engine.beginAsset(E5_ASSET_GROUP_ID, asset.path, asset.bytes, asset.digest);
+        assetStarted = true;
+      }
+      const range = yield* host.request<AssetReadResult>(ASSET_READ, {
+        group_id: E5_ASSET_GROUP_ID, file_path: asset.path, offset: assetOffset, length: ASSET_CHUNK_BYTES,
+      });
+      validateRange(range, asset.path, assetOffset);
+      if (range.total_bytes !== asset.bytes || range.sha256 !== asset.digest) {
+        throw failure("model_unavailable", "The admitted model metadata does not match the pinned E5 release");
+      }
+      engine.appendAsset(E5_ASSET_GROUP_ID, asset.path, assetOffset, Uint8Array.from(range.bytes));
+      assetOffset += range.bytes.length;
+      chunks += 1;
+      if (range.next_offset === null) {
+        engine.finishAsset(E5_ASSET_GROUP_ID, asset.path);
+        assetIndex += 1;
+        assetOffset = 0;
+        assetStarted = false;
+      }
+    }
+    const completed = E5_ASSETS.slice(0, assetIndex).reduce((total, asset) => total + asset.bytes, 0) + assetOffset;
+    return { ready: false, completed, total: E5_ASSET_TOTAL_BYTES };
   } catch (error) {
     engine.release();
+    assetIndex = 0;
+    assetOffset = 0;
+    assetStarted = false;
     throw modelUnavailable(error);
   } finally {
     loading = false;
@@ -176,6 +190,9 @@ export function releaseEmbedding(): void {
   if (bindings) bindings.release();
   ready = false;
   loading = false;
+  assetIndex = 0;
+  assetOffset = 0;
+  assetStarted = false;
 }
 
 /** UAX #29 sentence breaks from the component's pinned Unicode implementation. */

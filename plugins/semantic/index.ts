@@ -34,6 +34,9 @@ function checksum(index: Omit<SemanticIndex, 'checksum'>): string {
 export function makeIndex(request: ActionRequest, corpus: SemanticCorpus, vectors: number[][]): SemanticIndex {
   if (vectors.length !== corpus.passages.length) throw failure('model_unavailable', 'Embedding count differs from source passages');
   const passages = corpus.passages.map((passage, i) => ({ entityId: passage.entityId, type: passage.type, sourcePath: passage.sourcePath, sourceRevision: passage.sourceRevision, sentenceIndex: passage.sentenceIndex, textHash: sha256Text(passage.text), vector: encodeVector(vectors[i]!) }));
+  return makeIndexFromReferences(request, passages);
+}
+export function makeIndexFromReferences(request: ActionRequest, passages: IndexedReference[]): SemanticIndex {
   const base = { version: 2 as const, scope: request.scope, snapshot: request.snapshot, modelDigest: E5_MODEL.model_sha256, passages };
   return validateIndex({ ...base, checksum: checksum(base) }, request);
 }

@@ -210,9 +210,11 @@
               "additionalProperties": false,
               "required": [
                 "taskId",
+                "state",
                 "phase",
                 "completed",
-                "total"
+                "total",
+                "resumable"
               ],
               "properties": {
                 "taskId": {
@@ -232,7 +234,8 @@
                     "term_embedding",
                     "mention_scan",
                     "candidate_scoring",
-                    "complete"
+                    "complete",
+                    "model_loading"
                   ]
                 },
                 "completed": {
@@ -244,6 +247,19 @@
                   "type": "integer",
                   "minimum": 0,
                   "maximum": 2147483647
+                },
+                "state": {
+                  "enum": [
+                    "queued",
+                    "running",
+                    "paused",
+                    "cancelled",
+                    "failed",
+                    "complete"
+                  ]
+                },
+                "resumable": {
+                  "type": "boolean"
                 }
               }
             }
@@ -280,92 +296,209 @@
         }
       },
       "output_schema": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "snapshot",
-          "taskId",
-          "scanned",
-          "embedded",
-          "reused",
-          "removed",
-          "indexedGeneration"
-        ],
-        "properties": {
-          "snapshot": {
+        "oneOf": [
+          {
             "type": "object",
             "additionalProperties": false,
             "required": [
-              "id",
-              "local_commit",
-              "worktree_generation",
-              "draft_generation"
+              "snapshot",
+              "taskId",
+              "state",
+              "phase",
+              "completed",
+              "total"
             ],
             "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 256
-              },
-              "local_commit": {
-                "type": [
-                  "string",
-                  "null"
+              "snapshot": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "local_commit",
+                  "worktree_generation",
+                  "draft_generation"
                 ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "local_commit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 128
+                  },
+                  "worktree_generation": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "draft_generation": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 256
+                  },
+                  "remote_commit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 128
+                  }
+                }
+              },
+              "taskId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,128}$",
                 "maxLength": 128
               },
-              "worktree_generation": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 256
+              "state": {
+                "const": "running"
               },
-              "draft_generation": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 256
+              "phase": {
+                "enum": [
+                  "source_scan",
+                  "model_loading",
+                  "embedding",
+                  "cache_publish",
+                  "complete"
+                ]
               },
-              "remote_commit": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 128
+              "completed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647
               }
             }
           },
-          "taskId": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9_-]{1,128}$",
-            "maxLength": 128
-          },
-          "scanned": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 2147483647
-          },
-          "embedded": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 2147483647
-          },
-          "reused": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 2147483647
-          },
-          "removed": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 2147483647
-          },
-          "indexedGeneration": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 256
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "snapshot",
+              "taskId",
+              "state",
+              "phase",
+              "completed",
+              "total",
+              "result"
+            ],
+            "properties": {
+              "snapshot": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "local_commit",
+                  "worktree_generation",
+                  "draft_generation"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "local_commit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 128
+                  },
+                  "worktree_generation": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "draft_generation": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 256
+                  },
+                  "remote_commit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 128
+                  }
+                }
+              },
+              "taskId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,128}$",
+                "maxLength": 128
+              },
+              "state": {
+                "const": "complete"
+              },
+              "phase": {
+                "const": "complete"
+              },
+              "completed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647
+              },
+              "result": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "scanned",
+                  "embedded",
+                  "reused",
+                  "removed",
+                  "indexedGeneration"
+                ],
+                "properties": {
+                  "scanned": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "embedded": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "reused": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "removed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "indexedGeneration": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                }
+              }
+            }
           }
-        }
+        ]
       },
       "required_capabilities": [
         "workspace.file.read",
@@ -376,6 +509,245 @@
         "ui"
       ],
       "requires_user_gesture": true
+    },
+    {
+      "action_id": "proprium.semantic.index.step",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "taskId",
+          "sequence"
+        ],
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000
+          }
+        }
+      },
+      "output_schema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "snapshot",
+              "taskId",
+              "state",
+              "phase",
+              "completed",
+              "total"
+            ],
+            "properties": {
+              "snapshot": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "local_commit",
+                  "worktree_generation",
+                  "draft_generation"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "local_commit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 128
+                  },
+                  "worktree_generation": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "draft_generation": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 256
+                  },
+                  "remote_commit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 128
+                  }
+                }
+              },
+              "taskId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,128}$",
+                "maxLength": 128
+              },
+              "state": {
+                "const": "running"
+              },
+              "phase": {
+                "enum": [
+                  "source_scan",
+                  "model_loading",
+                  "embedding",
+                  "cache_publish",
+                  "complete"
+                ]
+              },
+              "completed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "snapshot",
+              "taskId",
+              "state",
+              "phase",
+              "completed",
+              "total",
+              "result"
+            ],
+            "properties": {
+              "snapshot": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "local_commit",
+                  "worktree_generation",
+                  "draft_generation"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "local_commit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 128
+                  },
+                  "worktree_generation": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "draft_generation": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 256
+                  },
+                  "remote_commit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 128
+                  }
+                }
+              },
+              "taskId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,128}$",
+                "maxLength": 128
+              },
+              "state": {
+                "const": "complete"
+              },
+              "phase": {
+                "const": "complete"
+              },
+              "completed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647
+              },
+              "result": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "scanned",
+                  "embedded",
+                  "reused",
+                  "removed",
+                  "indexedGeneration"
+                ],
+                "properties": {
+                  "scanned": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "embedded": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "reused": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "removed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "indexedGeneration": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.asset.read",
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": false
     },
     {
       "plugin_id": "proprium.semantic",
@@ -1841,9 +2213,11 @@
               "additionalProperties": false,
               "required": [
                 "taskId",
+                "state",
                 "phase",
                 "completed",
-                "total"
+                "total",
+                "resumable"
               ],
               "properties": {
                 "taskId": {
@@ -1863,7 +2237,8 @@
                     "term_embedding",
                     "mention_scan",
                     "candidate_scoring",
-                    "complete"
+                    "complete",
+                    "model_loading"
                   ]
                 },
                 "completed": {
@@ -1875,6 +2250,19 @@
                   "type": "integer",
                   "minimum": 0,
                   "maximum": 2147483647
+                },
+                "state": {
+                  "enum": [
+                    "queued",
+                    "running",
+                    "paused",
+                    "cancelled",
+                    "failed",
+                    "complete"
+                  ]
+                },
+                "resumable": {
+                  "type": "boolean"
                 }
               }
             }
@@ -2014,7 +2402,7 @@
               "id": "semantic-index-rebuild",
               "type": "form",
               "title": "インデックスの再構築を要求",
-              "description": "保存済み原稿から検索用インデックスを生成します。モデルと文章解析機能が必要です。現在は最大256文まで対応しています。",
+              "description": "保存済み原稿から検索用インデックスを構築または再利用します。インデックスが最新でもモデル未ロードなら、検索に使えるよう署名済みローカルモデルを準備します。Hostが進捗を保存する短い処理単位で実行し、中断後は同じスナップショットから再開します。",
               "fields": [
                 {
                   "id": "task_id",
