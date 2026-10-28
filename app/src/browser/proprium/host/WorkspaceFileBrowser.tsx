@@ -129,11 +129,11 @@ export function WorkspaceFileBrowser(props: Props) {
         onPointerCancel={cancelLongPress}
         onPointerLeave={cancelLongPress}
         disabled={props.busy}>
-        <span className="file-path">{node.name}</span>
+        <span className="file-path" id={"file-row-name-" + encodeURIComponent(node.path)}>{node.name}</span>
         {node.pending ? <small>作成中の下書き</small> : props.changedPaths.has(node.path) ? <small>未コミット</small> : null}
       </button>
       <button type="button" className="file-row-overflow" disabled={props.busy}
-        aria-label={node.path + " の操作メニュー"}
+        aria-label="ファイルの操作" aria-describedby={"file-row-name-" + encodeURIComponent(node.path)}
         onClick={event => openContext(node.path, event.currentTarget)}>···</button>
     </div>}</li>);
   }
