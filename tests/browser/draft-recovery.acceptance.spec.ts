@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { expectEditorText, showPanel } from "./restored-ui.helpers.js";
+import { expectEditorText, showPanel, openWorkspacePicker } from "./restored-ui.helpers.js";
 
 const identity = () => ({
   origin: "https://github.com",
@@ -32,7 +32,7 @@ test("a protected new-file draft can be found and reopened after the workspace c
   await expect(page.getByLabel("原稿の保護範囲を確認")).toContainText("自動回復記録 · 保存済み");
 
   page.once("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: "作品一覧", exact: true }).first().click();
+  await openWorkspacePicker(page);
   await page.getByRole("button", { name: /proprium-test\/ui-restoration/u }).click();
   await showPanel(page, "outline");
 

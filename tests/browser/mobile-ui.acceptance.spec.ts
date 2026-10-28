@@ -62,22 +62,31 @@ test("Mobile WebKit keeps workspace panels, routes Settings separately, and revi
     await window.propriumHostTest!.openWorkspace(workspace, { "chapter.md": "最初の本文です。\n" });
   }, workspace);
 
-  await expect(page.locator("summary[aria-label='別の画面へ移動']")).toBeVisible();
-  await expect(page.locator(".mobile-shell-navigation-menu")).not.toHaveAttribute("open", "");
-  await expect(page.getByRole("navigation", { name: "モバイル画面" })).not.toBeVisible();
-  await expect(page.locator(".st-workspace-mobile-tabs [role='tab']").first()).toBeVisible();
+  const screenNavigation = page.getByRole("navigation", { name: "モバイルの主要画面" });
+  await expect(screenNavigation).toBeVisible();
+  await expect(screenNavigation.getByRole("button")).toHaveCount(4);
+  await expect(page.locator('summary[aria-label="別の画面へ移動"]')).toHaveCount(0);
+  await expect(screenNavigation.getByRole("button", { name: "変更", exact: true })).toBeVisible();
 
-  const screenNavigation = page.getByRole("navigation", { name: "モバイル画面" });
-  await page.locator("summary[aria-label='別の画面へ移動']").click();
-  await screenNavigation.getByRole("button", { name: "設定", exact: true }).click();
+  await page.getByRole("button", { name: "設定を開く" }).click();
   await expect(page.locator(".mobile-shell-workspace-view[data-active-view='settings'] .mobile-shell-settings-card")).toBeVisible();
   await expect(page.locator(".mobile-shell-workspace-panel")).toHaveAttribute("hidden", "");
   await expect(page.locator(".commit-panel")).not.toBeVisible();
-
-  await page.locator("summary[aria-label='別の画面へ移動']").click();
   await screenNavigation.getByRole("button", { name: "書く", exact: true }).click();
   await expect(page.locator(".mobile-shell-workspace-panel")).not.toHaveAttribute("hidden", "");
+  await screenNavigation.getByRole("button", { name: "作品", exact: true }).click();
+  await page.locator(".file-row-group").filter({ hasText: "chapter.md" }).getByRole("button", { name: "ファイルの操作" }).click();
+  const fileActions = page.getByRole("dialog", { name: "ファイルの操作" });
+  await expect(fileActions).toBeVisible();
+  await expect(fileActions.getByLabel("名前・保存先を変更")).toHaveValue("chapter.md");
+  await fileActions.getByLabel("名前・保存先を変更").fill("../invalid.md");
+  await fileActions.getByRole("button", { name: "この端末で変更" }).click();
+  await expect(fileActions.getByRole("alert")).toBeVisible();
+  await fileActions.getByRole("button", { name: "操作メニューを閉じる" }).click();
+  await expect(fileActions).not.toBeVisible();
+
   await chooseFile(page, "chapter.md");
+  await expect(page.locator(".mobile-shell-workspace-view")).toHaveAttribute("data-active-view", "writing");
   await expect(page.getByRole("textbox", { name: "原稿 Markdown" })).toBeVisible();
   const manuscriptBounds = await page.locator(".cm-editor").boundingBox();
   expect(manuscriptBounds).not.toBeNull();
@@ -85,6 +94,8 @@ test("Mobile WebKit keeps workspace panels, routes Settings separately, and revi
   expect(visibleManuscriptHeight).toBeGreaterThan(120);
 
   await page.getByRole("textbox", { name: "原稿 Markdown" }).fill("変更後の本文です。\n");
+  await expect(screenNavigation).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "画面の切替を表示" })).toBeVisible();
   const saveDraft = page.getByRole("button", { name: "端末に保存", exact: true });
   await expect(saveDraft).toBeEnabled();
   await saveDraft.click();
@@ -93,4 +104,27 @@ test("Mobile WebKit keeps workspace panels, routes Settings separately, and revi
 
   await showPanel(page, "history");
   await expect(page.locator("#git-history-heading")).toBeVisible();
+});
+
+
+test("Mobile WebKit long press opens the same file action sheet without selecting or mutating the document", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-webkit", "Long press is a touch interaction");
+  await page.goto("/mobile?view=library");
+  await page.waitForFunction(() => typeof window.propriumHostTest?.openWorkspace === "function");
+  await page.evaluate(async () => {
+    await window.propriumHostTest!.openWorkspace({
+      provider: "local", name: "long-press-acceptance", branch: "main",
+      localWorkspaceId: `press-${crypto.randomUUID()}`,
+    }, { "note.md": "内容は変更しない。\\n" });
+  });
+  const file = page.getByRole("list", { name: "Repository files" }).getByRole("button", { name: "note.md", exact: true });
+  await expect(file).toBeVisible();
+  await file.dispatchEvent("pointerdown", { pointerId: 2, pointerType: "touch", clientX: 130, clientY: 150, bubbles: true });
+  await page.waitForTimeout(560);
+  const sheet = page.getByRole("dialog", { name: "ファイルの操作" });
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByLabel("名前・保存先を変更")).toHaveValue("note.md");
+  await sheet.getByRole("button", { name: "操作メニューを閉じる" }).click();
+  await expect(sheet).toBeHidden();
+  await expect(page.locator(".file-row[aria-current='page']")).toHaveCount(0);
 });

@@ -1,4 +1,4 @@
-import { showPanel, expectEditorText, chooseFile, reviewChangedFiles } from "./restored-ui.helpers.js";
+import { showPanel, expectEditorText, chooseFile, reviewChangedFiles, openWorkspacePicker } from "./restored-ui.helpers.js";
 import { expect, test } from "@playwright/test";
 import type { WorkspaceIdentity } from "../../app/src/browser/proprium/git/protocol.js";
 
@@ -64,7 +64,11 @@ test("Host edits and commits a generic repository offline, then reopens the save
   await expect(historyEntry.locator("code")).toHaveText(/^[a-f0-9]{10}$/u);
   await showRepositoryFiles(page);
   await expect(page.getByLabel("Local workspace only", { exact: true })).toBeVisible();
-  await expect(page.locator(".topbar").getByRole("button", { name: "GitHubに接続", exact: true })).toBeVisible();
+  if (await page.locator(".mobile-shell").count()) {
+    await page.getByRole("button", { name: "設定を開く" }).click();
+    await expect(page.getByRole("button", { name: "GitHubに接続", exact: true })).toBeVisible();
+    await showPanel(page, "outline");
+  } else await expect(page.locator(".topbar").getByRole("button", { name: "GitHubに接続", exact: true })).toBeVisible();
 
   // The dev server cannot supply a newly-created worker while offline. Keep the
   // editing and local Git operations offline, then restore transport before
@@ -107,7 +111,7 @@ test("local start creates and reopens a generic browser-only workspace without c
   await page.getByRole("button", { name: "端末に保存", exact: true }).click();
   await expect(page.locator(".host-message[role='status']")).toContainText("saved to this browser's local Git worktree");
 
-  await page.getByRole("button", { name: "作品一覧", exact: true }).click();
+  await openWorkspacePicker(page);
   await page.getByRole("button", { name: /A local draft/u }).click();
   await showRepositoryFiles(page);
   await chooseFile(page, "notes.md");

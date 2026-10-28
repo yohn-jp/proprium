@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { chooseFile } from "./restored-ui.helpers.js";
+import { chooseFile, showPanel } from "./restored-ui.helpers.js";
 
 type ContrastResult = {
   foreground: string;
@@ -86,7 +86,11 @@ test("selection, supporting copy and disabled editor controls remain readable in
   const isMobile = testInfo.project.name === "mobile-webkit";
   for (const theme of ["light", "dark", "paper"] as const) {
     await page.goto("/");
-    await page.getByLabel("外観", { exact: true }).selectOption(theme);
+    if (isMobile) {
+      await page.getByRole("button", { name: "設定を開く" }).click();
+      await page.locator("#settings-theme").selectOption(theme);
+      await page.getByRole("navigation", { name: "モバイルの主要画面" }).getByRole("button", { name: "作品", exact: true }).click();
+    } else await page.getByLabel("外観", { exact: true }).selectOption(theme);
 
     const selected = isMobile
       ? page.locator(".mobile-shell-navigation ion-button[fill='solid']")
@@ -118,10 +122,12 @@ test("selection, supporting copy and disabled editor controls remain readable in
     const saveDraft = page.getByRole("button", { name: "端末に保存", exact: true });
     await expect(saveDraft).toBeDisabled();
     await expectReadable(saveDraft, `${testInfo.project.name} ${theme} disabled 端末に保存`);
+    if (isMobile) await page.getByRole("button", { name: "設定を開く" }).click();
     const workspaces = page.getByRole("button", { name: "作品一覧", exact: true });
     await workspaces.hover();
     await expectReadable(workspaces, `${testInfo.project.name} ${theme} hovered 作品一覧`);
     await page.mouse.move(0, 0);
+    if (isMobile) await showPanel(page, "editor");
     if (!isMobile) {
       await expectReadable(page.locator(".st-studio-footer > span").first(), `${testInfo.project.name} ${theme} footer text`);
       const layoutDisclosure = page.locator(".st-workspace-configuration");

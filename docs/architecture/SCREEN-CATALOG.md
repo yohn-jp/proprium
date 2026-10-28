@@ -10,7 +10,7 @@
 
 Browser Hostの入口から到達するUIを対象にする。`main.tsx`は`BrowserRouter`内に一つの`HostApp`をmountする。`/desktop`・`/mobile`は初期モードの選択に使われ、画面別の独立したアプリケーションではない。Mobileの`view=library|writing|inspection|tools|settings`も、認証・保存状態を表すものではない。
 
-DesktopはWorkspace未選択時、左の「作品ライブラリ」にrecentsを置き、右の主領域にローカル開始・Gateway設定・認証・repository選択のpickerを出す。Workspace選択後は`editor / outline / inspector / history / review`の5パネルを構成する。MobileはWorkspaceを開いた後、同じ機能を独立したナビゲーションで提示し、`settings`は専用viewである。設定内容はDesktopではトップバーから開くmodal、Mobileではこのviewに表示される。Desktopに`?view=settings`が残っていても、それだけで独立した設定routeがあるとは判定しない。
+DesktopはWorkspace未選択時、左の「作品ライブラリ」にrecentsを置き、右の主領域にローカル開始・Gateway設定・認証・repository選択のpickerを出す。Workspace選択後は`editor / outline / inspector / history / review`の5パネルを構成する。MobileはWorkspaceを開いた後、作品・書く・変更・ツールの4つの直接タブで同じ機能を提示し、設定はヘッダーから開く専用viewである。設定内容はDesktopではトップバーから開くmodal、Mobileではこのviewに表示される。Desktopに`?view=settings`が残っていても、それだけで独立した設定routeがあるとは判定しない。
 
 実装上の入口は[Host entry][entry]、機能接続は[HostApp][host]、配置は[DesktopShell][desktop]・[MobileShell][mobile]・[Workspace][layout]を参照する。虫眼鏡風のレールアイコンも実際の遷移先は`inspector`であり、全文検索の実装証拠にはしない。
 
@@ -49,8 +49,8 @@ DesktopはWorkspace未選択時、左の「作品ライブラリ」にrecentsを
 | FT16 | Live MCP自動接続・SSE切断/再接続：[live] | Owner KeyやClient Tokenは廃止。常時利用・mobile background保証なし | F11 |
 | FT17 | client認可・token一回表示・一覧・失効・実行履歴：[live] | Gateway再起動／session切断後に旧tokenを復活させない | F12 |
 | FT18 | Writing/Research/Review・tab/split・float/dock・maximize・Save layout：[layout] | 配置を閉じることと実行終了を区別。保存失敗／invalid layoutを表示 | F13 |
-| FT19 | Mobile 5 view・戻る・参照sheet・keyboard／focus保持：[mobile] | Desktopの縮小版にしない。履歴遷移もflushと世代検証の対象 | F14 |
-| FT20 | ライト／ダーク／紙、UI mode切替、Git author、GitHub接続状態・Gateway URL：[theme]、[host]、[mobile] | 設定contentは接続済み。Desktopはトップバーからmodalを開き、MobileはWorkspace navigation内の専用settings viewを使う。MobileにはDesktop切替もある。shell headerにもthemeとGitHub認証操作があり、統合されたDesktop設定pageではない | F15 |
+| FT19 | Mobile 4 primary tabs + header Settings・戻る・参照sheet・keyboard／focus保持：[mobile] | Desktopの縮小版にしない。履歴遷移もflushと世代検証の対象 | F14 |
+| FT20 | ライト／ダーク／紙、UI mode切替、Git author、GitHub接続状態・Gateway URL：[theme]、[host]、[mobile] | 設定contentは接続済み。Desktopはトップバーからmodalを開き、Mobileはヘッダーから専用settings viewを開く。MobileにはDesktop切替もあり、外観・GitHub操作も設定内に表示する。Desktopは既存のトップバー・modal経路を維持する | F15 |
 | FT21 | unsaved離脱・journal回復・`storage_unknown`検証：[host]、[editor]、[recovery] | native dialogはstatus shelfの外。reset/deleteを検証の代替にしない | F04, F16 |
 | FT22 | Gateway release取得・設定・Tunnel・user service・更新：[operations]、[release] | Linux CLIがlatest解決とsystemd user serviceを管理する。Windows/macOSのCLI管理は未対応 | F17 |
 

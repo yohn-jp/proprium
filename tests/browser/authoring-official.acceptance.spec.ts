@@ -32,17 +32,17 @@ test("signed Narrative installs and navigates a large work in the real Host", as
   await showPanel(page, "review");
   const manager = page.locator("details.plugin-manager-panel");
   await manager.locator("summary").click();
-  await page.getByRole("button", { name: "信頼済みカタログを表示" }).click();
-  await page.getByRole("button", { name: "proprium.narrative 0.1.0 の署名済みプレビューを確認" }).click();
+  await page.getByRole("button", { name: "カタログを表示" }).click();
+  await page.getByRole("button", { name: "proprium.narrative v0.1.0 の導入内容と署名を確認" }).click();
   await page.getByRole("button", { name: "ダウンロードして無効状態でインストール" }).click();
   await expect(manager.getByRole("status")).toContainText("署名とダイジェストを検証し、無効状態でインストールしました");
-  const plugin = page.getByRole("listitem").filter({ hasText: "proprium.narrative" }).filter({ hasText: "v0.1.0" });
+  const plugin = page.locator(".installed-plugins > li").filter({ hasText: "proprium.narrative" }).filter({ hasText: "v0.1.0" });
   for (const capability of ["workspace.change.propose", "workspace.change.timestamp", "workspace.file.read", "workspace.identity.read"]) {
     const grant = plugin.getByRole("checkbox", { name: capability, exact: true });
     await expect(grant).not.toBeChecked();
     await grant.check();
   }
-  await plugin.getByRole("button", { name: "Enable" }).click();
+  await plugin.getByRole("button", { name: "有効化" }).click();
   await expect(manager.getByRole("status")).toContainText("proprium.narrative@0.1.0 is enabled");
   await page.locator(".st-workspace-configuration > summary").click();
   await page.locator(".st-workspace-panel-menu > summary").click();
@@ -89,17 +89,17 @@ test("signed Narrative proposes and applies a reviewed volume", async ({ page })
   await showPanel(page, "review");
   const manager = page.locator("details.plugin-manager-panel");
   await manager.locator("summary").click();
-  await page.getByRole("button", { name: "信頼済みカタログを表示" }).click();
-  await page.getByRole("button", { name: "proprium.narrative 0.1.0 の署名済みプレビューを確認" }).click();
+  await page.getByRole("button", { name: "カタログを表示" }).click();
+  await page.getByRole("button", { name: "proprium.narrative v0.1.0 の導入内容と署名を確認" }).click();
   await page.getByRole("button", { name: "ダウンロードして無効状態でインストール" }).click();
   await expect(manager.getByRole("status")).toContainText("署名とダイジェストを検証し、無効状態でインストールしました");
-  const plugin = page.getByRole("listitem").filter({ hasText: "proprium.narrative" }).filter({ hasText: "v0.1.0" });
+  const plugin = page.locator(".installed-plugins > li").filter({ hasText: "proprium.narrative" }).filter({ hasText: "v0.1.0" });
   for (const capability of ["workspace.change.propose", "workspace.change.timestamp", "workspace.file.read", "workspace.identity.read"]) {
     const grant = plugin.getByRole("checkbox", { name: capability, exact: true });
     await expect(grant).not.toBeChecked();
     await grant.check();
   }
-  await plugin.getByRole("button", { name: "Enable" }).click();
+  await plugin.getByRole("button", { name: "有効化" }).click();
   await expect(manager.getByRole("status")).toContainText("proprium.narrative@0.1.0 is enabled");
   await page.locator(".st-workspace-configuration > summary").click();
   await page.locator(".st-workspace-panel-menu > summary").click();
@@ -164,17 +164,17 @@ test("signed Narrative reviews and applies a scene title", async ({ page }) => {
   await showPanel(page, "review");
   const manager = page.locator("details.plugin-manager-panel");
   await manager.locator("summary").click();
-  await page.getByRole("button", { name: "信頼済みカタログを表示" }).click();
-  await page.getByRole("button", { name: "proprium.narrative 0.1.0 の署名済みプレビューを確認" }).click();
+  await page.getByRole("button", { name: "カタログを表示" }).click();
+  await page.getByRole("button", { name: "proprium.narrative v0.1.0 の導入内容と署名を確認" }).click();
   await page.getByRole("button", { name: "ダウンロードして無効状態でインストール" }).click();
   await expect(manager.getByRole("status")).toContainText("署名とダイジェストを検証し、無効状態でインストールしました");
-  const plugin = page.getByRole("listitem").filter({ hasText: "proprium.narrative" }).filter({ hasText: "v0.1.0" });
+  const plugin = page.locator(".installed-plugins > li").filter({ hasText: "proprium.narrative" }).filter({ hasText: "v0.1.0" });
   for (const capability of ["workspace.change.propose", "workspace.change.timestamp", "workspace.file.read", "workspace.identity.read"]) {
     const grant = plugin.getByRole("checkbox", { name: capability, exact: true });
     await expect(grant).not.toBeChecked();
     await grant.check();
   }
-  await plugin.getByRole("button", { name: "Enable" }).click();
+  await plugin.getByRole("button", { name: "有効化" }).click();
   await expect(manager.getByRole("status")).toContainText("proprium.narrative@0.1.0 is enabled");
   await page.locator(".st-workspace-configuration > summary").click();
   await page.locator(".st-workspace-panel-menu > summary").click();
@@ -234,17 +234,17 @@ test("signed Narrative reviews and applies a scene manuscript link", async ({ pa
   await showPanel(page, "review");
   const manager = page.locator("details.plugin-manager-panel");
   await manager.locator("summary").click();
-  await page.getByRole("button", { name: "信頼済みカタログを表示" }).click();
-  await page.getByRole("button", { name: "proprium.narrative 0.1.0 の署名済みプレビューを確認" }).click();
+  await page.getByRole("button", { name: "カタログを表示" }).click();
+  await page.getByRole("button", { name: "proprium.narrative v0.1.0 の導入内容と署名を確認" }).click();
   await page.getByRole("button", { name: "ダウンロードして無効状態でインストール" }).click();
   await expect(manager.getByRole("status")).toContainText("署名とダイジェストを検証し、無効状態でインストールしました");
-  const plugin = page.getByRole("listitem").filter({ hasText: "proprium.narrative" }).filter({ hasText: "v0.1.0" });
+  const plugin = page.locator(".installed-plugins > li").filter({ hasText: "proprium.narrative" }).filter({ hasText: "v0.1.0" });
   for (const capability of ["workspace.change.propose", "workspace.change.timestamp", "workspace.file.read", "workspace.identity.read"]) {
     const grant = plugin.getByRole("checkbox", { name: capability, exact: true });
     await expect(grant).not.toBeChecked();
     await grant.check();
   }
-  await plugin.getByRole("button", { name: "Enable" }).click();
+  await plugin.getByRole("button", { name: "有効化" }).click();
   await expect(manager.getByRole("status")).toContainText("proprium.narrative@0.1.0 is enabled");
   await page.locator(".st-workspace-configuration > summary").click();
   await page.locator(".st-workspace-panel-menu > summary").click();
@@ -330,17 +330,17 @@ test("local authoring edits, reviews, commits and recovers a large work", async 
   await showPanel(page, "review");
   const manager = page.locator("details.plugin-manager-panel");
   await manager.locator("summary").click();
-  await page.getByRole("button", { name: "信頼済みカタログを表示" }).click();
-  await page.getByRole("button", { name: "proprium.narrative 0.1.0 の署名済みプレビューを確認" }).click();
+  await page.getByRole("button", { name: "カタログを表示" }).click();
+  await page.getByRole("button", { name: "proprium.narrative v0.1.0 の導入内容と署名を確認" }).click();
   await page.getByRole("button", { name: "ダウンロードして無効状態でインストール" }).click();
   await expect(manager.getByRole("status")).toContainText("署名とダイジェストを検証し、無効状態でインストールしました");
-  const plugin = page.getByRole("listitem").filter({ hasText: "proprium.narrative" }).filter({ hasText: "v0.1.0" });
+  const plugin = page.locator(".installed-plugins > li").filter({ hasText: "proprium.narrative" }).filter({ hasText: "v0.1.0" });
   for (const capability of ["workspace.change.propose", "workspace.change.timestamp", "workspace.file.read", "workspace.identity.read"]) {
     const grant = plugin.getByRole("checkbox", { name: capability, exact: true });
     await expect(grant).not.toBeChecked();
     await grant.check();
   }
-  await plugin.getByRole("button", { name: "Enable" }).click();
+  await plugin.getByRole("button", { name: "有効化" }).click();
   await expect(manager.getByRole("status")).toContainText("proprium.narrative@0.1.0 is enabled");
   await page.locator(".st-workspace-configuration > summary").click();
   await page.locator(".st-workspace-panel-menu > summary").click();
@@ -389,7 +389,11 @@ test("local authoring edits, reviews, commits and recovers a large work", async 
   await expect(page.locator(".host-message[role='status']")).toContainText("Committed locally as");
   await page.reload();
   await page.getByRole("button", { name: /P0 synthetic work/ }).click();
-  await chooseFile(page, "manuscript/custom/scene-301.md");
+  // Mobile restores the last-open manuscript directly; do not demand a second
+  // file-tree selection when the correct document is already active.
+  if (!(await page.getByRole("textbox", { name: "原稿 Markdown" }).isVisible())) {
+    await chooseFile(page, "manuscript/custom/scene-301.md");
+  }
   await expectEditorText(page, edited);
 
 });

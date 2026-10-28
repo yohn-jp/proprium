@@ -11,16 +11,17 @@ function registryDirectory(): string {
 
 async function install(page: Page, id: string, grants: string[]) {
   const manager = page.locator("details.plugin-manager-panel");
-  await page.getByRole("button", { name: new RegExp(`${id.replaceAll(".", "\\.")} .* の署名済みプレビューを確認`) }).click();
+  await page.getByRole("button", { name: new RegExp(`${id.replaceAll(".", "\\.")} .* の導入内容と署名を確認`) }).click();
   await page.getByRole("button", { name: "ダウンロードして無効状態でインストール" }).click();
   await expect(manager.getByRole("status")).toContainText("署名とダイジェストを検証し、無効状態でインストールしました", { timeout: 60_000 });
-  const plugin = manager.getByRole("listitem").filter({ hasText: id }).filter({ hasText: "installed, disabled" });
+  const plugin = manager.locator(".installed-plugins > li").filter({ hasText: id }).filter({ hasText: "無効" });
   for (const grant of grants) await plugin.getByRole("checkbox", { name: grant, exact: true }).check();
-  await plugin.getByRole("button", { name: "Enable" }).click();
+  await plugin.getByRole("button", { name: "有効化" }).click();
   await expect(manager.getByRole("status")).toContainText(`${id}@`, { timeout: 60_000 });
 }
 
 async function showAuthoringPanel(page: Page, title: string) {
+  if (await page.locator(".mobile-shell").count()) await showPanel(page, "review");
   const config = page.locator(".st-workspace-configuration > summary");
   await config.click();
   const menu = page.locator(".st-workspace-panel-menu");
@@ -58,7 +59,7 @@ test("signed Knowledge and Research surfaces read and navigate real workspace da
   await showPanel(page, "review");
   const manager = page.locator("details.plugin-manager-panel");
   await manager.locator("summary").click();
-  await page.getByRole("button", { name: "信頼済みカタログを表示" }).click();
+  await page.getByRole("button", { name: "カタログを表示" }).click();
   await install(page, "proprium.narrative", ["workspace.file.read"]);
   await install(page, "proprium.knowledge", ["workspace.file.read"]);
   await install(page, "proprium.research", ["workspace.file.read", "workspace.derived.cache"]);

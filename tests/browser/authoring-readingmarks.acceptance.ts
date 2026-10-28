@@ -40,16 +40,17 @@ async function setup(page: Page) {
   await showPanel(page, 'review');
   const manager = page.locator('details.plugin-manager-panel');
   await manager.locator('summary').click();
-  await page.getByRole('button', { name: '信頼済みカタログを表示' }).click();
-  await page.getByRole('button', { name: 'proprium.narrative 0.1.0 の署名済みプレビューを確認' }).click();
+  await page.getByRole('button', { name: 'カタログを表示' }).click();
+  await page.getByRole('button', { name: 'proprium.narrative v0.1.0 の導入内容と署名を確認' }).click();
   await page.getByRole('button', { name: 'ダウンロードして無効状態でインストール' }).click();
   await expect(manager.getByRole('status')).toContainText('署名とダイジェストを検証し、無効状態でインストールしました');
-  const plugin = page.getByRole('listitem').filter({ hasText: 'proprium.narrative' }).filter({ hasText: 'v0.1.0' });
+  const plugin = page.locator(".installed-plugins > li").filter({ hasText: 'proprium.narrative' }).filter({ hasText: 'v0.1.0' });
   for (const capability of ['workspace.change.propose', 'workspace.change.timestamp', 'workspace.file.read', 'workspace.identity.read']) await plugin.getByRole('checkbox', { name: capability, exact: true }).check();
-  await plugin.getByRole('button', { name: 'Enable' }).click();
+  await plugin.getByRole('button', { name: '有効化' }).click();
   await expect(manager.getByRole('status')).toContainText('proprium.narrative@0.1.0 is enabled');
 }
 async function openSceneA(page: Page) {
+  if (await page.locator(".mobile-shell").count()) await showPanel(page, "review");
   const configuration = page.locator('.st-workspace-configuration');
   if (await configuration.getAttribute('open') === null) await configuration.locator(':scope > summary').click();
   const menu = page.locator('.st-workspace-panel-menu');
@@ -89,6 +90,7 @@ test('two reviewed reading marks open their saved source ranges', async ({ page 
     await showPanel(page, 'editor');
     await expect.poll(() => page.evaluate(() => window.propriumHostEditorText?.() ?? '')).toBe(bodyA);
   }
+  if (await page.locator(".mobile-shell").count()) await showPanel(page, "review");
   const configuration = page.locator('.st-workspace-configuration');
   if (await configuration.getAttribute('open') === null) await configuration.locator(':scope > summary').click();
   const menu = page.locator('.st-workspace-panel-menu');

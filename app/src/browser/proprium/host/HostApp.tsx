@@ -1094,7 +1094,21 @@ export function HostApp(): ReactElement {
               : <p className="sidebar-empty">このWorkspaceはこのブラウザー内だけに保存されます。GitHub同期は設定されていません。</p>}
           </section>
 </div> : mode === "desktop" ? <div className="host-controls">{recentCard}</div> : picker;
-  const tools = <div className="host-controls">{authoring && <>
+  const tools = <div className="host-controls">{git && workspace && <PluginPanel
+            manager={pluginManager}
+            workspaceId={activeWorkspaceId!}
+            activationScope={{ workspace_id: workspace.identity.localWorkspaceId,
+              repository_id: isGitHubWorkspaceIdentity(workspace.identity) ? workspace.identity.repositoryId : null,
+              branch: workspace.identity.branch }}
+            git={git}
+            revisionKey={pluginRevisionKey}
+            canApplyChanges={!currentFile?.dirty}
+            hostBusy={busy}
+            onBusyChange={setBusy}
+            onWorkspaceChanged={refreshAfterPlugin}
+            onRegisterLiveInvoker={registerLivePluginInvoker}
+            onAuthoringSurfacesChanged={refreshAuthoring}
+          />}{authoring && <>
     {authoringRegistrations.some(row=>row.pluginId==="proprium.semantic"&&row.status==="ready") && <details><summary>Semantic のローカル設定</summary><SemanticPreferences key={`semantic-prefs:${workspaceGeneration}:${preferences.email}`} scopeKey={authoring.localPreferenceScope()}
       readLocal={async(signal)=>{if(signal.aborted)throw new Error("cancelled");const value=await authoring.readLocalPreference(authoring.localPreferenceScope(),"proprium.semantic","reranker.enabled",1);if(signal.aborted)throw new Error("cancelled");return value;}}
       read={async(signal)=>{const result=await authoring.invokeRead("proprium.semantic","proprium.semantic.settings.read",{},signal);if(!result.ok)throw new Error(result.error.message);return result.value as unknown as SemanticSettingsValue;}}
@@ -1116,21 +1130,7 @@ export function HostApp(): ReactElement {
         const value=result.value as unknown as PairedPreferenceSnapshot;
         return {...value,local:local.found?local.value as Record<string,unknown>:{}};
       }} save={(event,expectedScope,value)=>authoring.writeLocalPreference(event,expectedScope,"proprium.paired-writing","model-settings",1,value)} onChanged={refreshAuthoring} /></details>}
-    <AuthoringReview key={workspaceGeneration} service={authoring} epoch={authoringEpoch} onApplied={refreshAfterPlugin} /><AuthoringAssets key={`assets:${workspaceGeneration}`} manager={pluginManager} service={authoring} epoch={authoringEpoch} /></>}<AuthoringCommandMenu registrations={contextualAuthoringRegistrations} invoke={invokeAuthoring} read={readAuthoring} navigate={navigateAuthoring} />{git && workspace && <PluginPanel
-            manager={pluginManager}
-            workspaceId={activeWorkspaceId!}
-            activationScope={{ workspace_id: workspace.identity.localWorkspaceId,
-              repository_id: isGitHubWorkspaceIdentity(workspace.identity) ? workspace.identity.repositoryId : null,
-              branch: workspace.identity.branch }}
-            git={git}
-            revisionKey={pluginRevisionKey}
-            canApplyChanges={!currentFile?.dirty}
-            hostBusy={busy}
-            onBusyChange={setBusy}
-            onWorkspaceChanged={refreshAfterPlugin}
-            onRegisterLiveInvoker={registerLivePluginInvoker}
-            onAuthoringSurfacesChanged={refreshAuthoring}
-          />}
+    <AuthoringReview key={workspaceGeneration} service={authoring} epoch={authoringEpoch} onApplied={refreshAfterPlugin} /><AuthoringAssets key={`assets:${workspaceGeneration}`} manager={pluginManager} service={authoring} epoch={authoringEpoch} /></>}<AuthoringCommandMenu registrations={contextualAuthoringRegistrations} invoke={invokeAuthoring} read={readAuthoring} navigate={navigateAuthoring} />
           {git && workspace && isGitHubWorkspaceIdentity(workspace.identity) && <LiveMcpPanel
             key={`${workspaceGeneration}:${gatewayDraft}`}
             repositories={recent}
@@ -1156,6 +1156,17 @@ export function HostApp(): ReactElement {
             <button type="button" className="primary-button commit-button" disabled={busy || !status.entries.length || !!currentFile?.dirty || !commitReviewed} onClick={() => void commitLocal()}>ローカルGitにコミット</button>
             <p className="local-commit-note">コミットはこの端末の履歴に記録されます。GitHubには公開されません。</p>
           </section>
+          {mode === "mobile" && <section className="mobile-change-publish" aria-label="GitHubへの同期と公開">
+            <h2>GitHubへの公開</h2>
+            {syncClient ? <>
+              <p>ローカルGitへのコミットとGitHubへの公開は別の操作です。</p>
+              <div className="sync-actions">
+                <button type="button" onClick={() => void fetchRemote()} disabled={busy}>更新を確認</button>
+                <button type="button" onClick={() => void pullRemote()} disabled={busy}>変更を取得</button>
+                <button type="button" className="publish-button" onClick={() => void publishRemote()} disabled={busy || status.localState !== "local-committed"}>GitHubへ公開</button>
+              </div>
+            </> : <p>GitHub未接続です。ローカルの変更確認とコミットは引き続き利用できます。接続は設定から行えます。</p>}
+          </section>}
 </div>;
   const historyPanel = <div className="host-controls">{git && <GitHistoryPanel key={workspaceGeneration} git={git} history={history} busy={busy} canRestore={!currentFile?.dirty}
     onRefresh={() => { void git.log(40).then(setHistory).catch(error => setMessage({ tone: "error", text: errorMessage(error) })); }}
@@ -1216,7 +1227,7 @@ export function HostApp(): ReactElement {
     </details>
   </section>;
   const statusMessage = recoveryEntry ? null : message;
-  const statusSurface = workspace || statusMessage ? <details className="application-status" data-attention={statusMessage?.tone === "error" || undefined}>
+  const statusSurface = workspace || statusMessage ? <details className="application-status" data-attention={statusMessage?.tone === "error" || mcpProposalCount > 0 || syncState === "conflict" || syncState === "remote-unknown" || syncState === "offline" || undefined}>
     <summary>
       <span className="save-state" role="status">{workspace ? saveStateLabel(syncState, status.head) : "端末内の作品"}</span>
       {statusMessage && <span className={`host-message message-${statusMessage.tone}`} role={statusMessage.tone === "error" ? "alert" : "status"}><span className="host-message-text">{statusMessage.text}</span></span>}

@@ -422,7 +422,7 @@
 .mobile-shell .mobile-shell-footer {box-shadow:0 -4px 15px #1e3d240b;border-color:var(--mobile-line);background:var(--mobile-paper)}
 .mobile-shell .mobile-shell-navigation {
   max-width:none;min-height:58px;
-  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
   gap:0;padding:3px max(10px,env(safe-area-inset-right,0px)) 1px max(10px,env(safe-area-inset-left,0px));
 }
 .mobile-shell .mobile-shell-navigation ion-button {
@@ -688,3 +688,110 @@ ion-modal.mobile-shell-reference-modal {
 }
 .mobile-shell-reference-durability strong {font-size:13px;color:var(--mobile-sheet-accent)}
 .mobile-shell-reference-durability span {font-size:12px;line-height:1.6}
+
+/* Mobile primary navigation: direct access without a disclosure menu. */
+.mobile-shell .mobile-shell-navigation {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.mobile-shell-header-settings {
+  display: grid;
+  place-items: center;
+  flex: 0 0 2.75rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  color: var(--ink);
+  background: var(--paper);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+.mobile-shell-header-settings:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* The retained editor may keep focus after switching tabs. Only the active
+   writing view may collapse navigation; other views must always retain it. */
+
+/* The manuscript is the focus: daily navigation belongs in one quiet row. */
+.mobile-shell .mobile-shell-identity-bar {
+  min-height: 56px;
+  gap: 9px;
+  padding-block: 5px;
+}
+.mobile-shell .mobile-shell-wordmark { font-size: 15px; }
+.mobile-shell .mobile-shell-current-title { font-size: 14px; line-height: 1.35; }
+.mobile-shell .mobile-shell-back { flex-basis: 40px; width: 40px; height: 44px; min-height: 44px; }
+.mobile-shell-header-settings, .mobile-shell-reveal-navigation {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--mobile-line);
+  border-radius: 11px;
+  background: var(--mobile-stage);
+  color: var(--mobile-ink);
+  font-size: 21px;
+}
+.mobile-shell-reveal-navigation { display: none; }
+.mobile-shell-header-settings[aria-current="page"] {
+  background: var(--surface-selected);
+  color: var(--mobile-accent);
+}
+.mobile-shell-reveal-navigation:focus-visible, .mobile-shell-header-settings:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.mobile-shell-settings-card .mobile-shell-shared-header .theme-control,
+.mobile-shell-settings-card .mobile-shell-shared-header .theme-error {
+  display: none;
+}
+/* Appearance is edited in the main Settings form, not duplicated in account tools. */
+.mobile-shell-settings-card .mobile-shell-shared-header {
+  display: block;
+  margin: 10px 0 18px;
+  padding: 12px;
+  border: 1px solid var(--mobile-line);
+  border-radius: 12px;
+  background: var(--mobile-stage);
+}
+.mobile-shell .mobile-shell-navigation {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-height: 57px;
+  padding-block: 2px;
+}
+.mobile-shell .mobile-shell-nav-content { font-size: 11px; }
+.mobile-shell-writing-active:has(.cm-editor:focus-within) .mobile-shell-footer,
+.mobile-shell-writing-active:has(.manuscript-input:focus-within) .mobile-shell-footer,
+.mobile-shell-writing-active.mobile-shell-keyboard-open .mobile-shell-footer {
+  display: none;
+}
+.mobile-shell-writing-active:has(.cm-editor:focus-within) .mobile-shell-reveal-navigation,
+.mobile-shell-writing-active:has(.manuscript-input:focus-within) .mobile-shell-reveal-navigation,
+.mobile-shell-writing-active.mobile-shell-keyboard-open .mobile-shell-reveal-navigation {
+  display: grid;
+}
+.mobile-shell-writing-active:has(.cm-editor:focus-within) .mobile-shell-status:not(:has([data-attention="true"], [role="alert"], .pending-review-count)),
+.mobile-shell-writing-active.mobile-shell-keyboard-open .mobile-shell-status:not(:has([data-attention="true"], [role="alert"], .pending-review-count)) {
+  display: none;
+}
+/* Mobile is single-task; the desktop arrangement toolbar is unnecessary chrome. */
+.mobile-shell .mobile-shell-workspace-view[data-active-view="writing"] .st-workspace-mobile-tabs,
+.mobile-shell .mobile-shell-workspace-view[data-active-view="library"] .st-workspace-mobile-tabs,
+.mobile-shell .mobile-shell-workspace-view[data-active-view="inspection"] .st-workspace-mobile-tabs { display: none; }
+.mobile-shell .mobile-change-publish {
+  display:grid;gap:11px;margin-top:15px;padding:17px;
+  border:1px solid var(--mobile-line);border-radius:12px;background:var(--mobile-paper);
+}
+.mobile-shell .mobile-change-publish h2 { margin:0;font-size:17px; }
+.mobile-shell .mobile-change-publish p { margin:0;font-size:12px;line-height:1.6;color:var(--mobile-muted); }
+.mobile-shell .mobile-change-publish .sync-actions { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px; }
+.mobile-shell .mobile-change-publish .sync-actions button { min-height:44px;padding:9px; }
+.mobile-shell .mobile-change-publish .sync-actions .publish-button { grid-column:1/-1; }
+
+@media (max-width: 359px) {
+  .mobile-shell .mobile-shell-identity-bar { gap: 5px; padding-inline: 9px; }
+  .mobile-shell .mobile-shell-nav-content { font-size: 10px; }
+}

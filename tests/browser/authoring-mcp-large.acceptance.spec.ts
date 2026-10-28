@@ -19,12 +19,12 @@ test("real MCP proposal over a large Narrative work preserves human approval", a
   await showPanel(page, "review");
   const manager = page.locator("details.plugin-manager-panel");
   await manager.locator("summary").click();
-  await page.getByRole("button", { name:"信頼済みカタログを表示" }).click();
-  await page.getByRole("button", { name:"proprium.narrative 0.1.0 の署名済みプレビューを確認" }).click();
+  await page.getByRole("button", { name:"カタログを表示" }).click();
+  await page.getByRole("button", { name:"proprium.narrative v0.1.0 の導入内容と署名を確認" }).click();
   await page.getByRole("button", { name:"ダウンロードして無効状態でインストール" }).click();
-  const card = manager.getByRole("listitem").filter({ hasText:"proprium.narrative" }).filter({ hasText:"v0.1.0" });
+  const card = manager.locator(".installed-plugins > li").filter({ hasText:"proprium.narrative" }).filter({ hasText:"v0.1.0" });
   for (const capability of ["workspace.change.propose", "workspace.change.timestamp", "workspace.file.read", "workspace.identity.read"]) await card.getByRole("checkbox", { name:capability, exact:true }).check();
-  await card.getByRole("button", { name:"Enable" }).click();
+  await card.getByRole("button", { name:"有効化" }).click();
   await expect(manager.getByRole("status")).toContainText("proprium.narrative@0.1.0 is enabled");
   await expect(page.locator(".live-mcp-panel").getByRole("status").first()).toContainText("ブラウザーに接続中", { timeout:20_000 });
   async function call(operation:string, input:Record<string,unknown>, idempotency_key?:string) {

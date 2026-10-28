@@ -13,6 +13,12 @@ declare global {
 
 const localWorkspaceText = "Cached workspace content before GitHub sign-in.\n";
 const dirtyEditorText = "Unsaved text that must survive GitHub sign-in.\n";
+async function showWorkspaceConnection(page: Page): Promise<void> {
+  if (await page.locator(".mobile-shell").count()) {
+    await page.getByRole("button", { name: "設定を開く" }).click();
+  }
+}
+
 
 async function openCachedWorkspaceWithDirtyEditor(page: Page): Promise<{
   origin: string;
@@ -31,18 +37,21 @@ async function openCachedWorkspaceWithDirtyEditor(page: Page): Promise<{
     await window.propriumHostTest!.openWorkspace(identity, { "README.md": text });
   }, { identity, text: localWorkspaceText });
 
+  await showWorkspaceConnection(page);
   await page.getByRole("button", { name: "作品一覧", exact: true }).click();
   await page.getByRole("button", { name: new RegExp(`${identity.owner}/${identity.repository}`, "u") }).click();
   await chooseFile(page, "README.md");
   await expectEditorText(page, localWorkspaceText);
   await page.getByRole("textbox", { name: "原稿 Markdown" }).fill(dirtyEditorText);
   await showPanel(page, "outline");
+  await showWorkspaceConnection(page);
   await expect(page.getByRole("button", { name: "GitHubに接続", exact: true })).toBeVisible();
   return { origin, identity, fixture };
 }
 
 async function startWorkspaceSignIn(page: Page, origin: string): Promise<import("@playwright/test").Locator> {
   await showPanel(page, "outline");
+  await showWorkspaceConnection(page);
   await page.getByRole("button", { name: "GitHubに接続", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "このWorkspaceをGitHubに接続" });
   await expect(dialog).toBeVisible();
@@ -64,7 +73,9 @@ test("cached Workspace signs in in place, preserves dirty text, and fills Home r
   await page.screenshot({ path: testInfo.outputPath("cached-workspace-github-auth.png"), fullPage: true });
   await expect(dialog).toBeHidden();
   await expect(page.locator(".host-message[role='status']")).toContainText(`Connected this Workspace to GitHub as ${staticFixtureLogin}`);
-  await expect(page.getByLabel("Connected to GitHub", { exact: true })).toBeVisible();
+  if (testInfo.project.name === "mobile-webkit") await expect(page.getByLabel("GitHub account")).toHaveText(staticFixtureLogin);
+  else await expect(page.getByLabel("Connected to GitHub", { exact: true })).toBeVisible();
+  if (await page.locator(".mobile-shell").count()) await showPanel(page, "inspector");
   await expect(page.getByRole("button", { name: "更新を確認", exact: true })).toBeEnabled();
   await expectEditorText(page, dirtyEditorText);
   await expect(page.locator(".save-state")).toHaveText("編集中・端末のファイル未保存");
@@ -77,6 +88,7 @@ test("cached Workspace signs in in place, preserves dirty text, and fills Home r
   await showPanel(page, "editor");
   await page.getByRole("button", { name: "端末に保存", exact: true }).click();
   await expectEditorText(page, dirtyEditorText);
+  await showWorkspaceConnection(page);
   await page.getByRole("button", { name: "作品一覧", exact: true }).click();
   const repositoryPicker = page.getByLabel("Repository", { exact: true });
   await expect(repositoryPicker).toBeVisible();
@@ -138,6 +150,7 @@ test("cancel before the Device code arrives does not revive an old authorization
   releaseCode();
   await finished;
   await showPanel(page, "outline");
+  await showWorkspaceConnection(page);
   await page.getByRole("button", { name: "GitHubに接続", exact: true }).click();
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("region", { name: "GitHub デバイス認証" })).toHaveCount(0);
@@ -168,6 +181,7 @@ test("repository list failure does not attach sync or show an empty signed-in pi
 
   await showPanel(page, "editor");
   await page.getByRole("button", { name: "端末に保存", exact: true }).click();
+  await showWorkspaceConnection(page);
   await page.getByRole("button", { name: "作品一覧", exact: true }).click();
   await expect(page.getByLabel("Repository", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "GitHubに接続", exact: true })).toBeVisible();
@@ -182,10 +196,12 @@ test("Workspace sign-in stays in view above a long file list and while editing",
     await window.propriumHostTest!.openWorkspace(identity, files);
   }, { ...staticFixtureIdentity, localWorkspaceId: `long-file-list-${crypto.randomUUID()}` });
   await showPanel(page, "outline");
-  await page.getByRole("list", { name: "Repository files" }).getByRole("button").last().scrollIntoViewIfNeeded();
+  await page.getByRole("list", { name: "Repository files" }).getByRole("button", { name: "notes/79.md", exact: true }).scrollIntoViewIfNeeded();
+  await showWorkspaceConnection(page);
   const connect = page.getByRole("button", { name: "GitHubに接続", exact: true });
   await expect(connect).toBeInViewport({ ratio: 1 });
   await chooseFile(page, "notes/0.md");
+  await showWorkspaceConnection(page);
   await expect(connect).toBeInViewport({ ratio: 1 });
   await connect.click();
   const dialog = page.getByRole("dialog", { name: "このWorkspaceをGitHubに接続", exact: true });

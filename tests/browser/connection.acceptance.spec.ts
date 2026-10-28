@@ -4,8 +4,13 @@ import { chooseFile, showPanel, configureGateway } from "./restored-ui.helpers.j
 
 test("workspace picker text stays readable in every appearance mode", async ({ page }, testInfo) => {
   await page.goto("/");
+  const mobile = testInfo.project.name === "mobile-webkit";
   for (const theme of ["light", "dark", "paper"]) {
-    await page.getByLabel("外観", { exact: true }).selectOption(theme);
+    if (mobile) {
+      await page.getByRole("button", { name: "設定を開く" }).click();
+      await page.locator("#settings-theme").selectOption(theme);
+      await page.getByRole("navigation", { name: "モバイルの主要画面" }).getByRole("button", { name: "作品" }).click();
+    } else await page.getByLabel("外観", { exact: true }).selectOption(theme);
     for (const target of [page.getByRole("heading", { name: "作品を作る・開く" }), page.locator(".welcome-copy > p").last()]) {
       const contrast = await target.evaluate(element => {
         const rgb = (value: string) => (value.match(/[\d.]+/gu) ?? []).slice(0, 3).map(Number);
@@ -37,10 +42,14 @@ test("GitHub authorization shows its code before navigation and reconnects recen
   await branchPicker.selectOption(staticFixtureIdentity.branch);
   await page.getByRole("button", { name: "作品を開く", exact: true }).click();
   await chooseFile(page, "README.md");
+  if (await page.locator(".mobile-shell").count()) await page.getByRole("button", { name: "設定を開く" }).click();
   await page.getByRole("button", { name: "作品一覧", exact: true }).click();
   await page.getByRole("button", { name: new RegExp(`${staticFixtureIdentity.owner}/${staticFixtureIdentity.repository}`, "u") }).click();
   await showPanel(page, "outline");
-  await expect(page.getByLabel("Connected to GitHub", { exact: true })).toBeVisible();
+  if (await page.locator(".mobile-shell").count()) await page.getByRole("button", { name: "設定を開く" }).click();
+  if (await page.locator(".mobile-shell").count()) await expect(page.getByLabel("GitHub account")).toBeVisible();
+  else await expect(page.getByLabel("Connected to GitHub", { exact: true })).toBeVisible();
+  await showPanel(page, "outline");
   await expect(page.getByRole("button", { name: "更新を確認", exact: true })).toBeEnabled();
 });
 

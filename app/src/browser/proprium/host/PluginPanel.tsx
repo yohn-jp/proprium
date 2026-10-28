@@ -105,6 +105,8 @@ export function PluginPanel({ manager, workspaceId, activationScope, git, revisi
   const config = useMemo(registryConfig, []);
   const [plugins, setPlugins] = useState<InstalledPlugin[]>([]);
   const [registryCatalog, setRegistryCatalog] = useState<readonly RegistryCatalogEntry[]>([]);
+  const [catalogQuery, setCatalogQuery] = useState("");
+  const previewRef = useRef<HTMLElement>(null);
   const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [installPlan, setInstallPlan] = useState<PluginInstallPreview | null>(null);
@@ -119,6 +121,8 @@ export function PluginPanel({ manager, workspaceId, activationScope, git, revisi
   const currentRevisionKey = useRef(revisionKey);
   const currentSnapshots = useRef(new Map<string, SnapshotState>());
   currentRevisionKey.current = revisionKey;
+  const filteredCatalog = registryCatalog.filter(entry => (entry.id + " " + entry.version).toLocaleLowerCase().includes(catalogQuery.trim().toLocaleLowerCase()));
+  useEffect(() => { if (installPlan) previewRef.current?.scrollIntoView({ block: "start" }); }, [installPlan]);
 
   useEffect(() => {
     onRegisterLiveInvoker(async (args, signal) => {
@@ -341,33 +345,48 @@ export function PluginPanel({ manager, workspaceId, activationScope, git, revisi
   }
 
   return <details className="plugin-manager-panel">
-    <summary>Plugins <span className="count-badge">{plugins.length}</span></summary>
+    <summary>プラグイン <span className="count-badge">{plugins.length}件導入済み</span></summary>
     <div className="plugin-panel-content">
       <p className="plugin-panel-copy">プラグインは署名を検証してから利用できます。インストールしても無効状態のままで、権限を確認して有効化した後に実行できます。</p>
-      <p className="plugin-panel-copy"><code>proprium.compute-sum</code> は配布と実行の確認用サンプルです。計算機能のみで、小説執筆プラグインではありません。</p>
       {!config ? <p className="plugin-panel-warning" role="status">このHostビルドには信頼済みプラグインレジストリが設定されていません。</p> : <section className="plugin-registry-catalog" aria-labelledby="plugin-registry-heading">
-        <h3 id="plugin-registry-heading">プラグインカタログ</h3>
-        <p id="plugin-registry-help">Hostに固定された公開鍵でレジストリ署名を検証します。一覧には署名対象のID、バージョン、依存関係を表示します。このv1のカタログに機能説明は含まれないため、IDだけで機能を推測せず、提供元の説明も確認してください。</p>
-        <p>一覧の表示だけではプラグイン本体を取得しません。まず検証済みの詳細プレビューを開き、権限と転送量を確認してからダウンロードします。</p>
-        <button type="button" onClick={() => void loadRegistryCatalog()} disabled={busy} aria-describedby="plugin-registry-help">{catalogLoaded ? "カタログを再読み込み" : "信頼済みカタログを表示"}</button>
-        {catalogLoading && <p role="status">レジストリ署名を検証しています…</p>}
-        {catalogLoaded && !registryCatalog.length && <p className="plugin-empty">信頼済みレジストリに利用可能なプラグインはありません。</p>}
-        {registryCatalog.length > 0 && <ul className="registry-plugin-list">{registryCatalog.map(entry => <li key={`${entry.registryUrl}:${entry.id}@${entry.version}`}>
-          <article className="registry-plugin-card">
-            <h4><code>{entry.id}</code></h4>
-            <p>バージョン <code>{entry.version}</code> · レジストリ <code>{entry.registryId}@{entry.registryVersion}</code></p>
-            {entry.dependencies.length > 0 && <p>依存関係: {entry.dependencies.map(dependency => `${dependency.id} ${dependency.range}`).join("、")}</p>}
-            <button type="button" onClick={() => void previewInstall(entry)} disabled={busy} aria-label={`${entry.id} ${entry.version} の署名済みプレビューを確認`}>署名を確認してプレビュー</button>
-          </article>
-        </li>)}</ul>}
+        <div className="plugin-catalog-heading">
+          <div><h3 id="plugin-registry-heading">利用可能なプラグイン</h3>
+          <p id="plugin-registry-help">公開鍵で署名を検証した一覧です。導入前に要求権限とダウンロード容量を確認できます。</p></div>
+          <button type="button" onClick={() => void loadRegistryCatalog()} disabled={busy} aria-describedby="plugin-registry-help">{catalogLoaded ? "更新" : "カタログを表示"}</button>
+        </div>
+        {catalogLoading && <p role="status">レジストリの署名を検証しています…</p>}
+        {catalogLoaded && <label className="plugin-catalog-search">プラグインを検索
+          <input type="search" value={catalogQuery} onChange={event => setCatalogQuery(event.target.value)} placeholder="名前・ID・バージョン" aria-label="プラグインを検索" />
+        </label>}
+        {catalogLoaded && registryCatalog.length === 0 && <p className="plugin-empty">検証済みレジストリに利用可能なプラグインはありません。</p>}
+        {catalogLoaded && registryCatalog.length > 0 && filteredCatalog.length === 0 && <p className="plugin-empty">検索条件に一致するプラグインはありません。</p>}
+        {filteredCatalog.length > 0 && <ul className="registry-plugin-list">{filteredCatalog.map(entry => {
+          const installed = plugins.some(plugin => plugin.id === entry.id && plugin.version === entry.version);
+          const shortName = entry.id.startsWith("proprium.") ? entry.id.slice("proprium.".length) : entry.id;
+          return <li key={entry.registryUrl + ":" + entry.id + "@" + entry.version}>
+            <article className="registry-plugin-card">
+              <div className="registry-plugin-identity">
+                <h4>{shortName}</h4>
+                <code>{entry.id}</code>
+                <small>v{entry.version}{entry.dependencies.length ? " · 依存あり" : ""}</small>
+              </div>
+              <button type="button" onClick={() => void previewInstall(entry)}
+                disabled={busy || installed} aria-label={entry.id + " v" + entry.version + " の導入内容と署名を確認"}>
+                {installed ? "導入済み" : "詳細・導入"}
+              </button>
+            </article>
+          </li>;
+        })}</ul>}
+        <p className="plugin-catalog-footnote">一覧の表示だけではWASM本体をダウンロードしません。機能説明は署名済みカタログに未収録のため、IDのみでは機能を断定できません。</p>
       </section>}
-      {installPlan && <section className="plugin-install-preview" aria-labelledby="plugin-preview-heading">
+      {installPlan && <section ref={previewRef} className="plugin-install-preview" aria-labelledby="plugin-preview-heading">
         <div className="plugin-preview-heading"><h3 id="plugin-preview-heading">{planIntent === "update" ? "更新プレビュー" : "インストールプレビュー"}</h3><button type="button" onClick={cancelPlan} disabled={busy}>閉じる</button></div>
         <dl><dt>プラグイン</dt><dd><code>{installPlan.pluginId}@{installPlan.version}</code></dd><dt>ダウンロード合計</dt><dd>{formatBytes(installPlan.downloadBytes)}</dd><dt>プレビュー有効期限</dt><dd><time dateTime={new Date(installPlan.expiresAt).toISOString()}>{new Date(installPlan.expiresAt).toLocaleTimeString()}</time></dd></dl>
         <ul>{installPlan.packages.map(item => <li key={`${item.id}@${item.version}`}><article><strong>{item.id}@{item.version}</strong><span>{formatBytes(item.downloadBytes)}</span><small>要求する権限: {item.capabilities.join(", ") || "なし"}</small>{item.dependencies.length > 0 && <small>依存関係: {item.dependencies.map(dependency => `${dependency.id}@${dependency.version}`).join(", ")}</small>}</article></li>)}</ul>
         <button type="button" className="plugin-confirm-install" disabled={busy} onClick={() => void confirmInstallPlan()}>{planIntent === "update" ? "ダウンロードして更新版を固定" : "ダウンロードして無効状態でインストール"}</button>
       </section>}
       {notice && <p className="plugin-notice" role="status" aria-live="polite">{notice}</p>}
+      <h3 className="installed-plugins-heading">この端末に導入済み</h3>
       {!plugins.length ? <div className="plugin-empty-state"><p className="plugin-empty">検証済みのインストール済みプラグインはありません。</p><p>プラグインがなくても、ワークスペースの編集とGit操作は利用できます。</p></div> : <ul className="installed-plugins">{plugins.map(plugin => {
         const pluginKey = `${plugin.id}@${plugin.version}`;
         const inputId = `plugin-input-${plugin.id}-${plugin.version}`;
@@ -376,9 +395,9 @@ export function PluginPanel({ manager, workspaceId, activationScope, git, revisi
         const request = requests[pluginKey] ?? (isComputeSumSample ? '{"left":20,"right":22}' : "");
         const canRun = !plugin.actions.length && (plugin.state === "active" || plugin.state === "enabled-idle");
         return <li key={pluginKey}>
-          <div className="plugin-card-head"><div><strong>{plugin.id}</strong><small>v{plugin.version} · {plugin.state === "active" ? "active" : plugin.state === "enabled-idle" ? "enabled, idle" : plugin.state === "revoked" ? "publisher revoked" : "installed, disabled"}</small></div><code>{plugin.activeVersion ? `pinned ${plugin.activeVersion}` : "not pinned"}</code></div>
+          <div className="plugin-card-head"><div><strong>{plugin.id}</strong><small>v{plugin.version} · {plugin.state === "active" ? "実行中" : plugin.state === "enabled-idle" ? "有効（待機中）" : plugin.state === "revoked" ? "公開者による失効" : "無効"}</small></div><code>{plugin.activeVersion ? `pinned ${plugin.activeVersion}` : "not pinned"}</code></div>
           <fieldset disabled={busy || plugin.state !== "installed"}>
-            <legend>Requested capabilities</legend>
+            <legend>要求される権限</legend>
             {plugin.capabilities.length === 0 && <p>要求する権限はありません。</p>}
             {plugin.capabilities.map(value => {
               const grantKey = `${workspaceId}:${plugin.id}@${plugin.version}`;
@@ -387,7 +406,7 @@ export function PluginPanel({ manager, workspaceId, activationScope, git, revisi
               return <label key={value} className="capability-choice"><input type="checkbox" checked={selected.includes(value as PluginCapability)} onChange={event => setGrants(current => ({ ...current, [grantKey]: event.target.checked ? [...selected, value as PluginCapability] : selected.filter(item => item !== value) }))} /> <span>{value}</span></label>;
             })}
           </fieldset>
-          <div className="plugin-actions">{plugin.state === "active" ? <>{!plugin.actions.length && <button type="button" onClick={() => void invoke(plugin, request)} disabled={busy}>Run</button>}<button type="button" onClick={() => void disable(plugin)} disabled={busy}>Stop</button></> : plugin.state === "enabled-idle" ? <>{!plugin.actions.length && <button type="button" onClick={() => void invoke(plugin, request)} disabled={busy}>Run</button>}<button type="button" onClick={() => void disable(plugin)} disabled={busy}>Disable</button></> : <button type="button" onClick={() => void enable(plugin)} disabled={busy || plugin.state === "revoked"}>{plugin.state === "revoked" ? "Revoked" : "Enable"}</button>}<button type="button" onClick={() => void update(plugin)} disabled={busy}>Update version</button>{plugin.activeVersion && <button type="button" onClick={() => void rollback(plugin)} disabled={busy}>Rollback</button>}<button type="button" className="plugin-remove" onClick={() => void uninstall(plugin)} disabled={busy}>Uninstall</button></div>
+          <div className="plugin-actions">{plugin.state === "active" ? <>{!plugin.actions.length && <button type="button" onClick={() => void invoke(plugin, request)} disabled={busy}>実行</button>}<button type="button" onClick={() => void disable(plugin)} disabled={busy}>停止</button></> : plugin.state === "enabled-idle" ? <>{!plugin.actions.length && <button type="button" onClick={() => void invoke(plugin, request)} disabled={busy}>実行</button>}<button type="button" onClick={() => void disable(plugin)} disabled={busy}>無効化</button></> : <button type="button" onClick={() => void enable(plugin)} disabled={busy || plugin.state === "revoked"}>{plugin.state === "revoked" ? "失効済み" : "有効化"}</button>}<button type="button" onClick={() => void update(plugin)} disabled={busy}>バージョンを更新</button>{plugin.activeVersion && <button type="button" onClick={() => void rollback(plugin)} disabled={busy}>以前の版に戻す</button>}<button type="button" className="plugin-remove" onClick={() => void uninstall(plugin)} disabled={busy}>アンインストール</button></div>
           {canRun && <label className="plugin-request" htmlFor={inputId}><span>プラグイン入力（テキスト）</span><small id={inputHelpId}>Hostは内容を1本の文字列として渡します。現在のABIは入力スキーマを定義せず、この画面も形式を検証しません。各プラグインの説明に従って入力してください。</small>{isComputeSumSample && <small id={`${inputId}-sample`}>計算サンプルは left と right の2つの有限な数値だけを含むJSONを受け取ります。例: <code>{'{"left":20,"right":22}'}</code></small>}<textarea id={inputId} aria-describedby={`${inputHelpId}${isComputeSumSample ? ` ${inputId}-sample` : ""}`} value={request} onChange={event => setRequests(current => ({ ...current, [pluginKey]: event.target.value }))} maxLength={256 * 1024} placeholder={isComputeSumSample ? '{"left":20,"right":22}' : "プラグインの指定形式を入力"} /></label>}
           {plugin.dependencies.length > 0 && <p className="plugin-metadata">Dependencies: {plugin.dependencies.map(item => `${item.id}@${item.version}`).join(", ")}</p>}
           {plugin.contributions.length > 0 && <section className="plugin-contributions" aria-label="Host-rendered plugin contributions"><strong>Plugin surfaces</strong>{plugin.contributions.map(item => <article key={`${item.kind}:${item.id}`}><small>{item.kind}</small><span>{item.title}</span></article>)}</section>}

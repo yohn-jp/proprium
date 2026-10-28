@@ -16,12 +16,12 @@ const fixture: Record<string, string> = {
 
 async function install(page: Page, id: string, capabilities: string[], version = '0.1.0') {
   const manager = page.locator('details.plugin-manager-panel');
-  await page.getByRole('button', { name: `${id} ${version} の署名済みプレビューを確認` }).click();
+  await page.getByRole('button', { name: `${id} v${version} の導入内容と署名を確認` }).click();
   await page.getByRole('button', { name: 'ダウンロードして無効状態でインストール' }).click();
   await expect(manager.getByRole('status')).toContainText('署名とダイジェストを検証し、無効状態でインストールしました');
-  const plugin = page.getByRole('listitem').filter({ hasText: id }).filter({ hasText: `v${version}` });
+  const plugin = page.locator(".installed-plugins > li").filter({ hasText: id }).filter({ hasText: `v${version}` });
   for (const capability of capabilities) await plugin.getByRole('checkbox', { name: capability, exact: true }).check();
-  await plugin.getByRole('button', { name: 'Enable' }).click();
+  await plugin.getByRole('button', { name: '有効化' }).click();
   await expect(manager.getByRole('status')).toContainText(`${id}@${version} is enabled`);
 }
 async function openPanel(page: Page, name: string) {
@@ -58,7 +58,7 @@ for (const research of [false, true]) {
   await showPanel(page, 'review');
   const manager = page.locator('details.plugin-manager-panel');
   await manager.locator('summary').click();
-  await page.getByRole('button', { name: '信頼済みカタログを表示' }).click();
+  await page.getByRole('button', { name: 'カタログを表示' }).click();
     await install(page, 'proprium.narrative', ['workspace.file.read']);
     if (research) await install(page, 'proprium.research', ['workspace.file.read', 'workspace.derived.cache'], '1.0.0');
     await install(page, 'proprium.paired-writing', ['workspace.file.read', 'workspace.plugin.invoke', 'workspace.capabilities.query']);
