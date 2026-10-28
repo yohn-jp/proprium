@@ -3,6 +3,10 @@ import { readFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { chooseFile, expectEditorText, reviewChangedFiles, showPanel } from "./restored-ui.helpers.js";
 
+async function showNarrativeOutline(page: import("@playwright/test").Page): Promise<void> {
+  await page.getByRole("tabpanel", { name: "Work outline", exact: true }).first().getByRole("tab", { name: "構成", exact: true }).click();
+}
+
 // These are actual Narrative sources and actual signed registry artifacts. Only
 // repository provisioning and the test registry HTTP transport are fixtures.
 test("signed Narrative installs and navigates a large work in the real Host", async ({ page }) => {
@@ -50,7 +54,10 @@ test("signed Narrative installs and navigates a large work in the real Host", as
   await page.locator(".st-workspace-configuration > summary").click();
   const tab = page.getByRole("tab", { name: "Work outline", exact: true });
   if (await tab.isVisible() && await tab.getAttribute("aria-selected") !== "true") await tab.click();
+  const outlinePanel = page.getByRole("tabpanel", { name: "Work outline", exact: true }).first();
   await page.getByRole("button", { name: "読み込む", exact: true }).click();
+  await expect(outlinePanel.getByRole("status")).toContainText("このリポジトリの作品構成を認識しました。");
+  await showNarrativeOutline(page);
   await expect(page.getByText("Volume One", { exact: true })).toBeVisible({ timeout: 120_000 });
   await page.getByText("Volume One", { exact: true }).click();
   await expect(page.getByText("Chapter One", { exact: true })).toBeVisible();
@@ -60,6 +67,41 @@ test("signed Narrative installs and navigates a large work in the real Host", as
   await page.getByText("Scene 301", { exact: true }).click();
   await expect(page.getByRole("textbox", { name: "原稿 Markdown" })).toContainText("目的の原稿", { timeout: 120_000 });
   await expectEditorText(page, files["manuscript/custom/scene-301.md"]!);
+});
+
+test("signed Narrative explains an unrecognized repository and leaves generic Files available", async ({ page }) => {
+  const root = resolve(process.env.PROPRIUM_OFFICIAL_E2E_DIR!);
+  const origin = new URL(test.info().project.use.baseURL!).origin;
+  await page.route(`${origin}/plugin-fixture/**`, async route => {
+    const relative = decodeURIComponent(new URL(route.request().url()).pathname.slice("/plugin-fixture/".length));
+    const path = resolve(root, relative);
+    if (!path.startsWith(root + sep)) return route.fulfill({ status: 404 });
+    try { await route.fulfill({ body: await readFile(path), contentType: path.endsWith(".json") ? "application/json" : "application/octet-stream" }); }
+    catch { await route.fulfill({ status: 404 }); }
+  });
+  const files = { "README.md": "通常のメモです。作品構成はありません。\n" };
+  await page.goto("/");
+  await page.waitForFunction(() => typeof window.propriumHostTest?.openWorkspace === "function");
+  await page.evaluate(async files => window.propriumHostTest!.openWorkspace({ origin: "https://github.com", repositoryId: 923456790, owner: "proprium-test", repository: "ordinary-files", branch: "main", localWorkspaceId: `ordinary-${crypto.randomUUID()}` }, files), files);
+  await showPanel(page, "review");
+  const manager = page.locator("details.plugin-manager-panel");
+  await manager.locator("summary").click();
+  await page.getByRole("button", { name: "カタログを表示" }).click();
+  await page.getByRole("button", { name: "proprium.narrative v0.1.0 の導入内容と署名を確認" }).click();
+  await page.getByRole("button", { name: "ダウンロードして無効状態でインストール" }).click();
+  await expect(manager.getByRole("status")).toContainText("署名とダイジェストを検証し、無効状態でインストールしました");
+  const plugin = page.locator(".installed-plugins > li").filter({ hasText: "proprium.narrative" }).filter({ hasText: "v0.1.0" });
+  for (const capability of ["workspace.change.propose", "workspace.change.timestamp", "workspace.file.read", "workspace.identity.read"]) await plugin.getByRole("checkbox", { name: capability, exact: true }).check();
+  await plugin.getByRole("button", { name: "有効化" }).click();
+  await expect(manager.getByRole("status")).toContainText("proprium.narrative@0.1.0 is enabled");
+  await page.locator(".st-workspace-configuration > summary").click();
+  await page.locator(".st-workspace-panel-menu > summary").click();
+  await page.getByRole("button", { name: "Work outlineを表示する", exact: true }).click();
+  await page.locator(".st-workspace-configuration > summary").click();
+  const outline = page.getByRole("tabpanel", { name: "Work outline", exact: true }).first();
+  await outline.getByRole("button", { name: "読み込む", exact: true }).click();
+  await expect(outline.getByRole("status")).toContainText("作品構成は見つかりません。通常のファイル表示はそのまま利用でき", { timeout: 60_000 });
+  await expect(page.getByRole("list", { name: "Repository files" }).getByRole("button", { name: "README.md" })).toBeVisible();
 });
 
 test("signed Narrative proposes and applies a reviewed volume", async ({ page }) => {
@@ -108,6 +150,7 @@ test("signed Narrative proposes and applies a reviewed volume", async ({ page })
   const tab = page.getByRole("tab", { name: "Work outline", exact: true });
   if (await tab.isVisible() && await tab.getAttribute("aria-selected") !== "true") await tab.click();
   await page.getByRole("button", { name: "読み込む", exact: true }).click();
+  await showNarrativeOutline(page);
   await expect(page.getByText("Volume One", { exact: true })).toBeVisible({ timeout: 120_000 });
   await page.getByText("Volume One", { exact: true }).click();
   await expect(page.getByText("Chapter One", { exact: true })).toBeVisible();
@@ -183,6 +226,7 @@ test("signed Narrative reviews and applies a scene title", async ({ page }) => {
   const tab = page.getByRole("tab", { name: "Work outline", exact: true });
   if (await tab.isVisible() && await tab.getAttribute("aria-selected") !== "true") await tab.click();
   await page.getByRole("button", { name: "読み込む", exact: true }).click();
+  await showNarrativeOutline(page);
   await expect(page.getByText("Volume One", { exact: true })).toBeVisible({ timeout: 120_000 });
   await page.getByText("Volume One", { exact: true }).click();
   await expect(page.getByText("Chapter One", { exact: true })).toBeVisible();
@@ -253,6 +297,7 @@ test("signed Narrative reviews and applies a scene manuscript link", async ({ pa
   const tab = page.getByRole("tab", { name: "Work outline", exact: true });
   if (await tab.isVisible() && await tab.getAttribute("aria-selected") !== "true") await tab.click();
   await page.getByRole("button", { name: "読み込む", exact: true }).click();
+  await showNarrativeOutline(page);
   await expect(page.getByText("Volume One", { exact: true })).toBeVisible({ timeout: 120_000 });
   await page.getByText("Volume One", { exact: true }).click();
   await expect(page.getByText("Chapter One", { exact: true })).toBeVisible();
@@ -349,6 +394,7 @@ test("local authoring edits, reviews, commits and recovers a large work", async 
   const tab = page.getByRole("tab", { name: "Work outline", exact: true });
   if (await tab.isVisible() && await tab.getAttribute("aria-selected") !== "true") await tab.click();
   await page.getByRole("button", { name: "読み込む", exact: true }).click();
+  await showNarrativeOutline(page);
   await expect(page.getByText("Volume One", { exact: true })).toBeVisible({ timeout: 120_000 });
   await page.getByText("Volume One", { exact: true }).click();
   await expect(page.getByText("Chapter One", { exact: true })).toBeVisible({ timeout: 35000 });

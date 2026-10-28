@@ -60,6 +60,7 @@ async function openSceneA(page: Page) {
   if (await tab.isVisible() && await tab.getAttribute('aria-selected') !== 'true') await tab.click();
   const outline = page.getByRole('tabpanel', { name: 'Work outline', exact: true }).first();
   await outline.getByRole('button', { name: '読み込む', exact: true }).click();
+  await outline.getByRole('tab', { name: '構成', exact: true }).click();
   await outline.getByText('第一巻', { exact: true }).click();
   await outline.getByText('始まり', { exact: true }).click();
   await outline.getByText('雨の夜', { exact: true }).click();
@@ -87,6 +88,17 @@ test('dirty draft prevents navigation without losing editor text', async ({ page
   await expect.poll(() => page.evaluate(() => window.propriumHostEditorText?.() ?? '')).toBe('未保存。' + bodyA);
 });
 
+test('Mobile quick append writes to the existing editor and keeps the exact text locally', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page); await openSceneA(page);
+  const append = page.getByRole('region', { name: 'クイック追記' });
+  await expect(append).toContainText('雨の夜。灯台が光る。');
+  await append.getByRole('textbox', { name: '追記する文章' }).fill('新しい文章です。');
+  await append.getByRole('button', { name: '原稿に追記' }).click();
+  await expect(append.getByRole('status')).toContainText('Host の下書き回復記録へ保存しました。', { timeout: 60_000 });
+  await expect.poll(() => page.evaluate(() => window.propriumHostEditorText?.() ?? ''), { timeout: 60_000 }).toBe(bodyA + '新しい文章です。');
+});
+
 test('portable marker validates its saved body and opens the scene', async ({ page }) => {
   await setup(page);
   await showPanel(page, 'review');
@@ -98,4 +110,29 @@ test('portable marker validates its saved body and opens the scene', async ({ pa
   await portable.getByRole('button', { name: '確認した位置を開く' }).click();
   await showPanel(page, 'editor');
   await expect.poll(() => page.evaluate(() => window.propriumHostEditorText?.() ?? '')).toBe(bodyA);
+});
+
+test('portable marker creation is reviewed and remains local until explicit publication', async ({ page }) => {
+  const outboundWrites: string[] = [];
+  page.on('request', request => { if (/github\.com|git-receive-pack/u.test(request.url()) && !['GET', 'HEAD'].includes(request.method())) outboundWrites.push(`${request.method()} ${request.url()}`); });
+  await setup(page); await openSceneA(page);
+  await page.evaluate(() => {
+    const view = (document.querySelector('.cm-content') as any)?.cmTile?.root?.view;
+    if (!view) throw new Error('CodeMirror view unavailable');
+    view.dispatch({ selection: { anchor: 6, head: 6 } });
+    view.focus();
+  });
+  await showPanel(page, 'review');
+  const portable = page.getByRole('region', { name: '端末別の保存位置' });
+  await portable.getByRole('button', { name: '現在の位置を共有用に提案' }).click();
+  await expect(portable.getByRole('status')).toContainText('変更提案を作成しました。', { timeout: 60_000 });
+  const review = page.getByRole('region', { name: 'Authoring proposals' });
+  await review.getByRole('button', { name: /proprium\.narrative · proposed/u }).last().click();
+  await expect(review).toContainText('resume.v1.yaml');
+  await review.getByRole('checkbox').last().check();
+  await review.getByRole('button', { name: '選択した単位をローカルへ適用' }).last().click();
+  await expect(review.getByRole('button', { name: /proprium\.narrative · applied/u })).toHaveCount(1, { timeout: 60_000 });
+  await portable.getByRole('button', { name: '端末別の保存位置を確認' }).click();
+  await expect(portable).toContainText('local_only', { timeout: 60_000 });
+  expect(outboundWrites).toEqual([]);
 });
