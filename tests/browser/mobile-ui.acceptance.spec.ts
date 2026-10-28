@@ -79,6 +79,9 @@ test("Mobile WebKit keeps workspace panels, routes Settings separately, and revi
   const fileActions = page.getByRole("dialog", { name: "ファイルの操作" });
   await expect(fileActions).toBeVisible();
   await expect(fileActions.getByLabel("名前・保存先を変更")).toHaveValue("chapter.md");
+  await fileActions.getByLabel("名前・保存先を変更").fill("../invalid.md");
+  await fileActions.getByRole("button", { name: "この端末で変更" }).click();
+  await expect(fileActions.getByRole("alert")).toBeVisible();
   await fileActions.getByRole("button", { name: "操作メニューを閉じる" }).click();
   await expect(fileActions).not.toBeVisible();
 

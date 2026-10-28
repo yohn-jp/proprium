@@ -57,3 +57,38 @@
 .file-context-dialog form input { box-sizing:border-box;width:100%;min-height:44px; }
 .file-context-dialog form button { min-height:44px; }
 .file-context-dialog .file-context-hint { font-size:12px;color:var(--muted);line-height:1.55; }
+
+/* A failed rename must be announced inside the modal, not behind its backdrop. */
+.file-context-dialog .file-context-feedback {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--error-text);
+  border-radius: 9px;
+  color: var(--error-text);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+/* Keep deep Japanese file trees readable without turning every row into a card. */
+.mobile-shell .host-file-browser { gap: 12px; }
+.mobile-shell .document-create-form > div { flex-wrap: nowrap; align-items: stretch; gap: 8px; }
+.mobile-shell .document-create-form > div input { min-height: 44px; font-size: 16px; }
+.mobile-shell .document-create-form > div button { min-height: 44px; flex: 0 0 auto; }
+.mobile-shell .file-tree { font-size: 14px; }
+.mobile-shell .file-tree summary {
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 9px 6px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.mobile-shell .file-tree ul { margin-inline-start: 8px; padding-inline-start: 8px; }
+.mobile-shell .file-tree .file-row {
+  box-sizing: border-box;
+  min-height: 44px;
+  margin-block: 2px;
+  padding: 8px 10px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.mobile-shell .file-tree .file-row small { font-size: 11px; }

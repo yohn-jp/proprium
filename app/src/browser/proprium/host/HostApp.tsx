@@ -1227,7 +1227,7 @@ export function HostApp(): ReactElement {
     </details>
   </section>;
   const statusMessage = recoveryEntry ? null : message;
-  const statusSurface = workspace || statusMessage ? <details className="application-status" data-attention={statusMessage?.tone === "error" || undefined}>
+  const statusSurface = workspace || statusMessage ? <details className="application-status" data-attention={statusMessage?.tone === "error" || mcpProposalCount > 0 || syncState === "conflict" || syncState === "remote-unknown" || syncState === "offline" || undefined}>
     <summary>
       <span className="save-state" role="status">{workspace ? saveStateLabel(syncState, status.head) : "端末内の作品"}</span>
       {statusMessage && <span className={`host-message message-${statusMessage.tone}`} role={statusMessage.tone === "error" ? "alert" : "status"}><span className="host-message-text">{statusMessage.text}</span></span>}

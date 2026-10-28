@@ -778,8 +778,8 @@ ion-modal.mobile-shell-reference-modal {
 .mobile-shell-writing-active.mobile-shell-keyboard-open .mobile-shell-reveal-navigation {
   display: grid;
 }
-.mobile-shell-writing-active:has(.cm-editor:focus-within) .mobile-shell-status:not(:has([data-attention="true"])),
-.mobile-shell-writing-active.mobile-shell-keyboard-open .mobile-shell-status:not(:has([data-attention="true"])) {
+.mobile-shell-writing-active:has(.cm-editor:focus-within) .mobile-shell-status:not(:has([data-attention="true"], [role="alert"], .pending-review-count)),
+.mobile-shell-writing-active.mobile-shell-keyboard-open .mobile-shell-status:not(:has([data-attention="true"], [role="alert"], .pending-review-count)) {
   display: none;
 }
 /* Mobile is single-task; the desktop arrangement toolbar is unnecessary chrome. */

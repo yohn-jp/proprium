@@ -160,6 +160,7 @@ export function WorkspaceFileBrowser(props: Props) {
         </form>
         {!props.canModify && <p>変更前に現在の原稿を端末へ保存してください。</p>}
         <p className="file-context-hint">ここでの変更はローカルのみです。GitHubへの公開は別操作です。</p>
+        {notice && <p role="alert" className="file-context-feedback">{notice}</p>}
       </>}
     </dialog>
     {props.selectedPath && <details className="file-rename-panel" key={props.selectedPath}>
@@ -169,6 +170,6 @@ export function WorkspaceFileBrowser(props: Props) {
       {!props.canModify && <p>編集中の本文を端末に保存してから変更してください。</p>}
     </details>}
     {props.transfer}
-    {notice && <p role="status">{notice}</p>}
+    {notice && !contextPath && <p role="status">{notice}</p>}
   </section>;
 }
