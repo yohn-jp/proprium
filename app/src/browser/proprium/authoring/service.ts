@@ -880,7 +880,7 @@ export class BrowserAuthoringService {
         const result=await this.dispatcher.invoke({plugin_id:"proprium.semantic",action_id:"proprium.semantic.index.step",
           input:{taskId:job.progress.taskId,sequence},idempotency_key:stepKey},principal);
         if(!result.ok){stepError=Object.assign(new Error(result.error.message),{code:result.error.code});}
-        else if(!sameJson(result.snapshot,job.snapshot))stepError=Object.assign(new Error("Semantic task snapshot changed"),{code:"snapshot_stale"});
+        else if(!sameSnapshotSource(result.snapshot,job.snapshot))stepError=Object.assign(new Error("Semantic task source snapshot changed"),{code:"snapshot_stale"});
         else{
           const task=await this.tasks.setStepResult(requestId,job.activation_epoch,scope,result.value);
           await this.tasks.finishStep(requestId);
@@ -1529,6 +1529,10 @@ function canonicalJson(value: unknown): string {
   return `{${Object.keys(object).sort().map(key => `${JSON.stringify(key)}:${canonicalJson(object[key])}`).join(",")}}`;
 }
 function sameJson(left: unknown, right: unknown): boolean { return canonicalJson(left) === canonicalJson(right); }
+function sameSnapshotSource(left: Snapshot, right: Snapshot): boolean {
+  return left.local_commit === right.local_commit && left.worktree_generation === right.worktree_generation &&
+    left.draft_generation === right.draft_generation && (left.remote_commit ?? null) === (right.remote_commit ?? null);
+}
 function sameSnapshotSelector(payload: Record<string, unknown>, context: AuthoringSnapshotContext): boolean {
   return payload.workspace_id === context.scope.workspace_id && payload.repository_id === context.scope.repository_id &&
     payload.branch === context.scope.branch && payload.snapshot_id === context.snapshot.id;

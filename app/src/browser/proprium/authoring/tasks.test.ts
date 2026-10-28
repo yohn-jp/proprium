@@ -55,13 +55,15 @@ test("reload preserves only scoped metadata and explicit resume reuses the same 
   await first.dispose();
   now += 1;
   const reloaded = new AuthoringTaskRegistry(store, () => now, "second-session");
-  assert.deepEqual(await reloaded.status(scope, snapshot, "1.0.0", "a".repeat(64)), [{
+  const renewedLease = { ...snapshot, id: "reloaded-pin" };
+  assert.deepEqual(await reloaded.status(scope, renewedLease, "1.0.0", "a".repeat(64)), [{
     taskId: "task", state: "paused", phase: "embedding", completed: 2, total: 5, resumable: true,
   }]);
-  const resumed = await reloaded.begin("resume", 2, { ...scope, generation: "g2" }, snapshot, "task",
+  const resumed = await reloaded.begin("resume", 2, { ...scope, generation: "g2" }, renewedLease, "task",
     { ...identity, idempotency_key: "fresh-resume-key" }, new AbortController());
   assert.equal(resumed.disposition, "resumed");
   assert.equal(resumed.task.scope.generation, "g2");
+  assert.equal(resumed.task.snapshot.id, "reloaded-pin");
   assert.equal(resumed.task.identity.idempotency_key, "job-key");
   assert.equal(resumed.task.progress.state, "running");
   assert.deepEqual(await reloaded.status({ ...scope, generation: "g2" }, snapshot, "1.0.0", "a".repeat(64)), [{
@@ -71,14 +73,28 @@ test("reload preserves only scoped metadata and explicit resume reuses the same 
 });
 
 test("task ID cannot resume a different snapshot, plugin digest or repository", async () => {
-  const tasks = new AuthoringTaskRegistry(new MemoryAuthoringTaskStore(), () => 1000, "session");
+  const changedSnapshots: Snapshot[] = [
+    { ...snapshot, id: "new-snapshot", local_commit: "different-commit" },
+    { ...snapshot, id: "new-snapshot", worktree_generation: "tree-2" },
+    { ...snapshot, id: "new-snapshot", draft_generation: "draft-2" },
+    { ...snapshot, id: "new-snapshot", remote_commit: "remote-2" },
+  ];
+  for (const [index, changed] of changedSnapshots.entries()) {
+    const tasks = new AuthoringTaskRegistry(new MemoryAuthoringTaskStore(), () => 1000, `session-${index}`);
+    await tasks.begin("start", 1, scope, snapshot, "task", identity, new AbortController());
+    await tasks.setStartResult("start", 1, scope, {
+      snapshot, taskId: "task", state: "running", phase: "source_scan", completed: 0, total: 0,
+    });
+    await tasks.dispose();
+    await assert.rejects(tasks.begin("resume", 2, scope, changed, "task", identity, new AbortController()),
+      error => (error as { code?: string }).code === "snapshot_stale");
+  }
+  const tasks = new AuthoringTaskRegistry(new MemoryAuthoringTaskStore(), () => 1000, "plugin-session");
   await tasks.begin("start", 1, scope, snapshot, "task", identity, new AbortController());
   await tasks.setStartResult("start", 1, scope, {
     snapshot, taskId: "task", state: "running", phase: "source_scan", completed: 0, total: 0,
   });
   await tasks.dispose();
-  await assert.rejects(tasks.begin("resume", 2, scope, { ...snapshot, id: "new-snapshot" }, "task", identity, new AbortController()),
-    error => (error as { code?: string }).code === "snapshot_stale");
   await assert.rejects(tasks.begin("resume", 2, scope, snapshot, "task", { ...identity, manifest_digest: "c".repeat(64) }, new AbortController()),
     error => (error as { code?: string }).code === "idempotency_conflict");
   assert.deepEqual(await tasks.status({ ...scope, repository_id: 2 }, snapshot), []);
@@ -147,7 +163,7 @@ test("model transfer progress restarts from zero when a resumable worker is recr
   });
   await firstSession.dispose();
   const nextSession = new AuthoringTaskRegistry(store, () => 2000, "second-session");
-  const resumed = await nextSession.begin("resume", 2, { ...scope, generation: "g2" }, snapshot, "warm",
+  const resumed = await nextSession.begin("resume", 2, { ...scope, generation: "g2" }, { ...snapshot, id: "warm-reloaded-pin" }, "warm",
     { ...identity, idempotency_key: "fresh-warm-key" }, new AbortController());
   assert.equal(resumed.task.progress.phase, "model_loading");
   assert.equal(resumed.task.progress.completed, 0);
