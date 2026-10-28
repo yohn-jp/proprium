@@ -86,9 +86,11 @@ test("selection, supporting copy and disabled editor controls remain readable in
   const isMobile = testInfo.project.name === "mobile-webkit";
   for (const theme of ["light", "dark", "paper"] as const) {
     await page.goto("/");
-    if (isMobile) await page.getByRole("button", { name: "設定を開く" }).click();
-    await page.locator("#settings-theme").selectOption(theme);
-    if (isMobile) await page.getByRole("navigation", { name: "モバイルの主要画面" }).getByRole("button", { name: "作品", exact: true }).click();
+    if (isMobile) {
+      await page.getByRole("button", { name: "設定を開く" }).click();
+      await page.locator("#settings-theme").selectOption(theme);
+      await page.getByRole("navigation", { name: "モバイルの主要画面" }).getByRole("button", { name: "作品", exact: true }).click();
+    } else await page.getByLabel("外観", { exact: true }).selectOption(theme);
 
     const selected = isMobile
       ? page.locator(".mobile-shell-navigation ion-button[fill='solid']")
