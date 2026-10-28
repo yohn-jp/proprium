@@ -1,0 +1,30 @@
+{
+  "schema": "proprium.semantic.model-source/v1",
+  "model_id": "mogolloni/bge-reranker-v2-m3-onnx",
+  "revision": "e5023553f6c47f09057da7a19cdd79ef850a4985",
+  "precision": "fp32",
+  "license": "Apache-2.0",
+  "model_card": "https://huggingface.co/mogolloni/bge-reranker-v2-m3-onnx/tree/e5023553f6c47f09057da7a19cdd79ef850a4985",
+  "files": [
+    {
+      "path": "onnx/model.onnx",
+      "bytes": 489245,
+      "sha256": "ed283424d9a40dbd6fe2f3081386848a88cc8057b7ab43e02d84077d6b69ba42",
+      "role": "onnx-graph"
+    },
+    {
+      "path": "onnx/model.onnx_data",
+      "bytes": 2271088656,
+      "sha256": "9a748c82efb2079d24650c489e053dbb3c71d8acbbcf04d7b2340db66f2748f7",
+      "role": "external-tensors"
+    },
+    {
+      "path": "tokenizer.json",
+      "bytes": 17082900,
+      "sha256": "8bf8afbfd11306bd872018c53bfdf2e160a56f8edbcf49933324404791c148d3",
+      "role": "tokenizer"
+    }
+  ],
+  "status": "source-pinned-not-signed",
+  "note": "This source manifest is not a Host admission signature. The eventual plugin registry build must bind these exact files in its signed optional model asset group. No model bytes are stored in this repository."
+}

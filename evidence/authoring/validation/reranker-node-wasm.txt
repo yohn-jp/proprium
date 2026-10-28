@@ -1,0 +1,16 @@
+{"model":"mogolloni/bge-reranker-v2-m3-onnx","revision":"e5023553f6c47f09057da7a19cdd79ef850a4985","graphBytes":489245,"externalTensorCount":393,"first":{"index":0,"name":"roberta.embeddings.word_embeddings.weight","offset":0,"bytes":1024008192},"last":{"index":392,"name":"Constant_586_attr::value","offset":2271023104,"bytes":65552}}
+{"stage":"graph-ready","wasmLinearMemoryBytes":"7274496","processRssBytes":130277376,"elapsedSeconds":"0.017"}
+{"stage":"tensor-50/393","wasmLinearMemoryBytes":"1064960000","processRssBytes":1171582976,"elapsedSeconds":"2.945"}
+{"stage":"tensor-100/393","wasmLinearMemoryBytes":"1064960000","processRssBytes":1171714048,"elapsedSeconds":"2.947"}
+{"stage":"tensor-150/393","wasmLinearMemoryBytes":"1065156608","processRssBytes":1171976192,"elapsedSeconds":"2.949"}
+{"stage":"tensor-200/393","wasmLinearMemoryBytes":"1065418752","processRssBytes":1172238336,"elapsedSeconds":"2.952"}
+{"stage":"tensor-250/393","wasmLinearMemoryBytes":"1078788096","processRssBytes":1185345536,"elapsedSeconds":"2.993"}
+{"stage":"tensor-300/393","wasmLinearMemoryBytes":"1493106688","processRssBytes":1596518400,"elapsedSeconds":"4.156"}
+{"stage":"tensor-350/393","wasmLinearMemoryBytes":"1928658944","processRssBytes":2032988160,"elapsedSeconds":"5.382"}
+{"stage":"tensor-393/393","wasmLinearMemoryBytes":"2279800832","processRssBytes":2380967936,"elapsedSeconds":"6.383"}
+{"stage":"external-data-verified","wasmLinearMemoryBytes":"2279800832","processRssBytes":2381099008,"elapsedSeconds":"6.384"}
+{"stage":"tokenizer-verified","wasmLinearMemoryBytes":"2296905728","processRssBytes":2398441472,"elapsedSeconds":"6.434"}
+{"stage":"model-loaded","loadSeconds":"5.929"}
+{"stage":"model-loaded","wasmLinearMemoryBytes":"3540385792","processRssBytes":3679739904,"elapsedSeconds":"12.364"}
+{"positive":8.533679008483887,"negative":-4.4541144371032715,"repeated":8.533679008483887,"finite":true,"ranking":true,"reproducible":true}
+{"stage":"scored","wasmLinearMemoryBytes":"3540385792","processRssBytes":3685769216,"elapsedSeconds":"15.147"}

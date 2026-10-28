@@ -1,0 +1,30 @@
+package proprium:semantic-reranker@1.0.0;
+
+interface inference {
+  record tensor-range {
+    index: u32,
+    name: string,
+    offset: u32,
+    bytes: u32,
+  }
+
+  inspect-graph: func(graph: list<u8>, sha256: string) -> result<list<tensor-range>, string>;
+  begin-data: func(total-bytes: u32, sha256: string) -> result<_, string>;
+  begin-tensor: func(index: u32) -> result<_, string>;
+  append-tensor: func(index: u32, offset: u32, bytes: list<u8>) -> result<_, string>;
+  finish-tensor: func(index: u32) -> result<_, string>;
+  finish-data: func() -> result<_, string>;
+  begin-tokenizer: func(total-bytes: u32, sha256: string) -> result<_, string>;
+  append-tokenizer: func(offset: u32, bytes: list<u8>) -> result<_, string>;
+  finish-tokenizer: func() -> result<_, string>;
+  load-model: func() -> result<_, string>;
+  score-pair: func(query: string, passage: string) -> result<f32, string>;
+  model-id: func() -> string;
+  model-revision: func() -> string;
+  memory-bytes: func() -> u64;
+  release: func();
+}
+
+world reranker-inference {
+  export inference;
+}
