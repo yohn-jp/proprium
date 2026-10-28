@@ -21,14 +21,14 @@ test("Mobile WebKit library keeps GitHub access visible without a neutral status
   await expect(libraryHeading).toHaveClass(/\bsr-only\b/u);
   await expect(page.locator(".mobile-shell-status")).toHaveCount(0);
 
+  await page.getByRole("button", { name: "設定を開く" }).click();
   const connect = page.getByRole("button", { name: "GitHubに接続", exact: true });
   await expect(connect).toBeVisible();
   await connect.scrollIntoViewIfNeeded();
   await expect(connect).toBeInViewport();
 
-  const gatewaySettings = page.locator("details.gateway-settings");
-  if (await gatewaySettings.getAttribute("open") === null) await gatewaySettings.locator("summary").click();
-  await page.getByLabel("Proprium Gateway URL", { exact: true }).fill("");
+  await page.getByText("GitHub・Gateway接続", { exact: true }).click();
+  await page.getByLabel("Gateway URL", { exact: true }).fill("");
   await connect.click();
 
   const error = page.locator(".github-authorization-error");
@@ -62,19 +62,16 @@ test("Mobile WebKit keeps workspace panels, routes Settings separately, and revi
     await window.propriumHostTest!.openWorkspace(workspace, { "chapter.md": "最初の本文です。\n" });
   }, workspace);
 
-  await expect(page.locator("summary[aria-label='別の画面へ移動']")).toBeVisible();
-  await expect(page.locator(".mobile-shell-navigation-menu")).not.toHaveAttribute("open", "");
-  await expect(page.getByRole("navigation", { name: "モバイル画面" })).not.toBeVisible();
-  await expect(page.locator(".st-workspace-mobile-tabs [role='tab']").first()).toBeVisible();
+  const screenNavigation = page.getByRole("navigation", { name: "モバイルの主要画面" });
+  await expect(screenNavigation).toBeVisible();
+  await expect(screenNavigation.getByRole("button")).toHaveCount(4);
+  await expect(page.locator('summary[aria-label="別の画面へ移動"]')).toHaveCount(0);
+  await expect(screenNavigation.getByRole("button", { name: "変更", exact: true })).toBeVisible();
 
-  const screenNavigation = page.getByRole("navigation", { name: "モバイル画面" });
-  await page.locator("summary[aria-label='別の画面へ移動']").click();
-  await screenNavigation.getByRole("button", { name: "設定", exact: true }).click();
+  await page.getByRole("button", { name: "設定を開く" }).click();
   await expect(page.locator(".mobile-shell-workspace-view[data-active-view='settings'] .mobile-shell-settings-card")).toBeVisible();
   await expect(page.locator(".mobile-shell-workspace-panel")).toHaveAttribute("hidden", "");
   await expect(page.locator(".commit-panel")).not.toBeVisible();
-
-  await page.locator("summary[aria-label='別の画面へ移動']").click();
   await screenNavigation.getByRole("button", { name: "書く", exact: true }).click();
   await expect(page.locator(".mobile-shell-workspace-panel")).not.toHaveAttribute("hidden", "");
   await chooseFile(page, "chapter.md");
@@ -85,6 +82,8 @@ test("Mobile WebKit keeps workspace panels, routes Settings separately, and revi
   expect(visibleManuscriptHeight).toBeGreaterThan(120);
 
   await page.getByRole("textbox", { name: "原稿 Markdown" }).fill("変更後の本文です。\n");
+  await expect(screenNavigation).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "画面の切替を表示" })).toBeVisible();
   const saveDraft = page.getByRole("button", { name: "端末に保存", exact: true });
   await expect(saveDraft).toBeEnabled();
   await saveDraft.click();
