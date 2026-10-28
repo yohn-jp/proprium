@@ -90,6 +90,7 @@ test('two reviewed reading marks open their saved source ranges', async ({ page 
     await showPanel(page, 'editor');
     await expect.poll(() => page.evaluate(() => window.propriumHostEditorText?.() ?? '')).toBe(bodyA);
   }
+  if (await page.locator(".mobile-shell").count()) await showPanel(page, "review");
   const configuration = page.locator('.st-workspace-configuration');
   if (await configuration.getAttribute('open') === null) await configuration.locator(':scope > summary').click();
   const menu = page.locator('.st-workspace-panel-menu');
