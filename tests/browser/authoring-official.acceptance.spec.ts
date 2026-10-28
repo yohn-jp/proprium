@@ -389,7 +389,11 @@ test("local authoring edits, reviews, commits and recovers a large work", async 
   await expect(page.locator(".host-message[role='status']")).toContainText("Committed locally as");
   await page.reload();
   await page.getByRole("button", { name: /P0 synthetic work/ }).click();
-  await chooseFile(page, "manuscript/custom/scene-301.md");
+  // Mobile restores the last-open manuscript directly; do not demand a second
+  // file-tree selection when the correct document is already active.
+  if (!(await page.getByRole("textbox", { name: "原稿 Markdown" }).isVisible())) {
+    await chooseFile(page, "manuscript/custom/scene-301.md");
+  }
   await expectEditorText(page, edited);
 
 });

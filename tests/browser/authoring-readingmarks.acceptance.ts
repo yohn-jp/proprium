@@ -50,6 +50,7 @@ async function setup(page: Page) {
   await expect(manager.getByRole('status')).toContainText('proprium.narrative@0.1.0 is enabled');
 }
 async function openSceneA(page: Page) {
+  if (await page.locator(".mobile-shell").count()) await showPanel(page, "review");
   const configuration = page.locator('.st-workspace-configuration');
   if (await configuration.getAttribute('open') === null) await configuration.locator(':scope > summary').click();
   const menu = page.locator('.st-workspace-panel-menu');

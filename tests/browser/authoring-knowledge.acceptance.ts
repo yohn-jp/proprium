@@ -21,6 +21,7 @@ async function install(page: Page, id: string, grants: string[]) {
 }
 
 async function showAuthoringPanel(page: Page, title: string) {
+  if (await page.locator(".mobile-shell").count()) await showPanel(page, "review");
   const config = page.locator(".st-workspace-configuration > summary");
   await config.click();
   const menu = page.locator(".st-workspace-panel-menu");
