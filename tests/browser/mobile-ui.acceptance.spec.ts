@@ -74,6 +74,14 @@ test("Mobile WebKit keeps workspace panels, routes Settings separately, and revi
   await expect(page.locator(".commit-panel")).not.toBeVisible();
   await screenNavigation.getByRole("button", { name: "書く", exact: true }).click();
   await expect(page.locator(".mobile-shell-workspace-panel")).not.toHaveAttribute("hidden", "");
+  await screenNavigation.getByRole("button", { name: "作品", exact: true }).click();
+  await page.getByRole("button", { name: "chapter.md の操作メニュー" }).click();
+  const fileActions = page.getByRole("dialog", { name: "ファイルの操作" });
+  await expect(fileActions).toBeVisible();
+  await expect(fileActions.getByLabel("名前・保存先を変更")).toHaveValue("chapter.md");
+  await fileActions.getByRole("button", { name: "操作メニューを閉じる" }).click();
+  await expect(fileActions).not.toBeVisible();
+
   await chooseFile(page, "chapter.md");
   await expect(page.getByRole("textbox", { name: "原稿 Markdown" })).toBeVisible();
   const manuscriptBounds = await page.locator(".cm-editor").boundingBox();
