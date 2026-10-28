@@ -9434,6 +9434,85 @@
                     "primary": "evidenceA.quote",
                     "secondary": "evidenceB.quote"
                   }
+                },
+                {
+                  "id": "lint-proposal",
+                  "title": "整形を提案",
+                  "body": {
+                    "id": "diagnostics-lint-proposal-form",
+                    "type": "form",
+                    "title": "診断済み原稿の整形を提案",
+                    "description": "先に保存済み場面を診断してください。現在のスナップショットと診断済みの原稿・規則を再確認してから、Hostのレビューへ送ります。",
+                    "fields": [
+                      {
+                        "id": "idempotency_key",
+                        "label": "レビューキー",
+                        "type": "string",
+                        "required": true,
+                        "min_length": 1,
+                        "max_length": 256
+                      }
+                    ],
+                    "submit_when": {
+                      "data_key": "last_action_result.identity.documentRevision"
+                    },
+                    "unavailable_message": "先に保存済み場面レポートを実行してください。",
+                    "submit": {
+                      "action_id": "proprium.diagnostics.lint.propose.v1",
+                      "input_template": {
+                        "documentPath": {
+                          "data_key": "last_action_result.identity.documentPath"
+                        },
+                        "expectedRevision": {
+                          "data_key": "last_action_result.identity.documentRevision"
+                        },
+                        "textHash": {
+                          "data_key": "last_action_result.identity.textHash"
+                        },
+                        "idempotencyKey": {
+                          "data_key": "form.idempotency_key"
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "format-proposal",
+                  "title": "原稿全体の整形",
+                  "body": {
+                    "id": "diagnostics-format-proposal-form",
+                    "type": "form",
+                    "title": "保存済み場面の整形を提案",
+                    "description": "先に場面レポートを実行すると、その保存済み原稿のRevisionに結び付いた提案を作成します。",
+                    "fields": [
+                      {
+                        "id": "idempotency_key",
+                        "label": "レビューキー",
+                        "type": "string",
+                        "required": true,
+                        "min_length": 1,
+                        "max_length": 256
+                      }
+                    ],
+                    "submit_when": {
+                      "data_key": "last_action_result.identity.documentRevision"
+                    },
+                    "unavailable_message": "先に保存済み場面レポートを実行してください。",
+                    "submit": {
+                      "action_id": "proprium.diagnostics.manuscript.format.propose.v1",
+                      "input_template": {
+                        "sceneId": {
+                          "data_key": "last_action_result.identity.sceneId"
+                        },
+                        "expectedRevision": {
+                          "data_key": "last_action_result.identity.documentRevision"
+                        },
+                        "idempotencyKey": {
+                          "data_key": "form.idempotency_key"
+                        }
+                      }
+                    }
+                  }
                 }
               ]
             }
@@ -9585,6 +9664,223 @@
               "value": {
                 "data_key": "last_action_result.sections.speaker.providerIdentity"
               }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "diagnostics.chapter-aspects",
+      "kind": "panel",
+      "title": "章の観点レビュー",
+      "context": {},
+      "body": {
+        "id": "chapter-aspects-root",
+        "type": "tabs",
+        "title": "決定論的な章レビュー",
+        "tabs": [
+          {
+            "id": "preview",
+            "title": "対象プレビュー",
+            "body": {
+              "id": "chapter-aspects-preview",
+              "type": "tabs",
+              "tabs": [
+                {
+                  "id": "preview-request",
+                  "title": "対象を選択",
+                  "body": {
+                    "id": "chapter-aspects-preview-form",
+                    "type": "form",
+                    "title": "読み取り対象を確認",
+                    "description": "本文と同一スナップショットの章メタデータから、選択した観点のローカルレビューを準備します。外部モデルは呼び出しません。",
+                    "fields": [
+                      {
+                        "id": "chapter_id",
+                        "label": "章ID",
+                        "type": "string",
+                        "required": true,
+                        "min_length": 1,
+                        "max_length": 128
+                      },
+                      {
+                        "id": "aspects",
+                        "label": "確認項目",
+                        "type": "multi-reference",
+                        "required": true,
+                        "options": [
+                          {
+                            "value": "tempo",
+                            "label": "場面のテンポ"
+                          },
+                          {
+                            "value": "pov-shift",
+                            "label": "視点の変化"
+                          },
+                          {
+                            "value": "over-explain",
+                            "label": "説明の重複"
+                          }
+                        ]
+                      }
+                    ],
+                    "submit": {
+                      "action_id": "proprium.diagnostics.chapter.aspects.preview.v1",
+                      "input_template": {
+                        "chapterId": {
+                          "data_key": "form.chapter_id"
+                        },
+                        "aspects": {
+                          "data_key": "form.aspects"
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "prompt",
+                  "title": "プレビュー",
+                  "body": {
+                    "id": "chapter-aspects-preview-result",
+                    "type": "detail",
+                    "title": "準備されたローカルレビュー",
+                    "value": {
+                      "data_key": "last_action_result"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "review",
+            "title": "結果を確認",
+            "body": {
+              "id": "chapter-aspects-review",
+              "type": "tabs",
+              "tabs": [
+                {
+                  "id": "review-request",
+                  "title": "対象を選択",
+                  "body": {
+                    "id": "chapter-aspects-review-form",
+                    "type": "form",
+                    "title": "章の決定論的レビュー",
+                    "description": "選択した項目を処理し、続きをページ単位で確認できます。",
+                    "fields": [
+                      {
+                        "id": "chapter_id",
+                        "label": "章ID",
+                        "type": "string",
+                        "required": true,
+                        "min_length": 1,
+                        "max_length": 128
+                      },
+                      {
+                        "id": "aspects",
+                        "label": "確認項目",
+                        "type": "multi-reference",
+                        "required": true,
+                        "options": [
+                          {
+                            "value": "tempo",
+                            "label": "場面のテンポ"
+                          },
+                          {
+                            "value": "pov-shift",
+                            "label": "視点の変化"
+                          },
+                          {
+                            "value": "over-explain",
+                            "label": "説明の重複"
+                          }
+                        ]
+                      }
+                    ],
+                    "submit": {
+                      "action_id": "proprium.diagnostics.chapter.aspects.review.v1",
+                      "input_template": {
+                        "chapterId": {
+                          "data_key": "form.chapter_id"
+                        },
+                        "aspects": {
+                          "data_key": "form.aspects"
+                        },
+                        "limit": 100
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "findings",
+                  "title": "所見",
+                  "body": {
+                    "id": "chapter-aspects-findings",
+                    "type": "list",
+                    "title": "根拠付き所見",
+                    "items": {
+                      "data_key": "last_action_result.findings"
+                    },
+                    "primary": "finding",
+                    "secondary": "aspectLabel",
+                    "next_action": {
+                      "action_id": "proprium.diagnostics.chapter.aspects.review.v1",
+                      "input_template": {
+                        "chapterId": {
+                          "data_key": "last_action_result.chapterId"
+                        },
+                        "aspects": {
+                          "data_key": "last_action_result.aspects"
+                        },
+                        "cursor": {
+                          "data_key": "last_action_result.nextCursor"
+                        },
+                        "limit": 100
+                      }
+                    },
+                    "next_action_when": {
+                      "data_key": "last_action_result.nextCursor"
+                    },
+                    "item_navigation": {
+                      "intent": "open",
+                      "target": {
+                        "path": {
+                          "data_key": "item.evidence.0.path"
+                        },
+                        "span": {
+                          "path": {
+                            "data_key": "item.evidence.0.path"
+                          },
+                          "revision": {
+                            "data_key": "item.evidence.0.revision"
+                          },
+                          "start": {
+                            "data_key": "item.evidence.0.start"
+                          },
+                          "end": {
+                            "data_key": "item.evidence.0.end"
+                          },
+                          "quote": {
+                            "data_key": "item.evidence.0.quote"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "status",
+                  "title": "状態",
+                  "body": {
+                    "id": "chapter-aspects-status",
+                    "type": "detail",
+                    "title": "レビュー範囲と完了状態",
+                    "value": {
+                      "data_key": "last_action_result"
+                    }
+                  }
+                }
+              ]
             }
           }
         ]

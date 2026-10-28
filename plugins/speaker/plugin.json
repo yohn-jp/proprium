@@ -8668,6 +8668,654 @@
         "plugin"
       ],
       "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.speaker",
+      "schema_version": 1,
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "inspected",
+              "proposal_created",
+              "no_changes"
+            ],
+            "maxLength": 1024
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "inventory": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "enum": [
+                    "corrections",
+                    "adopted-model"
+                  ],
+                  "maxLength": 1024
+                },
+                "source_path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "target_path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "source_revision": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$",
+                      "maxLength": 1024
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "target_revision": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$",
+                      "maxLength": 1024
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "source_byte_length": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1048576
+                },
+                "target_byte_length": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 1048576
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "source_sha256": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$",
+                      "maxLength": 1024
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "target_sha256": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$",
+                      "maxLength": 1024
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "disposition": {
+                  "type": "string",
+                  "enum": [
+                    "disabled",
+                    "absent",
+                    "unchanged",
+                    "conflict",
+                    "restore",
+                    "blocked"
+                  ],
+                  "maxLength": 1024
+                }
+              },
+              "required": [
+                "id",
+                "source_path",
+                "target_path",
+                "source_revision",
+                "target_revision",
+                "source_byte_length",
+                "target_byte_length",
+                "source_sha256",
+                "target_sha256",
+                "disposition"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "expected_revisions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "revision": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$",
+                      "maxLength": 1024
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "path",
+                "revision"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "provenance": {
+            "type": "object",
+            "properties": {
+              "action_id": {
+                "type": "string",
+                "enum": [
+                  "speaker.recovery.inspect",
+                  "speaker.recovery.propose"
+                ],
+                "maxLength": 1024
+              },
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "workspace_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "repository_id": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "branch": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "generation": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                },
+                "required": [
+                  "workspace_id",
+                  "repository_id",
+                  "branch",
+                  "generation"
+                ],
+                "additionalProperties": false
+              },
+              "snapshot": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "local_commit": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 0,
+                        "maxLength": 512
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "worktree_generation": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "draft_generation": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 0,
+                        "maxLength": 256
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "remote_commit": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 0,
+                        "maxLength": 512
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "local_commit",
+                  "worktree_generation",
+                  "draft_generation"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "action_id",
+              "scope",
+              "snapshot"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "status",
+          "proposal_id",
+          "inventory",
+          "expected_revisions",
+          "provenance"
+        ],
+        "additionalProperties": false
+      },
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false,
+      "action_id": "speaker.recovery.inspect",
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ]
+    },
+    {
+      "plugin_id": "proprium.speaker",
+      "schema_version": 1,
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "inspected",
+              "proposal_created",
+              "no_changes"
+            ],
+            "maxLength": 1024
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "inventory": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "enum": [
+                    "corrections",
+                    "adopted-model"
+                  ],
+                  "maxLength": 1024
+                },
+                "source_path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "target_path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "source_revision": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$",
+                      "maxLength": 1024
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "target_revision": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$",
+                      "maxLength": 1024
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "source_byte_length": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1048576
+                },
+                "target_byte_length": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 1048576
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "source_sha256": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$",
+                      "maxLength": 1024
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "target_sha256": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$",
+                      "maxLength": 1024
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "disposition": {
+                  "type": "string",
+                  "enum": [
+                    "disabled",
+                    "absent",
+                    "unchanged",
+                    "conflict",
+                    "restore",
+                    "blocked"
+                  ],
+                  "maxLength": 1024
+                }
+              },
+              "required": [
+                "id",
+                "source_path",
+                "target_path",
+                "source_revision",
+                "target_revision",
+                "source_byte_length",
+                "target_byte_length",
+                "source_sha256",
+                "target_sha256",
+                "disposition"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "expected_revisions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "revision": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$",
+                      "maxLength": 1024
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "path",
+                "revision"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "provenance": {
+            "type": "object",
+            "properties": {
+              "action_id": {
+                "type": "string",
+                "enum": [
+                  "speaker.recovery.inspect",
+                  "speaker.recovery.propose"
+                ],
+                "maxLength": 1024
+              },
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "workspace_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "repository_id": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "branch": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "generation": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                },
+                "required": [
+                  "workspace_id",
+                  "repository_id",
+                  "branch",
+                  "generation"
+                ],
+                "additionalProperties": false
+              },
+              "snapshot": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "local_commit": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 0,
+                        "maxLength": 512
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "worktree_generation": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "draft_generation": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 0,
+                        "maxLength": 256
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "remote_commit": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 0,
+                        "maxLength": 512
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "local_commit",
+                  "worktree_generation",
+                  "draft_generation"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "action_id",
+              "scope",
+              "snapshot"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "status",
+          "proposal_id",
+          "inventory",
+          "expected_revisions",
+          "provenance"
+        ],
+        "additionalProperties": false
+      },
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false,
+      "action_id": "speaker.recovery.propose",
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9._:-]+$"
+          }
+        },
+        "required": [
+          "idempotency_key"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose"
+      ]
     }
   ],
   "ui": [
@@ -9422,6 +10070,76 @@
                   }
                 }
               ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "speaker.recovery",
+      "kind": "panel",
+      "title": "Restore preserved speaker state",
+      "context": {},
+      "body": {
+        "id": "speaker-recovery-tabs",
+        "type": "tabs",
+        "title": "Preserved speaker files",
+        "tabs": [
+          {
+            "id": "inventory",
+            "title": "Inspect",
+            "body": {
+              "id": "speaker-recovery-inventory",
+              "type": "list",
+              "title": "Legacy and current files",
+              "load_action": {
+                "action_id": "speaker.recovery.inspect",
+                "input_template": {}
+              },
+              "items": {
+                "data_key": "last_action_result.inventory"
+              },
+              "primary": "disposition",
+              "secondary": "target_path"
+            }
+          },
+          {
+            "id": "restore",
+            "title": "Restore",
+            "body": {
+              "id": "speaker-recovery-proposal-form",
+              "type": "form",
+              "title": "Propose absent-only recovery",
+              "fields": [
+                {
+                  "id": "idempotency_key",
+                  "label": "Review key",
+                  "type": "string",
+                  "required": true,
+                  "min_length": 1,
+                  "max_length": 128
+                }
+              ],
+              "submit": {
+                "action_id": "speaker.recovery.propose",
+                "input_template": {
+                  "idempotency_key": {
+                    "data_key": "form.idempotency_key"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "result",
+            "title": "Latest result",
+            "body": {
+              "id": "speaker-recovery-result",
+              "type": "detail",
+              "title": "Recovery status",
+              "value": {
+                "data_key": "last_action_result"
+              }
             }
           }
         ]
