@@ -61,7 +61,10 @@ interface ActiveTask {
 const sameStableScope = (left: Scope, right: Scope) => left.workspace_id === right.workspace_id &&
   left.repository_id === right.repository_id && left.branch === right.branch;
 const sameScope = (left: Scope, right: Scope) => sameStableScope(left, right) && left.generation === right.generation;
-const sameSnapshot = (left: Snapshot, right: Snapshot) => canonicalJson(left) === canonicalJson(right);
+/** Snapshot IDs are short-lived Host leases; the Git/worktree fields identify the source snapshot across reloads. */
+const sameSnapshot = (left: Snapshot, right: Snapshot) => left.local_commit === right.local_commit &&
+  left.worktree_generation === right.worktree_generation && left.draft_generation === right.draft_generation &&
+  (left.remote_commit ?? null) === (right.remote_commit ?? null);
 const keyFor = (pluginId: string, scope: Scope, taskId: string) => "task:" + encodeURIComponent(pluginId) + ":" +
   encodeURIComponent(canonicalJson({ workspace_id: scope.workspace_id, repository_id: scope.repository_id, branch: scope.branch })) + ":" +
   encodeURIComponent(taskId);
@@ -205,7 +208,7 @@ export class AuthoringTaskRegistry {
         }
         if (current.progress.state === "complete") return { next: current, value: { disposition: "complete" as const, task: current } };
         const resumed: StoredAuthoringTask = {
-          ...current, scope: structuredClone(scope), activation_epoch: epoch, owner_id: this.sessionId,
+          ...current, scope: structuredClone(scope), snapshot: structuredClone(snapshot), activation_epoch: epoch, owner_id: this.sessionId,
           progress: { ...current.progress, state: "running", resumable: true,
             ...(current.progress.phase === "model_loading" ? { completed: 0 } : {}) }, updated_at: this.now(),
         };
