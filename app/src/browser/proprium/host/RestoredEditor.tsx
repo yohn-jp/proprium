@@ -28,6 +28,8 @@ interface Props {
   onHistory(): void;
   canPublish: boolean;
   onRegisterFlush(flush: (() => Promise<string | null>) | null): void;
+  onRegisterQuickAppend?(append: ((text: string, operationId: string) => Promise<void>) | null,
+    matchesAppliedOperation?: ((text: string, operationId: string) => boolean) | null): void;
   git: BrowserLocalGit;
   onScratchApplied(): Promise<void>;
   onCompositionChange?(composing: boolean): void;
@@ -47,6 +49,8 @@ export function RestoredEditor(props: Props): ReactElement {
   const snapshot = useMemo<SnapshotId>(() => ({ repository: repo, remoteCommit: published ? head ?? "" : "", ...(head ? { overlayCommit: head } : {}) }), [repo, head, published]);
   const journalRef = useRef<BrowserJournal | null>(null);
   const inputFlushRef = useRef<(() => Promise<string | null>) | null>(null);
+  const inputAppendRef = useRef<((text: string) => string | null) | null>(null);
+  const appendOperationsRef = useRef(new Map<string, string>());
   const latest = useRef(props); latest.current = props;
   const generation = useRef(Date.now());
   const [journalReady, setJournalReady] = useState(false);
@@ -79,10 +83,10 @@ export function RestoredEditor(props: Props): ReactElement {
     operation: { id, generation: ++generation.current, repository: repo, baseRemoteCommit: snapshot.remoteCommit, effect: path.startsWith("meta/scratch/") ? "metadata" : "manuscript", reads: [{ path, revision: writes[0]?.revision ?? null }], writes, message: `Draft ${path}` },
   }), [repo, authorScope, snapshot, file.path, file.revision.oid]);
 
-  const persistText = useCallback(async (text: string): Promise<void> => {
+  const persistText = useCallback(async (text: string, operationId: string = crypto.randomUUID()): Promise<void> => {
     const journal = journalRef.current;
     if (!journal) throw new Error("下書きの回復記録を利用できません。入力はエディターに保持されています。");
-    const entry = draftEntry(file.path, text, crypto.randomUUID());
+    const entry = draftEntry(file.path, text, operationId);
     // The recovered journal uses content SHA-256 revisions; Browser Git uses Git blob OIDs.
     // Translate only this recovery value, preserving the original journal contract.
     const base = latest.current.file.data;
@@ -111,6 +115,34 @@ export function RestoredEditor(props: Props): ReactElement {
   }, [persistText]);
   useEffect(() => { onRegisterFlush(flush); return () => onRegisterFlush(null); }, [flush, onRegisterFlush]);
   const registerInputFlush = useCallback((next: (() => Promise<string | null>) | null) => { inputFlushRef.current = next; }, []);
+  const registerInputAppend = useCallback((next: ((text: string) => string | null) | null) => { inputAppendRef.current = next; }, []);
+  const appendQuickText = useCallback(async (text: string, operationId: string): Promise<void> => {
+    if (!journalReady || !journalRef.current) throw new Error("下書きの回復記録を利用できません。エディターは変更されていません。");
+    if (!text.trim() || !/^[A-Za-z0-9_-]{1,128}$/u.test(operationId)) throw new Error("追記する文章または操作 ID が不正です。");
+    const priorText = appendOperationsRef.current.get(operationId);
+    if (priorText !== undefined && priorText !== text) throw new Error("同じ操作 ID で異なる文章を追記できません。");
+    let nextText: string | null;
+    if (priorText !== undefined) {
+      nextText = await inputFlushRef.current?.() ?? latest.current.file.text;
+    } else {
+      if (latest.current.file.dirty) throw new Error("原稿に未保存の変更があります。保存してから追記してください。");
+      const before = await inputFlushRef.current?.();
+      if (before === null || before !== latest.current.file.text) throw new Error("表示中の原稿が最新の保存済み本文と一致しません。");
+      nextText = inputAppendRef.current?.(text) ?? null;
+      if (nextText !== null) {
+        appendOperationsRef.current.set(operationId, text);
+        while (appendOperationsRef.current.size > 128) appendOperationsRef.current.delete(appendOperationsRef.current.keys().next().value!);
+      }
+    }
+    if (nextText === null) throw new Error("原稿エディターを利用できません。");
+    await persistText(nextText, operationId);
+  }, [journalReady, persistText]);
+  const matchesAppliedAppend = useCallback((text: string, operationId: string): boolean =>
+    appendOperationsRef.current.get(operationId) === text, []);
+  useEffect(() => {
+    props.onRegisterQuickAppend?.(appendQuickText, matchesAppliedAppend);
+    return () => props.onRegisterQuickAppend?.(null, null);
+  }, [appendQuickText, matchesAppliedAppend, props.onRegisterQuickAppend]);
   const scratchFlushRef = useRef<(() => Promise<JournalEntry | null>) | null>(null);
   const registerScratchFlush = useCallback((next: (() => Promise<JournalEntry | null>) | null) => { scratchFlushRef.current = next; }, []);
   const draftScratch = async (draft: ScratchDraftPayload, binding: ScratchDraftBinding): Promise<JournalEntry> => {
@@ -175,6 +207,7 @@ export function RestoredEditor(props: Props): ReactElement {
       onHistory={props.onHistory} historyOpen={false} historyExternal={true} onRestoreHistoryBody={props.onChange}
       scratchEntries={entries.filter(entry => entry.documentPath.startsWith("meta/scratch/"))} onDraftScratch={draftScratch} onCheckpointScratch={checkpointScratch}
       registerScratchFlush={registerScratchFlush} registerNavigationFlush={registerInputFlush} scratchBusy={busy} pendingCount={file.dirty ? 1 : 0}
+      registerQuickAppend={registerInputAppend}
       onCompositionChange={props.onCompositionChange} />
   </>;
 }

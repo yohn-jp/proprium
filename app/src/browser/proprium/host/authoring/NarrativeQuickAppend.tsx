@@ -21,7 +21,7 @@ export function NarrativeQuickAppend({ paragraphs, disabled = false, append }: N
   const [composing, setComposing] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const [operationId, setOperationId] = useState("");
+  const [operationId, setOperationId] = useState<string>("");
   const context = paragraphs.map(value => value.trim()).filter(Boolean).slice(-3);
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

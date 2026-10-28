@@ -10,7 +10,8 @@ import { BrowserPluginManager, type InstalledPlugin, type ResolvedAssetGroup } f
 import { AuthoringActionDispatcher, type ActionIdempotencyStore, type IdempotencyKey, type IdempotencyClaim,
   type HostOperationContext, type InvocationContext, type TrustedActionPrincipal, type StageLeaseInvocation } from "./actions.js";
 import type { ActionRuntime, VerifiedActionSet } from "./actions.js";
-import { IndexedDbBrokerStore, DerivedCacheBroker, FreshGestureAuthority, PluginPreferencesBroker, ArtifactBroker } from "./brokers.js";
+import { IndexedDbBrokerStore, DerivedCacheBroker, FreshGestureAuthority, PluginPreferencesBroker, ArtifactBroker,
+  type DerivedCacheSelector, type DerivedCachePrefixSelector } from "./brokers.js";
 import { AssetGroupBroker, IndexedDbAssetGroupStore, type AssetCapacityInput, type AssetCapacityMeasurement,
   type AssetArtifactSource, type AssetReadRequest, type AssetCapacityConsent, type AssetAdmissionResult,
   type AssetTransferProgress } from "./assets.js";
@@ -22,7 +23,8 @@ import { BrowserGitWriterWorkspace } from "./writer-browser.js";
 import { ChangeStageStore, type ChangeStageContext, type ChangeStageRead } from "./stages.js";
 import { ProviderRequestBroker, type ProviderBrokerOptions, type ProviderConsentRequest, type ProviderRequestInput } from "./providers.js";
 import { ProviderUsageHistory } from "./provider-usage.js";
-import { AuthoringTaskRegistry, SEMANTIC_PROGRESS_KEY } from "./tasks.js";
+import { AuthoringTaskRegistry, IndexedDbAuthoringTaskStore, SEMANTIC_PROGRESS_KEY,
+  type AuthoringTaskIdentity, type AuthoringTaskUpdate } from "./tasks.js";
 import { assertValue } from "./schema.js";
 import { sourceTextDecoder } from "./source-text.js";
 
@@ -85,9 +87,13 @@ export interface AuthoringServiceBackends {
     Promise<AuthoringSnapshotContext>;
   readonly propose?: (request: ActionRequest, changeset: unknown, context: AuthoringHostOperationContext) => Promise<unknown>;
   readonly stage?: (request: ActionRequest, payload: Record<string, unknown>, context: AuthoringHostOperationContext) => Promise<unknown>;
-  readonly cacheGet?: (pluginId: string, payload: Record<string, unknown>) => Promise<unknown>;
-  readonly cachePut?: (pluginId: string, payload: Record<string, unknown>) => Promise<unknown>;
-  readonly cacheEvict?: (pluginId: string, payload: Record<string, unknown>) => Promise<unknown>;
+  readonly cacheGet?: (pluginId: string, payload: Record<string, unknown>, context: AuthoringHostOperationContext) => Promise<unknown>;
+  readonly cacheGetPrevious?: (pluginId: string, payload: Record<string, unknown>, context: AuthoringHostOperationContext) => Promise<unknown>;
+  readonly cachePut?: (pluginId: string, payload: Record<string, unknown>, context: AuthoringHostOperationContext) => Promise<unknown>;
+  readonly cacheEvict?: (pluginId: string, payload: Record<string, unknown>, context: AuthoringHostOperationContext) => Promise<unknown>;
+  readonly cacheEvictPrevious?: (pluginId: string, payload: Record<string, unknown>, context: AuthoringHostOperationContext) => Promise<unknown>;
+  readonly cacheEvictPrefix?: (pluginId: string, payload: Record<string, unknown>, context: AuthoringHostOperationContext) => Promise<unknown>;
+  readonly cacheEvictPreviousPrefix?: (pluginId: string, payload: Record<string, unknown>, context: AuthoringHostOperationContext) => Promise<unknown>;
   readonly preferenceRead?: (pluginId: string, payload: Record<string, unknown>) => Promise<unknown>;
   readonly preferenceWrite?: (pluginId: string, payload: Record<string, unknown>, gesture: object) => Promise<unknown>;
   readonly artifactCreate?: (pluginId: string, request: ActionRequest, payload: Record<string, unknown>) => Promise<unknown>;
@@ -188,8 +194,12 @@ export interface BrowserAuthoringCapabilityPorts {
   propose(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
   stage(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
   cacheGet(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
+  cacheGetPrevious(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
   cachePut(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
   cacheEvict(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
+  cacheEvictPrevious(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
+  cacheEvictPrefix(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
+  cacheEvictPreviousPrefix(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
   preferencesRead(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
   artifactCreate(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
   artifactAppend(payload: Record<string, unknown>, context: AuthoringHostOperationContext): Promise<unknown>;
@@ -231,14 +241,15 @@ export class BrowserAuthoringService {
   private actionSnapshotQueue: Promise<unknown> = Promise.resolve();
   private disposed = false;
   private retainedActionSnapshot: AuthoringSnapshotContext | null = null;
-  private readonly tasks = new AuthoringTaskRegistry();
+  private readonly tasks = new AuthoringTaskRegistry(new IndexedDbAuthoringTaskStore());
+  private readonly taskRuns = new Map<string, Promise<void>>();
 
   constructor(private readonly options: BrowserAuthoringServiceOptions) {
     this.nextRequestId = options.createRequestId ?? ID;
     this.dispatcher = new AuthoringActionDispatcher({
       installed: pluginId => options.manager.verifiedActionSet(pluginId),
       authority: this.authority,
-      runtime: { invoke: invoke => {
+      runtime: { invoke: async invoke => {
         if(invoke.request.plugin_id==="proprium.narrative"&&[
           "proprium.narrative.reading-marks.create","proprium.narrative.reading-marks.create-ui","proprium.narrative.reading-marks.delete",
         ].includes(invoke.request.action_id)){
@@ -247,14 +258,44 @@ export class BrowserAuthoringService {
         }
         if (invoke.request.plugin_id === "proprium.semantic") {
           const request=invoke.request, epoch=invoke.activation_epoch;
-          if(request.action_id==="proprium.semantic.task.status")return Promise.resolve({request_id:request.request_id,scope:request.scope,snapshot:request.snapshot,ok:true as const,
-            value:{snapshot:request.snapshot,activeTasks:this.tasks.status(request.scope,request.snapshot,epoch)},warnings:[]});
-          if(request.action_id==="proprium.semantic.task.cancel")return Promise.resolve({request_id:request.request_id,scope:request.scope,snapshot:request.snapshot,ok:true as const,
-            value:{snapshot:request.snapshot,taskId:request.input.taskId,cancelled:this.tasks.cancel(request.scope,epoch,String(request.input.taskId))},warnings:[]});
-          if(request.action_id==="proprium.semantic.index.rebuild"){
-            this.tasks.begin(request.request_id,epoch,request.scope,request.snapshot,String(request.input.taskId),()=>this.controllers.get(request.request_id)?.abort());
-            return options.manager.authoringRuntime(request.plugin_id).invoke(invoke).finally(()=>this.tasks.finish(request.request_id));
+          if(request.action_id==="proprium.semantic.task.status")return options.manager.verifiedActionSet(request.plugin_id).then(async set => ({
+            request_id:request.request_id,scope:request.scope,snapshot:request.snapshot,ok:true as const,
+            value:{snapshot:request.snapshot,activeTasks:await this.tasks.status(request.scope,request.snapshot,set?.version,set?.manifest_digest)},warnings:[]}));
+          if(request.action_id==="proprium.semantic.task.cancel")return this.tasks.cancel(request.scope,epoch,String(request.input.taskId)).then(cancelled => ({
+            request_id:request.request_id,scope:request.scope,snapshot:request.snapshot,ok:true as const,
+            value:{snapshot:request.snapshot,taskId:request.input.taskId,cancelled},warnings:[]}));
+          if(request.action_id==="proprium.semantic.index.step"){
+            const allowed=await this.tasks.consumeStepPermit(request.request_id,epoch,request.scope,String(request.input.taskId),
+              Number(request.input.sequence),request.idempotency_key);
+            if(!allowed)throw Object.assign(new Error("Semantic step has no current Host task permit"),{code:"capability_denied"});
+            return options.manager.authoringRuntime(request.plugin_id).invoke(invoke);
           }
+          if(request.action_id==="proprium.semantic.index.rebuild"){
+            const idempotencyKey=invoke.request.idempotency_key;
+            if(invoke.caller!=="ui"||!idempotencyKey)throw Object.assign(new Error("Index jobs require an explicitly approved Host request"),{code:"capability_denied"});
+            const set=await options.manager.verifiedActionSet(request.plugin_id);
+            if(!set?.enabled||!set.activation_epoch)throw Object.assign(new Error("Semantic is not active in this workspace"),{code:"plugin_unavailable"});
+            const controller=this.controllers.get(request.request_id)??new AbortController();
+            const identity:AuthoringTaskIdentity={plugin_id:request.plugin_id,plugin_version:set.version,manifest_digest:set.manifest_digest,
+              config_digest:await sha256Bytes(new TextEncoder().encode(canonicalJson({plugin_id:request.plugin_id,version:set.version,
+                manifest_digest:set.manifest_digest,workspace_id:request.scope.workspace_id,repository_id:request.scope.repository_id,branch:request.scope.branch}))),
+              idempotency_key:idempotencyKey};
+            const begun=await this.tasks.begin(request.request_id,epoch,request.scope,request.snapshot,String(request.input.taskId),identity,controller);
+            if(begun.disposition==="already_active"||begun.disposition==="complete"){
+              const progress=begun.task.progress;
+              return {request_id:request.request_id,scope:request.scope,snapshot:request.snapshot,ok:true as const,
+                value:{snapshot:request.snapshot,taskId:progress.taskId,state:progress.state==="complete"?"complete":"running",
+                  phase:progress.phase,completed:progress.completed,total:progress.total},warnings:[]};
+            }
+            try{
+              const result=await options.manager.authoringRuntime(request.plugin_id).invoke(invoke);
+              if(!result.ok){await this.tasks.finishTask(begun.task.key,"failed",result.error.code);return result;}
+              const task=await this.tasks.setStartResult(request.request_id,epoch,request.scope,result.value);
+              if(task.progress.state==="running")void this.runTask(task.key);
+              return result;
+            }catch(error){await this.tasks.finishTask(begun.task.key,"failed",(error as {code?:string})?.code);throw error;}
+          }
+          if(request.action_id==="proprium.semantic.index.step")throw Object.assign(new Error("Semantic step permission was already consumed"),{code:"capability_denied"});
         }
         if (invoke.request.plugin_id === "proprium.narrative" && invoke.request.action_id === "proprium.narrative.resume.mark.propose") {
           const editor = options.editorState(), position = editor.resume_position, input = invoke.request.input;
@@ -451,7 +492,7 @@ export class BrowserAuthoringService {
 
   /** Release ephemeral reader leases and abort outstanding UI reads. The shared manager is Host-owned. */
   async dispose(): Promise<void> {
-    this.tasks.dispose();
+    await this.tasks.dispose();
     if (this.disposed) return;
     this.disposed = true;
     for (const controller of this.controllers.values()) controller.abort();
@@ -463,6 +504,11 @@ export class BrowserAuthoringService {
     this.leases.clear(); this.foreignLeases.clear(); this.requestLeases.clear();
     await Promise.allSettled(contexts.map(context => context.reader.release(context.lease)));
     await this.options.disposeBackends?.();
+  }
+
+  /** Host-only, coalesced progress notifications; no task payload or plugin code crosses this boundary. */
+  subscribeTaskUpdates(listener: (update: AuthoringTaskUpdate) => void): () => void {
+    return this.tasks.subscribe(listener);
   }
 
   async navigate(event: Event, target: AuthoringNavigationTarget, intent: "open" | "reveal"): Promise<void> {
@@ -561,14 +607,31 @@ export class BrowserAuthoringService {
           if (typeof value?.staging_snapshot !== "string" || value.staging_snapshot.length > 256) throw Object.assign(new Error("Host staging did not return an opaque lease"), { code: "storage_unknown" });
           return value as T;
         }
-      case "workspace.derived.cache.get": return await this.requireBackend(operation, this.options.backends.cacheGet)(pluginId, payload) as T;
+      case "workspace.derived.cache.get":
+        if (!operationContext) throw missing(operation);
+        return await this.requireBackend(operation, this.options.backends.cacheGet)(pluginId, payload, operationContext) as T;
+      case "workspace.derived.cache.get_previous":
+        if (!operationContext) throw missing(operation);
+        return await this.requireBackend(operation, this.options.backends.cacheGetPrevious)(pluginId, payload, operationContext) as T;
+      case "workspace.derived.cache.evict_previous":
+        if (!operationContext) throw missing(operation);
+        return await this.requireBackend(operation, this.options.backends.cacheEvictPrevious)(pluginId, payload, operationContext) as T;
+      case "workspace.derived.cache.evict_prefix":
+        if (!operationContext) throw missing(operation);
+        return await this.requireBackend(operation, this.options.backends.cacheEvictPrefix)(pluginId, payload, operationContext) as T;
+      case "workspace.derived.cache.evict_previous_prefix":
+        if (!operationContext) throw missing(operation);
+        return await this.requireBackend(operation, this.options.backends.cacheEvictPreviousPrefix)(pluginId, payload, operationContext) as T;
       case "workspace.derived.cache.put":
         if(pluginId==="proprium.semantic"&&isRecord(payload.key)&&payload.key.key===SEMANTIC_PROGRESS_KEY){
           if(!operationContext)throw invalid("Task progress needs an active Host invocation");
           return this.tasks.update(operationContext.request.request_id,operationContext.activation_epoch,operationContext.request.scope,payload.value) as T;
         }
-        return await this.requireBackend(operation, this.options.backends.cachePut)(pluginId, payload) as T;
-      case "workspace.derived.cache.evict": return await this.requireBackend(operation, this.options.backends.cacheEvict)(pluginId, payload) as T;
+        if (!operationContext) throw missing(operation);
+        return await this.requireBackend(operation, this.options.backends.cachePut)(pluginId, payload, operationContext) as T;
+      case "workspace.derived.cache.evict":
+        if (!operationContext) throw missing(operation);
+        return await this.requireBackend(operation, this.options.backends.cacheEvict)(pluginId, payload, operationContext) as T;
       case "plugin.preferences.read": return await this.requireBackend(operation, this.options.backends.preferenceRead)(pluginId, payload) as T;
       case "artifact.create": return await this.requireBackend(operation, this.options.backends.artifactCreate)(pluginId, request, payload) as T;
       case "artifact.append": return await this.requireBackend(operation, this.options.backends.artifactAppend)(pluginId, payload) as T;
@@ -617,8 +680,12 @@ export class BrowserAuthoringService {
       propose: routed("workspace.change.propose", (p, c) => route("workspace.change.propose", p, c)),
       stage: routed("workspace.change.stage", (p, c) => route("workspace.change.stage", p, c)),
       cacheGet: routed("workspace.derived.cache.get", (p, c) => route("workspace.derived.cache.get", p, c)),
+      cacheGetPrevious: routed("workspace.derived.cache.get_previous", (p, c) => route("workspace.derived.cache.get_previous", p, c)),
       cachePut: routed("workspace.derived.cache.put", (p, c) => route("workspace.derived.cache.put", p, c)),
       cacheEvict: routed("workspace.derived.cache.evict", (p, c) => route("workspace.derived.cache.evict", p, c)),
+      cacheEvictPrevious: routed("workspace.derived.cache.evict_previous", (p, c) => route("workspace.derived.cache.evict_previous", p, c)),
+      cacheEvictPrefix: routed("workspace.derived.cache.evict_prefix", (p, c) => route("workspace.derived.cache.evict_prefix", p, c)),
+      cacheEvictPreviousPrefix: routed("workspace.derived.cache.evict_previous_prefix", (p, c) => route("workspace.derived.cache.evict_previous_prefix", p, c)),
       preferencesRead: routed("plugin.preferences.read", (p, c) => route("plugin.preferences.read", p, c)),
       artifactCreate: routed("artifact.create", (p, c) => route("artifact.create", p, c)),
       artifactAppend: routed("artifact.append", (p, c) => route("artifact.append", p, c)),
@@ -781,6 +848,53 @@ export class BrowserAuthoringService {
     if (!value || !value.generation) throw Object.assign(new Error("No active authoring workspace"), { code: "repository_not_active" });
     return value;
   }
+  private runTask(taskKey: string): Promise<void> {
+    const running=this.taskRuns.get(taskKey);
+    if(running)return running;
+    const next=this.driveTask(taskKey).catch(async error=>{
+      await this.tasks.finishTask(taskKey,"failed",(error as {code?:string})?.code);
+    }).finally(()=>{if(this.taskRuns.get(taskKey)===next)this.taskRuns.delete(taskKey);});
+    this.taskRuns.set(taskKey,next);
+    return next;
+  }
+
+  /** Drive one bounded plugin action per Host invocation so progress/status/cancel stay responsive. */
+  private async driveTask(taskKey:string):Promise<void>{
+    for(;;){
+      const job=await this.tasks.taskByKey(taskKey);
+      if(!job||job.progress.state!=="running"||job.owner_id!==this.tasks.sessionId)return;
+      const selected=this.requireSelection(),scope=this.scope(selected);
+      if(!sameScope(scope,job.scope)){
+        await this.tasks.finishTask(taskKey,"failed","snapshot_stale");
+        return;
+      }
+      const sequence=job.step_sequence+1;
+      const requestId=this.nextRequestId();
+      const stepKey=await sha256Bytes(new TextEncoder().encode(job.identity.idempotency_key+":step:"+sequence));
+      const controller=new AbortController();
+      await this.tasks.authorizeStep(scope,job.activation_epoch,job.progress.taskId,sequence,requestId,stepKey,controller);
+      this.controllers.set(requestId,controller);
+      const principal:TrustedActionPrincipal={caller:"ui",actor_id:"proprium-host-task-runner",selected_scope:scope,request_id:requestId};
+      let stepError:unknown;
+      try{
+        const result=await this.dispatcher.invoke({plugin_id:"proprium.semantic",action_id:"proprium.semantic.index.step",
+          input:{taskId:job.progress.taskId,sequence},idempotency_key:stepKey},principal);
+        if(!result.ok){stepError=Object.assign(new Error(result.error.message),{code:result.error.code});}
+        else if(!sameJson(result.snapshot,job.snapshot))stepError=Object.assign(new Error("Semantic task snapshot changed"),{code:"snapshot_stale"});
+        else{
+          const task=await this.tasks.setStepResult(requestId,job.activation_epoch,scope,result.value);
+          await this.tasks.finishStep(requestId);
+          if(task.progress.state==="complete")return;
+        }
+      }catch(error){stepError=error;}
+      finally{
+        if(stepError!==undefined)await this.tasks.finishStep(requestId,stepError);
+        await this.releaseRequest(requestId);
+      }
+      if(stepError!==undefined)return;
+    }
+  }
+
   private scope(value: AuthoringWorkspaceSelection): Scope {
     return { workspace_id: value.identity.localWorkspaceId,
       repository_id: value.identity.provider === "local" ? null : value.identity.repositoryId,
@@ -1091,9 +1205,25 @@ export function createBrowserAuthoringService(options: CreateBrowserAuthoringSer
       });
       return result;
     },
-    cacheGet: async (pluginId, payload) => cache.get(pluginId, payload.key as CacheKey),
-    cachePut: async (pluginId, payload) => cache.put(pluginId, payload.key as CacheKey, payload.value),
-    cacheEvict: async (pluginId, payload) => cache.evict(pluginId, payload.key as CacheKey | undefined),
+    cacheGet: async (pluginId, payload, context) => cache.get(pluginId, context.request.scope, context.request.snapshot, payload.key as CacheKey),
+    cacheGetPrevious: async (pluginId, payload, context) => {
+      if (!isRecord(payload.selector)) throw invalid("Previous cache lookup needs a logical key selector");
+      return cache.getPrevious(pluginId, context.request.scope, context.request.snapshot, payload.selector as unknown as DerivedCacheSelector);
+    },
+    cachePut: async (pluginId, payload, context) => cache.put(pluginId, context.request.scope, context.request.snapshot, payload.key as CacheKey, payload.value),
+    cacheEvict: async (pluginId, payload, context) => cache.evict(pluginId, context.request.scope, context.request.snapshot, payload.key as CacheKey | undefined),
+    cacheEvictPrevious: async (pluginId, payload, context) => {
+      if (!isRecord(payload.selector)) throw invalid("Previous cache eviction needs a logical key selector");
+      return cache.evictPrevious(pluginId, context.request.scope, context.request.snapshot, payload.selector as unknown as DerivedCacheSelector);
+    },
+    cacheEvictPrefix: async (pluginId, payload, context) => {
+      if (!isRecord(payload.selector)) throw invalid("Cache prefix eviction needs a logical key selector");
+      return cache.evictPrefix(pluginId, context.request.scope, context.request.snapshot, payload.selector as unknown as DerivedCachePrefixSelector);
+    },
+    cacheEvictPreviousPrefix: async (pluginId, payload, context) => {
+      if (!isRecord(payload.selector)) throw invalid("Previous cache prefix eviction needs a logical key selector");
+      return cache.evictPreviousPrefix(pluginId, context.request.scope, context.request.snapshot, payload.selector as unknown as DerivedCachePrefixSelector);
+    },
     preferenceRead: async (pluginId, payload) => {
       const key=requiredString(payload.key,"key"),version=requiredInteger(payload.schema_version,"schema_version");
       await admitPreferenceSchema(pluginId,key,version);
