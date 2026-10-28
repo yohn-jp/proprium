@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { refreshCanonMetadata } from "./authoring-evidence-metadata.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const traceabilityPath = resolve(root, "docs/canon/traceability.json");
@@ -517,7 +518,19 @@ function audit(actual, required, errors) {
 }
 
 const required = await requirements();
-if (process.argv.includes("--check")) {
+if (process.argv.includes("--refresh-requirements")) {
+  const argument = process.argv[process.argv.indexOf("--refresh-requirements") + 1];
+  const path = argument && !argument.startsWith("--") ? resolve(argument) : outputPath;
+  const { execFileSync } = await import("node:child_process");
+  const revision = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+  const { ledger, changed } = refreshCanonMetadata(JSON.parse(await readFile(path, "utf8")), required, revision);
+  const errors = audit(ledger, required, []);
+  if (errors.length) { console.error(errors.join("\n")); process.exitCode = 1; }
+  else {
+    await writeFile(path, `${JSON.stringify(ledger, null, 2)}\n`);
+    console.log(`Refreshed ${changed} canonical descriptions; historical execution results and superseded descriptions retained.`);
+  }
+} else if (process.argv.includes("--check")) {
   const actual = JSON.parse(await readFile(outputPath, "utf8"));
   const errors = audit(actual, required, []);
   if (errors.length) { console.error(errors.join("\n")); process.exitCode = 1; }

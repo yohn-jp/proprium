@@ -253,7 +253,7 @@ Exercise malformed YAML, duplicate IDs, missing/unsafe manuscript links, missing
 
 <a id="accept-nar-a10"></a>
 
-### <a id="nar-a10"></a>NAR-A10 — Pure mixed-domain compiler (**FROZEN**)
+### <a id="nar-a10"></a>NAR-A10 — Pure mixed-domain compiler
 
 **Lifecycle:** FROZEN as Paired Writing-specific work under the [acceptance freeze policy](../ACCEPTANCE.md#freeze-and-implementation-branches). FROZEN is not PASS. Keep any implementation gaps and verification results visible in the feature audit; this gate does not freeze shared Narrative navigation, metadata editing, Host review, or recovery requirements. Resumption requires an explicit product decision.
 

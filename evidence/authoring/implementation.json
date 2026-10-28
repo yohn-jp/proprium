@@ -611,7 +611,7 @@
           "id": "accept-nar-a10",
           "canon_title": "Pure mixed-domain compiler",
           "canon_reference": "#accept-nar-a10",
-          "canon_requirement": "Pass the exact pinned NarrativeChangeSet v1 fixtures through `changes.compile` and verify strict key/type/bound validation, original-base `read_set` including absent paths, stable source-operation mapping and generic output units. Compile `entity.create` for a volume/chapter, `scene.create` carrying Knowledge fields plus matching `scene.insert`, structural title/manuscript-link/order edits, and a scene update containing Narrative `readingMarks` and Knowledge semantic fields. A mark addition must reference manuscript evidence at the exact original file revision; the compiler verifies the UTF-16 slice and reports that body revision in its read set. The split compilers receive one source operation ID; Paired Writing produces one inseparable final unit after Host staging and shows the intermediate semantic intents with the final byte diff. A missing required prior stage returns `dependency_unavailable`; an expired or wrong-scope stage returns `snapshot_stale`; invalid source operation, unresolved forward reference, stale source revision, path overlap without a valid dependency, cancellation or Worker trap fails visibly with no proposal/worktree mutation. The resulting proposal is submitted once by Paired Writing, reviewed by the Host, and is idempotent across an unknown response.",
+          "canon_requirement": "**Lifecycle:** FROZEN as Paired Writing-specific work under the [acceptance freeze policy](../ACCEPTANCE.md#freeze-and-implementation-branches). FROZEN is not PASS. Keep any implementation gaps and verification results visible in the feature audit; this gate does not freeze shared Narrative navigation, metadata editing, Host review, or recovery requirements. Resumption requires an explicit product decision. Pass the exact pinned NarrativeChangeSet v1 fixtures through `changes.compile` and verify strict key/type/bound validation, original-base `read_set` including absent paths, stable source-operation mapping and generic output units. Compile `entity.create` for a volume/chapter, `scene.create` carrying Knowledge fields plus matching `scene.insert`, structural title/manuscript-link/order edits, and a scene update containing Narrative `readingMarks` and Knowledge semantic fields. A mark addition must reference manuscript evidence at the exact original file revision; the compiler verifies the UTF-16 slice and reports that body revision in its read set. The split compilers receive one source operation ID; Paired Writing produces one inseparable final unit after Host staging and shows the intermediate semantic intents with the final byte diff. A missing required prior stage returns `dependency_unavailable`; an expired or wrong-scope stage returns `snapshot_stale`; invalid source operation, unresolved forward reference, stale source revision, path overlap without a valid dependency, cancellation or Worker trap fails visibly with no proposal/worktree mutation. The resulting proposal is submitted once by Paired Writing, reviewed by the Host, and is idempotent across an unknown response.",
           "feature_ids": [
             "NAR-10"
           ],
@@ -633,7 +633,15 @@
           "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null,
           "lifecycle": "FROZEN",
-          "pre_freeze_status": "NOT_CHECKED"
+          "pre_freeze_status": "NOT_CHECKED",
+          "canon_metadata_history": [
+            {
+              "ledger_revision": "7858ea5fcbc010c78e7126f840c056243ebd69c9",
+              "fields": {
+                "canon_requirement": "Pass the exact pinned NarrativeChangeSet v1 fixtures through `changes.compile` and verify strict key/type/bound validation, original-base `read_set` including absent paths, stable source-operation mapping and generic output units. Compile `entity.create` for a volume/chapter, `scene.create` carrying Knowledge fields plus matching `scene.insert`, structural title/manuscript-link/order edits, and a scene update containing Narrative `readingMarks` and Knowledge semantic fields. A mark addition must reference manuscript evidence at the exact original file revision; the compiler verifies the UTF-16 slice and reports that body revision in its read set. The split compilers receive one source operation ID; Paired Writing produces one inseparable final unit after Host staging and shows the intermediate semantic intents with the final byte diff. A missing required prior stage returns `dependency_unavailable`; an expired or wrong-scope stage returns `snapshot_stale`; invalid source operation, unresolved forward reference, stale source revision, path overlap without a valid dependency, cancellation or Worker trap fails visibly with no proposal/worktree mutation. The resulting proposal is submitted once by Paired Writing, reviewed by the Host, and is idempotent across an unknown response."
+              }
+            }
+          ]
         },
         {
           "id": "accept-nar-a11",
