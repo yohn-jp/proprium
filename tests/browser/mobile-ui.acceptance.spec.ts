@@ -21,14 +21,14 @@ test("Mobile WebKit library keeps GitHub access visible without a neutral status
   await expect(libraryHeading).toHaveClass(/\bsr-only\b/u);
   await expect(page.locator(".mobile-shell-status")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "設定を開く" }).click();
   const connect = page.getByRole("button", { name: "GitHubに接続", exact: true });
   await expect(connect).toBeVisible();
   await connect.scrollIntoViewIfNeeded();
   await expect(connect).toBeInViewport();
 
-  await page.getByText("GitHub・Gateway接続", { exact: true }).click();
-  await page.getByLabel("Gateway URL", { exact: true }).fill("");
+  const gatewaySettings = page.locator("details.gateway-settings");
+  if (await gatewaySettings.getAttribute("open") === null) await gatewaySettings.locator("summary").click();
+  await page.getByLabel("Proprium Gateway URL", { exact: true }).fill("");
   await connect.click();
 
   const error = page.locator(".github-authorization-error");
