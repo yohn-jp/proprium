@@ -16,7 +16,9 @@ test("recovered shells retain CodeMirror, typography, reading, theme and unsaved
   await page.getByRole("button", { name: "読書モード", exact: true }).click();
   await expect(page.getByRole("document", { name: "縦書き読書モード" })).toBeVisible();
   await page.getByRole("button", { name: "編集に戻る", exact: true }).click();
-  await page.getByLabel("外観", { exact: true }).selectOption("paper");
+  if (testInfo.project.name === "mobile-webkit") await page.getByRole("button", { name: "設定を開く" }).click();
+  await page.locator("#settings-theme").selectOption("paper");
+  if (testInfo.project.name === "mobile-webkit") await showPanel(page, "editor");
   await expect(page.locator("html")).toHaveAttribute("data-zp-theme", "paper");
   await showPanel(page, "inspector");
   await expectEditorText(page, "未保存の原稿。|漢字《かんじ》\n");
