@@ -4,7 +4,7 @@
 
 ## Classification and ownership
 
-`RECOVERY` identifies actual Scriptorium behavior or narrowly verified Loom UI/API behavior. `DESIGN_TARGET` identifies a new Proprium boundary or a source design that was not implemented. Mixed rows preserve historical intent while explicitly naming the new boundary. Planned persisted character beliefs and the unified Story Lens are not fabricated as shipped. The exact scope/default/error contract in each canon tells implementers what is enabled and what is explicitly unavailable in the declared version. Runtime PASS/FAIL/BLOCKED/NOT_CHECKED belongs in release evidence, separate from these classifications.
+`RECOVERY` identifies actual Scriptorium behavior or narrowly verified Loom UI/API behavior. `DESIGN_TARGET` identifies a new Proprium boundary or a source design that was not implemented. Mixed rows preserve historical intent while explicitly naming the new boundary. Planned persisted character beliefs and the unified Story Lens are not fabricated as shipped. The exact scope/default/error contract in each canon tells implementers what is enabled and what is explicitly unavailable in the declared version. Runtime PASS/FAIL/BLOCKED/NOT_CHECKED belongs in release evidence, separate from these classifications. `FROZEN` records a product lifecycle decision, not implementation status or success; the underlying pre-freeze outcome remains in the evidence ledger.
 
 Scriptorium is primary: actual registered Action, domain implementation, browser contribution and test are all required provenance. Loom is read only for demonstrated missing/reduced/ambiguous operations. Do not copy private manuscripts, credentials, third-party implementations or model weights. Atlas stays excluded.
 
@@ -12,7 +12,7 @@ Scriptorium is primary: actual registered Action, domain implementation, browser
 | --- | --- | --- |
 | Story | Narrative + Knowledge | Hierarchy/reading continuity versus Bible/semantic facts; one scene/file identity |
 | Search + NLP | Research | One lexical/terms/tokenizer workflow; no required embedding model |
-| Assistant + Story ChangeSet | Paired Writing | Scoped optional generation and context; owner compilers, one Host review |
+| Assistant + Story ChangeSet | Paired Writing — FROZEN | Scoped optional generation and context; owner compilers, one Host review; preserve implementation and author data |
 | Diagnostics | Diagnostics; character-style routines in Speaker | One deterministic report/feedback owner; one character-style engine |
 | Speaker | Speaker | Attribution/corrections/voice/evaluation are one isolated lifecycle |
 | Semantic | Semantic | Heavy optional retrieval; lexical ranking stays Research, dismissals stay Diagnostics |
@@ -28,7 +28,9 @@ Scriptorium is primary: actual registered Action, domain implementation, browser
 
 ## Complete feature index
 
-Every row links its single canonical feature contract and explicit observable acceptance cases. Source functions, actual tests (including absent coverage), data schema and UI operations live in that feature contract. Cross-product handoff rows do not create duplicate owners.
+Every row links its single canonical feature contract and explicit observable acceptance cases. Source functions, actual tests (including absent coverage), data schema and UI operations live in that feature contract. Lifecycle labels record product scope, not implementation success. Cross-product handoff rows do not create duplicate owners.
+
+All Paired Writing feature rows `PW-01`–`PW-21`, their plugin gates `accept-pw-01`–`accept-pw-11` and `accept-pw-21`, and the Paired-only Narrative and Diagnostics rows/gates `NAR-10` / `NAR-A10` and `DIA-10` / `DIA-A12` carry lifecycle `FROZEN`. Shared Host, Narrative, Knowledge, Diagnostics, Git, security, distribution and MCP acceptance remains active in its owning rows.
 
 | Feature / Canon | Acceptance |
 | --- | --- |
@@ -41,7 +43,7 @@ Every row links its single canonical feature contract and explicit observable ac
 | [NAR-07](plugins/NARRATIVE.md#feature-nar-07) | [NAR-A07](plugins/NARRATIVE.md#accept-nar-a07) |
 | [NAR-08](plugins/NARRATIVE.md#feature-nar-08) | [NAR-A08](plugins/NARRATIVE.md#accept-nar-a08) |
 | [NAR-09](plugins/NARRATIVE.md#feature-nar-09) | [NAR-A09](plugins/NARRATIVE.md#accept-nar-a09) |
-| [NAR-10](plugins/NARRATIVE.md#feature-nar-10) | [NAR-A10](plugins/NARRATIVE.md#accept-nar-a10) |
+| [NAR-10](plugins/NARRATIVE.md#feature-nar-10) — **FROZEN** | [NAR-A10](plugins/NARRATIVE.md#accept-nar-a10) — **FROZEN** |
 | [NAR-11](plugins/NARRATIVE.md#feature-nar-11) | [NAR-A11](plugins/NARRATIVE.md#accept-nar-a11) |
 | [NAR-12](plugins/NARRATIVE.md#feature-nar-12) | [NAR-A12](plugins/NARRATIVE.md#accept-nar-a12) |
 | [KNO-01](plugins/KNOWLEDGE.md#feature-kno-01) | [KNO-A01](plugins/KNOWLEDGE.md#accept-kno-a01), [KNO-A02](plugins/KNOWLEDGE.md#accept-kno-a02) |
@@ -82,27 +84,27 @@ Every row links its single canonical feature contract and explicit observable ac
 | [RES-011](plugins/RESEARCH.md#feature-res-011) | [RES-A011](plugins/RESEARCH.md#accept-res-a011) |
 | [RES-012](plugins/RESEARCH.md#feature-res-012) | [RES-A012](plugins/RESEARCH.md#accept-res-a012) |
 | [RES-013](plugins/RESEARCH.md#feature-res-013) | [RES-A013](plugins/RESEARCH.md#accept-res-a013) |
-| [PW-01](plugins/PAIRED-WRITING.md#feature-pw-01) | [PW-01](plugins/PAIRED-WRITING.md#accept-pw-01), [PW-11](plugins/PAIRED-WRITING.md#accept-pw-11) |
-| [PW-02](plugins/PAIRED-WRITING.md#feature-pw-02) | [PW-02](plugins/PAIRED-WRITING.md#accept-pw-02) |
-| [PW-03](plugins/PAIRED-WRITING.md#feature-pw-03) | [PW-03](plugins/PAIRED-WRITING.md#accept-pw-03) |
-| [PW-04](plugins/PAIRED-WRITING.md#feature-pw-04) | [PW-04](plugins/PAIRED-WRITING.md#accept-pw-04) |
-| [PW-05](plugins/PAIRED-WRITING.md#feature-pw-05) | [PW-05](plugins/PAIRED-WRITING.md#accept-pw-05) |
-| [PW-06](plugins/PAIRED-WRITING.md#feature-pw-06) | [PW-06](plugins/PAIRED-WRITING.md#accept-pw-06) |
-| [PW-07](plugins/PAIRED-WRITING.md#feature-pw-07) | [PW-07](plugins/PAIRED-WRITING.md#accept-pw-07) |
-| [PW-08](plugins/PAIRED-WRITING.md#feature-pw-08) | [PW-07](plugins/PAIRED-WRITING.md#accept-pw-07) |
-| [PW-09](plugins/PAIRED-WRITING.md#feature-pw-09) | [PW-07](plugins/PAIRED-WRITING.md#accept-pw-07) |
-| [PW-10](plugins/PAIRED-WRITING.md#feature-pw-10) | [PW-07](plugins/PAIRED-WRITING.md#accept-pw-07) |
-| [PW-11](plugins/PAIRED-WRITING.md#feature-pw-11) | [PW-07](plugins/PAIRED-WRITING.md#accept-pw-07) |
-| [PW-12](plugins/PAIRED-WRITING.md#feature-pw-12) | [PW-02](plugins/PAIRED-WRITING.md#accept-pw-02), [PW-03](plugins/PAIRED-WRITING.md#accept-pw-03), [PW-04](plugins/PAIRED-WRITING.md#accept-pw-04), [PW-06](plugins/PAIRED-WRITING.md#accept-pw-06), [PW-07](plugins/PAIRED-WRITING.md#accept-pw-07) |
-| [PW-13](plugins/PAIRED-WRITING.md#feature-pw-13) | [PW-08](plugins/PAIRED-WRITING.md#accept-pw-08) |
-| [PW-14](plugins/PAIRED-WRITING.md#feature-pw-14) | [PW-09](plugins/PAIRED-WRITING.md#accept-pw-09) |
-| [PW-15](plugins/PAIRED-WRITING.md#feature-pw-15) | [PW-10](plugins/PAIRED-WRITING.md#accept-pw-10) |
-| [PW-16](plugins/PAIRED-WRITING.md#feature-pw-16) | [PW-07](plugins/PAIRED-WRITING.md#accept-pw-07), [PW-10](plugins/PAIRED-WRITING.md#accept-pw-10) |
-| [PW-17](plugins/PAIRED-WRITING.md#feature-pw-17) | [PW-01](plugins/PAIRED-WRITING.md#accept-pw-01), [PW-11](plugins/PAIRED-WRITING.md#accept-pw-11) |
-| [PW-18](plugins/PAIRED-WRITING.md#feature-pw-18) | [PW-02](plugins/PAIRED-WRITING.md#accept-pw-02), [PW-08](plugins/PAIRED-WRITING.md#accept-pw-08) |
-| [PW-19](plugins/PAIRED-WRITING.md#feature-pw-19) | [PW-06](plugins/PAIRED-WRITING.md#accept-pw-06) |
-| [PW-20](plugins/PAIRED-WRITING.md#feature-pw-20) | [PW-08](plugins/PAIRED-WRITING.md#accept-pw-08), [PW-10](plugins/PAIRED-WRITING.md#accept-pw-10) |
-| [PW-21](plugins/PAIRED-WRITING.md#feature-pw-21) | [PW-10](plugins/PAIRED-WRITING.md#accept-pw-10), [PW-21](plugins/PAIRED-WRITING.md#accept-pw-21) |
+| [PW-01](plugins/PAIRED-WRITING.md#feature-pw-01) — **FROZEN** | [PW-01](plugins/PAIRED-WRITING.md#accept-pw-01), [PW-11](plugins/PAIRED-WRITING.md#accept-pw-11) — **FROZEN** |
+| [PW-02](plugins/PAIRED-WRITING.md#feature-pw-02) — **FROZEN** | [PW-02](plugins/PAIRED-WRITING.md#accept-pw-02) |
+| [PW-03](plugins/PAIRED-WRITING.md#feature-pw-03) — **FROZEN** | [PW-03](plugins/PAIRED-WRITING.md#accept-pw-03) |
+| [PW-04](plugins/PAIRED-WRITING.md#feature-pw-04) — **FROZEN** | [PW-04](plugins/PAIRED-WRITING.md#accept-pw-04) |
+| [PW-05](plugins/PAIRED-WRITING.md#feature-pw-05) — **FROZEN** | [PW-05](plugins/PAIRED-WRITING.md#accept-pw-05) |
+| [PW-06](plugins/PAIRED-WRITING.md#feature-pw-06) — **FROZEN** | [PW-06](plugins/PAIRED-WRITING.md#accept-pw-06) |
+| [PW-07](plugins/PAIRED-WRITING.md#feature-pw-07) — **FROZEN** | [PW-07](plugins/PAIRED-WRITING.md#accept-pw-07) |
+| [PW-08](plugins/PAIRED-WRITING.md#feature-pw-08) — **FROZEN** | [PW-07](plugins/PAIRED-WRITING.md#accept-pw-07) |
+| [PW-09](plugins/PAIRED-WRITING.md#feature-pw-09) — **FROZEN** | [PW-07](plugins/PAIRED-WRITING.md#accept-pw-07) |
+| [PW-10](plugins/PAIRED-WRITING.md#feature-pw-10) — **FROZEN** | [PW-07](plugins/PAIRED-WRITING.md#accept-pw-07) |
+| [PW-11](plugins/PAIRED-WRITING.md#feature-pw-11) — **FROZEN** | [PW-07](plugins/PAIRED-WRITING.md#accept-pw-07) |
+| [PW-12](plugins/PAIRED-WRITING.md#feature-pw-12) — **FROZEN** | [PW-02](plugins/PAIRED-WRITING.md#accept-pw-02), [PW-03](plugins/PAIRED-WRITING.md#accept-pw-03), [PW-04](plugins/PAIRED-WRITING.md#accept-pw-04), [PW-06](plugins/PAIRED-WRITING.md#accept-pw-06), [PW-07](plugins/PAIRED-WRITING.md#accept-pw-07) |
+| [PW-13](plugins/PAIRED-WRITING.md#feature-pw-13) — **FROZEN** | [PW-08](plugins/PAIRED-WRITING.md#accept-pw-08) |
+| [PW-14](plugins/PAIRED-WRITING.md#feature-pw-14) — **FROZEN** | [PW-09](plugins/PAIRED-WRITING.md#accept-pw-09) |
+| [PW-15](plugins/PAIRED-WRITING.md#feature-pw-15) — **FROZEN** | [PW-10](plugins/PAIRED-WRITING.md#accept-pw-10) |
+| [PW-16](plugins/PAIRED-WRITING.md#feature-pw-16) — **FROZEN** | [PW-07](plugins/PAIRED-WRITING.md#accept-pw-07), [PW-10](plugins/PAIRED-WRITING.md#accept-pw-10) |
+| [PW-17](plugins/PAIRED-WRITING.md#feature-pw-17) — **FROZEN** | [PW-01](plugins/PAIRED-WRITING.md#accept-pw-01), [PW-11](plugins/PAIRED-WRITING.md#accept-pw-11) |
+| [PW-18](plugins/PAIRED-WRITING.md#feature-pw-18) — **FROZEN** | [PW-02](plugins/PAIRED-WRITING.md#accept-pw-02), [PW-08](plugins/PAIRED-WRITING.md#accept-pw-08) |
+| [PW-19](plugins/PAIRED-WRITING.md#feature-pw-19) — **FROZEN** | [PW-06](plugins/PAIRED-WRITING.md#accept-pw-06) |
+| [PW-20](plugins/PAIRED-WRITING.md#feature-pw-20) — **FROZEN** | [PW-08](plugins/PAIRED-WRITING.md#accept-pw-08), [PW-10](plugins/PAIRED-WRITING.md#accept-pw-10) |
+| [PW-21](plugins/PAIRED-WRITING.md#feature-pw-21) — **FROZEN** | [PW-10](plugins/PAIRED-WRITING.md#accept-pw-10), [PW-21](plugins/PAIRED-WRITING.md#accept-pw-21) |
 | [DIA-01](plugins/DIAGNOSTICS.md#feature-dia-01) | [DIA-A1](plugins/DIAGNOSTICS.md#accept-dia-a1), [DIA-A2](plugins/DIAGNOSTICS.md#accept-dia-a2), [DIA-A9](plugins/DIAGNOSTICS.md#accept-dia-a9), [DIA-A14](plugins/DIAGNOSTICS.md#accept-dia-a14), [DIA-A15](plugins/DIAGNOSTICS.md#accept-dia-a15) |
 | [DIA-02](plugins/DIAGNOSTICS.md#feature-dia-02) | [DIA-A3](plugins/DIAGNOSTICS.md#accept-dia-a3) |
 | [DIA-03](plugins/DIAGNOSTICS.md#feature-dia-03) | [DIA-A4](plugins/DIAGNOSTICS.md#accept-dia-a4) |
@@ -112,7 +114,7 @@ Every row links its single canonical feature contract and explicit observable ac
 | [DIA-07](plugins/DIAGNOSTICS.md#feature-dia-07) | [DIA-A8](plugins/DIAGNOSTICS.md#accept-dia-a8) |
 | [DIA-08](plugins/DIAGNOSTICS.md#feature-dia-08) | [DIA-A9](plugins/DIAGNOSTICS.md#accept-dia-a9) |
 | [DIA-09](plugins/DIAGNOSTICS.md#feature-dia-09) | [DIA-A10](plugins/DIAGNOSTICS.md#accept-dia-a10), [DIA-A11](plugins/DIAGNOSTICS.md#accept-dia-a11) |
-| [DIA-10](plugins/DIAGNOSTICS.md#feature-dia-10) | [DIA-A12](plugins/DIAGNOSTICS.md#accept-dia-a12) |
+| [DIA-10](plugins/DIAGNOSTICS.md#feature-dia-10) — **FROZEN** | [DIA-A12](plugins/DIAGNOSTICS.md#accept-dia-a12) — **FROZEN** |
 | [DIA-11](plugins/DIAGNOSTICS.md#feature-dia-11) | [DIA-A13](plugins/DIAGNOSTICS.md#accept-dia-a13) |
 | [DIA-12](plugins/DIAGNOSTICS.md#feature-dia-12) | [DIA-A10](plugins/DIAGNOSTICS.md#accept-dia-a10), [DIA-A11](plugins/DIAGNOSTICS.md#accept-dia-a11) |
 | [DIA-13](plugins/DIAGNOSTICS.md#feature-dia-13) | [DIA-A9](plugins/DIAGNOSTICS.md#accept-dia-a9) |

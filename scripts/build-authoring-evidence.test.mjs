@@ -12,6 +12,7 @@ test("evidence ledger covers every current canon feature and source contribution
   const checked = spawnSync(process.execPath, [command, "--check"], { cwd: root, encoding: "utf8" });
   assert.equal(checked.status, 0, checked.stderr || checked.stdout);
   const ledger = JSON.parse(await readFile(ledgerPath, "utf8"));
+  assert.equal(ledger.schema, "proprium.authoring.evidence/v2");
   assert.equal(ledger.matrix.length, 14);
   assert.ok(ledger.matrix.every(item => item.canon_title && item.required_proof));
   assert.equal(ledger.plugins.reduce((total, plugin) => total + plugin.features.length, 0), 114);
@@ -25,7 +26,26 @@ test("evidence ledger covers every current canon feature and source contribution
     assert.deepEqual(feature.source_revisions, [...new Set(feature.source_anchors.map(anchor => anchor.source_revision))].sort());
     assert.ok(feature.source_anchors.every(anchor => /^[a-f0-9]{40}$/u.test(anchor.source_revision)));
   }
-  assert.ok(ledger.matrix.every(item => item.status === "NOT_CHECKED"));
+  assert.ok(ledger.matrix.every(item => item.lifecycle === "ACTIVE" ? item.status !== "FROZEN" : item.status === "FROZEN"));
+  const paired = ledger.plugins.find(plugin => plugin.plugin_id === "proprium.paired-writing");
+  assert.equal(paired.lifecycle, "FROZEN");
+  assert.equal(paired.features.length, 21);
+  assert.ok(paired.features.every(item => item.lifecycle === "FROZEN" && item.status === "FROZEN" &&
+    ["FAIL", "BLOCKED", "NOT_CHECKED", "PASS"].includes(item.pre_freeze_status)));
+  assert.ok(paired.acceptance_cases.every(item => item.lifecycle === "FROZEN" && item.status === "FROZEN" &&
+    ["FAIL", "BLOCKED", "NOT_CHECKED", "PASS"].includes(item.pre_freeze_status)));
+  const pairedOnlyNarrative = ledger.plugins.find(plugin => plugin.plugin_id === "proprium.narrative");
+  assert.equal(pairedOnlyNarrative.features.find(item => item.feature_id === "NAR-10").status, "FROZEN");
+  assert.equal(pairedOnlyNarrative.acceptance_cases.find(item => item.id === "accept-nar-a10").status, "FROZEN");
+  const pairedOnlyDiagnostics = ledger.plugins.find(plugin => plugin.plugin_id === "proprium.diagnostics");
+  assert.equal(pairedOnlyDiagnostics.features.find(item => item.feature_id === "DIA-10").status, "FROZEN");
+  assert.equal(pairedOnlyDiagnostics.acceptance_cases.find(item => item.id === "accept-dia-a12").status, "FROZEN");
+  assert.notEqual(pairedOnlyDiagnostics.features.find(item => item.feature_id === "DIA-11").status, "FROZEN");
+  assert.notEqual(ledger.plugins.find(plugin => plugin.plugin_id === "proprium.knowledge")
+    .features.find(item => item.feature_id === "KNO-24").status, "FROZEN");
+  assert.equal(ledger.matrix.find(item => item.id === "R09").status, "FROZEN");
+  assert.equal(ledger.matrix.find(item => item.id === "R09").pre_freeze_status, "FAIL");
+  assert.ok(ledger.matrix.filter(item => item.id !== "R09").every(item => item.lifecycle === "ACTIVE"));
   assert.ok(ledger.plugins.flatMap(plugin => plugin.acceptance_cases).every(item =>
     item.canon_reference?.startsWith("#") && item.canon_requirement?.length > 40));
   const pairedProviderGate = ledger.plugins.find(plugin => plugin.plugin_id === "proprium.paired-writing")
@@ -70,6 +90,36 @@ test("evidence validator refuses PASS without signed artifact identity and archi
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
+test("evidence validator rejects FROZEN status on an active feature", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "proprium-authoring-evidence-"));
+  const path = resolve(directory, "ledger.json");
+  try {
+    const ledger = JSON.parse(await readFile(ledgerPath, "utf8"));
+    const feature = ledger.plugins.find(plugin => plugin.plugin_id === "proprium.narrative").features[0];
+    feature.status = "FROZEN";
+    feature.pre_freeze_status = "FAIL";
+    await writeFile(path, JSON.stringify(ledger));
+    const checked = spawnSync(process.execPath, [command, "--validate", path], { cwd: root, encoding: "utf8" });
+    assert.notEqual(checked.status, 0);
+    assert.match(checked.stderr, /implementation status must match its canonical lifecycle/u);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("evidence validator rejects FROZEN as a source-parity result", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "proprium-authoring-evidence-"));
+  const path = resolve(directory, "ledger.json");
+  try {
+    const ledger = JSON.parse(await readFile(ledgerPath, "utf8"));
+    const sourceAction = ledger.recovered_source.source_actions[0];
+    sourceAction.status = "FROZEN";
+    sourceAction.pre_freeze_status = "NOT_CHECKED";
+    await writeFile(path, JSON.stringify(ledger));
+    const checked = spawnSync(process.execPath, [command, "--validate", path], { cwd: root, encoding: "utf8" });
+    assert.notEqual(checked.status, 0);
+    assert.match(checked.stderr, /source parity evidence cannot be FROZEN/u);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 test("evidence validator rejects altered immutable source anchors", async () => {
   const directory = await mkdtemp(resolve(tmpdir(), "proprium-authoring-evidence-"));
   const path = resolve(directory, "ledger.json");
@@ -101,7 +151,7 @@ test("evidence validator rejects R14 without same-run migration and source parit
     await writeFile(path, JSON.stringify(ledger));
     const checked = spawnSync(process.execPath, [command, "--validate", path], { cwd: root, encoding: "utf8" });
     assert.notEqual(checked.status, 0);
-    assert.match(checked.stderr, /R14: source parity source_files\//u);
+    assert.match(checked.stderr, /R14: source_files\/modules\/assistant\/src\/actions\.ts has no source-parity proof/u);
     assert.match(checked.stderr, /R14: proprium\.narrative\/NAR-01 has no source-parity proof/u);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
