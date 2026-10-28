@@ -8,8 +8,12 @@ import { join, resolve } from "node:path";
 export default async function setup(): Promise<() => void> {
   const retained = process.env.PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR;
   if (retained) {
-    const signer = createPrivateKey(process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY!);
-    const publicKey = createPublicKey(signer).export({ format: "der", type: "spki" }).subarray(-32).toString("base64");
+    // When the signed registry crosses a CI job boundary, only the public
+    // verification root is transferred. Never upload or reconstruct its
+    // private signing key in an acceptance job.
+    const publicKey = process.env.PROPRIUM_SIGNED_AUTHORING_REGISTRY_PUBLIC_KEY ??
+      createPublicKey(createPrivateKey(process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY!))
+        .export({ format: "der", type: "spki" }).subarray(-32).toString("base64");
     const source = resolve(process.env.PROPRIUM_E2E_SOURCE ?? ".");
     execFileSync(process.execPath, [join(source, "scripts/verify-plugin-registry.mjs"), "authoring"], {
       cwd: source, stdio: "inherit", env: { ...process.env,
