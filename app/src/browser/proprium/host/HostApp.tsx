@@ -1156,7 +1156,7 @@ export function HostApp(): ReactElement {
             <button type="button" className="primary-button commit-button" disabled={busy || !status.entries.length || !!currentFile?.dirty || !commitReviewed} onClick={() => void commitLocal()}>ローカルGitにコミット</button>
             <p className="local-commit-note">コミットはこの端末の履歴に記録されます。GitHubには公開されません。</p>
           </section>
-          <section className="mobile-change-publish" aria-label="GitHubへの同期と公開">
+          {mode === "mobile" && <section className="mobile-change-publish" aria-label="GitHubへの同期と公開">
             <h2>GitHubへの公開</h2>
             {syncClient ? <>
               <p>ローカルGitへのコミットとGitHubへの公開は別の操作です。</p>
@@ -1166,7 +1166,7 @@ export function HostApp(): ReactElement {
                 <button type="button" className="publish-button" onClick={() => void publishRemote()} disabled={busy || status.localState !== "local-committed"}>GitHubへ公開</button>
               </div>
             </> : <p>GitHub未接続です。ローカルの変更確認とコミットは引き続き利用できます。接続は設定から行えます。</p>}
-          </section>
+          </section>}
 </div>;
   const historyPanel = <div className="host-controls">{git && <GitHistoryPanel key={workspaceGeneration} git={git} history={history} busy={busy} canRestore={!currentFile?.dirty}
     onRefresh={() => { void git.log(40).then(setHistory).catch(error => setMessage({ tone: "error", text: errorMessage(error) })); }}
