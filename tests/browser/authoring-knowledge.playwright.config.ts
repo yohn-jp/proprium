@@ -13,7 +13,7 @@ const { webServer: _unused, ...shared } = base;
 export default defineConfig({ ...shared,
   testMatch: "authoring-knowledge.acceptance.ts", testIgnore: [], timeout: 180_000,
   globalSetup: process.env.PROPRIUM_KNOWLEDGE_REGISTRY ? undefined : "./authoring-official.setup.ts",
-  outputDir: process.env.PROPRIUM_E2E_OUTPUT_DIR ?? "/tmp/proprium-knowledge-browser-results",
+  outputDir: process.env.PROPRIUM_E2E_OUTPUT_DIR ?? "test-results/authoring-knowledge",
   projects: shared.projects,
   use: { ...shared.use, baseURL: `${origin}/`, actionTimeout: 15_000 },
   webServer: [{ command: `node app/node_modules/vite/bin/vite.js app --config app/vite.proprium.config.ts --host 127.0.0.1 --port ${port} --strictPort`, cwd: process.env.PROPRIUM_E2E_SOURCE ?? process.cwd(), url: `${origin}/`, reuseExistingServer: false, timeout: 120_000 }],

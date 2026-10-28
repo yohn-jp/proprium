@@ -6,10 +6,14 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const registryDirectory = process.env.PROPRIUM_AUTHORING_REGISTRY_DIR ?? process.env.PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR;
-const registryPublicKey = process.env.PROPRIUM_AUTHORING_REGISTRY_PUBLIC_KEY ?? process.env.PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY ??
+// An explicit diagnostic-version trust root takes priority over the original
+// signed-build public key. Both are independently signature-verified.
+const registryPublicKey = process.env.PROPRIUM_AUTHORING_REGISTRY_PUBLIC_KEY ??
   (process.env.PROPRIUM_AUTHORING_REGISTRY_PUBLIC_KEY_FILE
     ? (await readFile(process.env.PROPRIUM_AUTHORING_REGISTRY_PUBLIC_KEY_FILE, "utf8")).trim()
-    : process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_KEY_FILE
+    : undefined) ??
+  process.env.PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY ??
+  (process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_KEY_FILE
     ? createPublicKey(await readFile(process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_KEY_FILE, "utf8")).export({ format: "der", type: "spki" }).subarray(-32).toString("base64") : undefined);
 if (!registryDirectory) throw new Error("Set PROPRIUM_AUTHORING_REGISTRY_DIR to the actual independently built signed authoring registry directory.");
 if (!registryPublicKey) throw new Error("Set PROPRIUM_AUTHORING_REGISTRY_PUBLIC_KEY to the separately pinned Ed25519 public key; no test key will be generated.");

@@ -23,9 +23,10 @@ test("a local manuscript can be saved, renamed, reviewed, committed and inspecte
   await page.locator(".file-rename-panel > summary").click();
   await page.getByLabel("新しい名前・保存先", { exact: true }).fill("chapters/序章.md");
   await page.getByRole("button", { name: "変更する", exact: true }).click();
-  // A rename persists through the asynchronous local Git workspace. Wait for
-  // the resulting file-list projection before changing mobile panels again.
-  await expect(files.getByRole("button", { name: "chapters/序章.md", exact: true })).toBeVisible();
+  // Renaming can activate the editor tab on mobile. Verify the committed
+  // destination through the active editor first, then explicitly return to
+  // the outline before asserting its (otherwise unmounted) file list.
+  await expect(page.getByRole("region", { name: "原稿エディター" }).locator("strong")).toHaveText("chapters/序章.md");
   await showPanel(page, "outline");
   await expect(files.getByRole("button", { name: "chapters/序章.md", exact: true })).toBeVisible();
   await expect(files.getByRole("button", { name: "序章.md", exact: true })).toHaveCount(0);
