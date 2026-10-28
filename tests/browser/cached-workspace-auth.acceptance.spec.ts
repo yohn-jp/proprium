@@ -73,7 +73,8 @@ test("cached Workspace signs in in place, preserves dirty text, and fills Home r
   await page.screenshot({ path: testInfo.outputPath("cached-workspace-github-auth.png"), fullPage: true });
   await expect(dialog).toBeHidden();
   await expect(page.locator(".host-message[role='status']")).toContainText(`Connected this Workspace to GitHub as ${staticFixtureLogin}`);
-  await expect(page.getByLabel("Connected to GitHub", { exact: true })).toBeVisible();
+  if (testInfo.project.name === "mobile-webkit") await expect(page.getByLabel("GitHub account")).toHaveText(staticFixtureLogin);
+  else await expect(page.getByLabel("Connected to GitHub", { exact: true })).toBeVisible();
   if (await page.locator(".mobile-shell").count()) await showPanel(page, "inspector");
   await expect(page.getByRole("button", { name: "更新を確認", exact: true })).toBeEnabled();
   await expectEditorText(page, dirtyEditorText);

@@ -86,6 +86,7 @@ test("Mobile WebKit keeps workspace panels, routes Settings separately, and revi
   await expect(fileActions).not.toBeVisible();
 
   await chooseFile(page, "chapter.md");
+  await expect(page.locator(".mobile-shell-workspace-view")).toHaveAttribute("data-active-view", "writing");
   await expect(page.getByRole("textbox", { name: "原稿 Markdown" })).toBeVisible();
   const manuscriptBounds = await page.locator(".cm-editor").boundingBox();
   expect(manuscriptBounds).not.toBeNull();

@@ -290,13 +290,24 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
   }, [navigateRoute]);
 
   useEffect(() => {
-    if (!requestedPanel?.id || !requestedPanel.sequence) return;
-    const requestKey = `${requestedPanel.id}:${requestedPanel.sequence}`;
+    if (!hasWorkspace || !requestedPanel?.id || !requestedPanel.sequence) return;
+    const requestKey = `${workspaceScope}:${requestedPanel.id}:${requestedPanel.sequence}`;
     if (forwardedPanelRequestRef.current === requestKey) return;
     forwardedPanelRequestRef.current = requestKey;
     setReferenceSheet(null);
-    queueWorkspacePanel(requestedPanel.id);
-  }, [requestedPanel?.id, requestedPanel?.sequence, queueWorkspacePanel]);
+    // Host-originated panel requests must update the mobile route as well as
+    // the retained Workspace panel. Otherwise the header says "作品" while
+    // the editor is still shown after a workspace/file is reopened.
+    const destination = PRIMARY_VIEWS.find(view => WORKSPACE_PANEL_FOR_VIEW[view.id as Exclude<MobileView, "settings">] === requestedPanel.id);
+    if (destination && destination.id !== activeView) {
+      const targetRoute = withViewInCurrentUrl(destination.id);
+      queueWorkspacePanel(requestedPanel.id, () => navigateRoute(targetRoute, {
+        state: { ...historyState(location.state), [MOBILE_PREVIOUS_VIEW_STATE]: activeView },
+      }), targetRoute);
+    } else {
+      queueWorkspacePanel(requestedPanel.id);
+    }
+  }, [hasWorkspace, workspaceScope, requestedPanel?.id, requestedPanel?.sequence, activeView, location.state, navigateRoute, queueWorkspacePanel]);
 
   const navigate = useCallback(async (view: MobileView) => {
     const sameRoute = view === activeView;

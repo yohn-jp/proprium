@@ -343,7 +343,7 @@ test("Host Plugin panel previews, installs, runs, stops, updates and rolls back 
 
   const pluginV2 = page.locator(".installed-plugins > li").filter({ hasText: "fixture.compute-sum" }).filter({ hasText: "v1.0.1" });
   await expect(pluginV2).toContainText("pinned 1.0.1");
-  await pluginV2.getByRole("button", { name: "Rollback" }).click();
+  await pluginV2.getByRole("button", { name: "以前の版に戻す" }).click();
   await expect(panelNotice).toContainText("fixture.compute-sum was rolled back to its retained verified version");
   await expect(pluginV1).toContainText("pinned 1.0.0");
 });
