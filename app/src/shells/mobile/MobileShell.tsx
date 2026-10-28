@@ -14,6 +14,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import type { ApplicationShellProps, WorkspacePanelRequest } from "../../application/contracts";
 import { Workspace } from "../../workspace/Workspace";
 import { useWritingKeyboardVisibility } from "./useWritingKeyboardVisibility";
+import { classifyPageSwipe, isPageSwipeSurface } from "./mobileNavigationGestures";
 import "@ionic/react/css/core.css";
 import "@ionic/react/css/normalize.css";
 import "@ionic/react/css/structure.css";
@@ -61,10 +62,11 @@ function referenceTabId(panelId: string): string {
 const VIEWS: ReadonlyArray<{ id: MobileView; label: string; title: string; mark: string }> = [
   { id: "library", label: "作品", title: "作品ライブラリ", mark: "▤" },
   { id: "writing", label: "書く", title: "執筆・読書", mark: "✎" },
-  { id: "inspection", label: "変更", title: "状態と回復", mark: "◎" },
-  { id: "tools", label: "道具", title: "ツールとレビュー", mark: "◇" },
+  { id: "inspection", label: "変更", title: "変更と保存", mark: "◎" },
+  { id: "tools", label: "ツール", title: "ツールとプラグイン", mark: "◇" },
   { id: "settings", label: "設定", title: "設定", mark: "⚙" },
 ];
+const PRIMARY_VIEWS = VIEWS.filter(view => view.id !== "settings");
 
 const MOBILE_VIEW_PARAM = "view";
 const MOBILE_PREVIOUS_VIEW_STATE = "scriptoriumMobilePreviousView";
@@ -161,6 +163,7 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
   const contentRef = useRef<HTMLIonContentElement | null>(null);
   const activeViewRef = useRef(activeView);
   const scrollPositionsRef = useRef(new Map<MobileView, number>());
+  const swipeStart = useRef<{ x: number; y: number; view: MobileView; scope?: string } | null>(null);
 
   useEffect(() => {
     const pending = pendingPanelRequestRef.current;
@@ -418,7 +421,8 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
   const settingsContent = (
     <section className="mobile-shell-settings-card" aria-labelledby="mobile-display-settings-title">
       <h2 id="mobile-display-settings-title">表示とアカウント</h2>
-      {settings ?? <p>この画面に表示できる設定項目はまだありません。外観とアカウントの操作は画面上部から行えます。</p>}
+      <div className="mobile-shell-shared-header" aria-label="アカウントと外観の操作">{header}</div>
+      {settings ?? <p>設定項目は現在利用できません。</p>}
       <IonButton className="mobile-shell-primary-action" expand="block" onClick={() => void navigate(hasWorkspace ? "writing" : "library")}>
         {hasWorkspace ? "執筆画面へ戻る" : "作品を開く"}
       </IonButton>
@@ -430,7 +434,7 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
     </section>
   );
   return (
-    <IonApp className={"mobile-shell" + (writingKeyboardVisible ? " mobile-shell-keyboard-open" : "")}>
+    <IonApp className={"mobile-shell" + (activeView === "writing" ? " mobile-shell-writing-active" : "") + (writingKeyboardVisible ? " mobile-shell-keyboard-open" : "")}>
       <IonPage className="mobile-shell-page">
         <IonHeader className="mobile-shell-ion-header">
           <div className="mobile-shell-identity-bar">
@@ -440,14 +444,33 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
               <strong className="mobile-shell-current-title">{mobileTitle}</strong>
               {documentContext && activeView === "writing" ? <small className="mobile-shell-context">{documentContext}</small> : null}
             </div>
+            <button type="button" className="mobile-shell-reveal-navigation" aria-label="画面の切替を表示" onClick={() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); }}>▦</button>
             <button type="button" className="mobile-shell-header-settings" aria-label="設定を開く" aria-current={activeView === "settings" ? "page" : undefined} onClick={() => void navigate("settings")}>⚙</button>
           </div>
-          <div className="mobile-shell-shared-header" aria-label="アカウントと画面設定">{header}</div>
         </IonHeader>
 
         <IonContent ref={contentRef} className="mobile-shell-content" fullscreen={false}>
           {hasWorkspace ? (
             <div className="mobile-shell-workspace-view" data-active-view={activeView}
+              onTouchStartCapture={event => {
+                swipeStart.current = null;
+                if (activeView === "writing" || referenceSheet || event.touches.length !== 1 || !isPageSwipeSurface(event.target)) return;
+                const touch = event.touches[0];
+                if (touch) swipeStart.current = { x: touch.clientX, y: touch.clientY, view: activeView, scope: workspaceScope };
+              }}
+              onTouchEndCapture={event => {
+                const start = swipeStart.current;
+                swipeStart.current = null;
+                if (!start || activeView !== start.view || start.scope !== workspaceScope || event.changedTouches.length !== 1) return;
+                const touch = event.changedTouches[0];
+                if (!touch) return;
+                const direction = classifyPageSwipe({ startX: start.x, startY: start.y, endX: touch.clientX, endY: touch.clientY, viewportWidth: window.innerWidth });
+                if (!direction) return;
+                const index = PRIMARY_VIEWS.findIndex(view => view.id === activeView);
+                const target = PRIMARY_VIEWS[index + (direction === "next" ? 1 : -1)];
+                if (target) void navigate(target.id);
+              }}
+              onTouchCancelCapture={() => { swipeStart.current = null; }}
               aria-label={activeView === "settings" ? "設定" : "モバイル用執筆画面"}>
               <div className="mobile-shell-workspace-panel" hidden={activeView === "settings"}>
                 <Workspace
@@ -532,7 +555,7 @@ export function MobileShell({ header, documentTitle, documentContext, desktopDur
             </div>
           ) : null}
           <nav className="mobile-shell-navigation" aria-label="モバイルの主要画面">
-            {VIEWS.filter((view) => view.id !== "settings").map((view) => (
+            {PRIMARY_VIEWS.map((view) => (
               <IonButton
                 key={view.id}
                 type="button"
