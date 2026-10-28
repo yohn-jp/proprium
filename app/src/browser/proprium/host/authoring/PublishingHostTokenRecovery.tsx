@@ -35,6 +35,14 @@ export interface LegacyShareProposalInput {
   grants: SanitizedLegacyShareGrant[];
 }
 
+export function legacyGrantProposalMessage(result: unknown): string {
+  const status = isRecord(result) && typeof result.status === 'string' ? result.status : '';
+  if (status === 'already_imported') return 'この share grant は既に同じ内容で復旧されています。';
+  if (status === 'conflict') return '既存の share-grants.jsonl と内容が異なるため復旧は競合しました。追加・変更は行われていません。';
+  if (status === 'proposed') return 'proposal を Host Review に送信しました。承認されるまで Git ファイルは変更されません。';
+  return 'Host から proposal の結果を確認できませんでした。ファイルは変更されていません。';
+}
+
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_FILE_ROWS = 10_000;
 const MAX_GRANTS = 100;
@@ -214,11 +222,8 @@ export function PublishingHostTokenRecovery({ repositoryId, branch, inspect, pro
       branch_confirmation: branch, grants: selected as SanitizedLegacyShareGrant[],
     };
     setBusy(true); setMessage('Host Review 用の proposal を作成しています。');
-    void propose(event, input).then(result => {
-      setMessage(result && typeof result === 'object' && (result as { status?: unknown }).status === 'already_imported'
-        ? 'この share grant は既に同じ内容で復旧されています。'
-        : 'proposal を Host Review に送信しました。承認されるまで Git ファイルは変更されません。');
-    }, () => setMessage('proposal を作成できませんでした。ファイルは変更されていません。'))
+    void propose(event, input).then(result => setMessage(legacyGrantProposalMessage(result)),
+      () => setMessage('proposal を作成できませんでした。ファイルは変更されていません。'))
       .finally(() => setBusy(false));
   }
 

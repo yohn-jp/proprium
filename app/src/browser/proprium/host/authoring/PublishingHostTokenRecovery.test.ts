@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { inspectLegacyShareMap, PublishingHostTokenRecovery } from './PublishingHostTokenRecovery.js';
+import { inspectLegacyShareMap, legacyGrantProposalMessage, PublishingHostTokenRecovery } from './PublishingHostTokenRecovery.js';
 
 const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
 const row = (overrides: Record<string, unknown> = {}) => ({ id: 'grant-1', ownerId: 'private-owner', projectId: 'project-a',
@@ -88,4 +88,12 @@ test('renders the honest manual recovery path and unavailable local-workspace st
   const unavailable = renderToStaticMarkup(createElement(PublishingHostTokenRecovery, { repositoryId: null, branch: 'main', inspect, propose }));
   assert.match(unavailable, /この workspace では利用できません/u);
   assert.ok(!unavailable.includes('type="file"'));
+});
+
+test('reports canonical target conflicts without presenting them as successful proposals', () => {
+  assert.match(legacyGrantProposalMessage({ status: 'conflict' }), /競合/u);
+  assert.match(legacyGrantProposalMessage({ status: 'conflict' }), /変更は行われていません/u);
+  assert.match(legacyGrantProposalMessage({ status: 'already_imported' }), /既に同じ内容/u);
+  assert.match(legacyGrantProposalMessage({ status: 'proposed' }), /Host Review/u);
+  assert.match(legacyGrantProposalMessage({ status: 'unexpected' }), /結果を確認できません/u);
 });
