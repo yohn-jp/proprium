@@ -72,6 +72,12 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify signed v1 and authoring registry fixtures
         run: pnpm test:plugin-registry
+      - name: Verify authoring canon, freeze boundaries and complete feature inventory
+        run: |
+          node scripts/verify-authoring-canon.mjs
+          node scripts/build-authoring-evidence.mjs --check
+          node --test scripts/build-authoring-evidence.test.mjs scripts/authoring-feature-audit.test.mjs
+          node scripts/authoring-feature-audit.mjs --check
       - name: Build and verify all signed authoring components
         env:
           PROPRIUM_AUTHORING_BUILD_EVIDENCE_PATH: ${{ runner.temp }}/authoring-plugin-build-evidence.json
