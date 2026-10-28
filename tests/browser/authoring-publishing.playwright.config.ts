@@ -22,7 +22,8 @@ if (externalRegistry && keyFile) {
   // PROPRIUM_OFFICIAL_E2E_DIR. Configure the same locally intercepted URL and
   // pinned public key before Vite starts, including in CI's retained-build lane.
   const signer = createPrivateKey(process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_PRIVATE_KEY!);
-  const publicKey = createPublicKey(signer).export({ format: 'der', type: 'spki' }).subarray(-32).toString('base64');
+  const publicKey = process.env.PROPRIUM_SIGNED_AUTHORING_REGISTRY_PUBLIC_KEY ??
+    createPublicKey(signer).export({ format: 'der', type: 'spki' }).subarray(-32).toString('base64');
   const artifactBase = process.env.PROPRIUM_AUTHORING_TEST_ARTIFACT_BASE ?? new URL('plugin-fixture/', baseURL).href;
   process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_URL = new URL('plugin-fixture/registry.json', baseURL).href;
   process.env.VITE_PROPRIUM_PLUGIN_REGISTRY_KEY = publicKey;
