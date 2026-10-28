@@ -195,3 +195,62 @@
   .restored-host .plugin-card-head { flex-direction: column; }
   .restored-host .plugin-card-head code { text-align: start; }
 }
+
+/* Signed registry: no browser-default bullets or exposed package metadata in the first scan. */
+.restored-host .plugin-registry-catalog { display:grid;gap:13px;min-width:0; }
+.restored-host .plugin-catalog-heading { display:flex;align-items:flex-start;justify-content:space-between;gap:12px; }
+.restored-host .plugin-catalog-heading > div { min-width:0; }
+.restored-host .plugin-catalog-heading h3,.restored-host .installed-plugins-heading {
+  margin:0 0 5px;font-size:16px;line-height:1.45;font-weight:700;
+}
+.restored-host .plugin-catalog-heading p { margin:0;color:var(--muted);font-size:12px;line-height:1.6; }
+.restored-host .plugin-catalog-heading button {
+  flex:0 0 auto;min-height:44px;padding:9px 12px;font-size:13px;
+}
+.restored-host .plugin-catalog-search { display:grid;gap:6px;font-size:13px;font-weight:650;color:var(--ink); }
+.restored-host .plugin-catalog-search input {
+  box-sizing:border-box;width:100%;min-height:44px;padding:10px 12px;
+  border:1px solid var(--line);border-radius:11px;background:var(--paper);color:var(--ink);
+  font-size:16px;
+}
+.restored-host .registry-plugin-list {
+  display:grid;gap:8px;min-width:0;margin:0;padding:0;list-style:none;
+}
+.restored-host .registry-plugin-list > li { min-width:0;margin:0;padding:0;list-style:none; }
+.restored-host .registry-plugin-card {
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  min-width:0;padding:13px 12px;border:1px solid var(--line);border-radius:12px;
+  background:var(--paper);
+}
+.restored-host .registry-plugin-identity { display:grid;gap:3px;flex:1 1 auto;min-width:0; }
+.restored-host .registry-plugin-identity h4 {
+  margin:0;font-size:16px;font-weight:700;line-height:1.4;overflow-wrap:anywhere;
+}
+.restored-host .registry-plugin-identity code {
+  font-size:11px;color:var(--muted);line-height:1.4;overflow-wrap:anywhere;
+}
+.restored-host .registry-plugin-identity small { font-size:11px;color:var(--muted); }
+.restored-host .registry-plugin-card button {
+  flex:0 0 auto;min-height:44px;padding:9px 12px;border-radius:9px;
+  font-size:12px;font-weight:650;white-space:nowrap;
+}
+.restored-host .registry-plugin-card button:disabled { opacity:.65; }
+.restored-host .plugin-catalog-footnote {
+  margin:0;color:var(--muted);font-size:12px;line-height:1.55;
+}
+.restored-host .plugin-install-preview { scroll-margin-top:12px; }
+.restored-host .plugin-install-preview > ul { display:grid;gap:9px;margin:0;padding:0;list-style:none; }
+.restored-host .plugin-install-preview > ul > li { min-width:0;list-style:none; }
+.restored-host .plugin-install-preview dl { display:grid;grid-template-columns: auto minmax(0,1fr);gap:8px 12px;margin:0; }
+.restored-host .plugin-install-preview dt { font-size:12px;color:var(--muted); }
+.restored-host .plugin-install-preview dd { min-width:0;margin:0;overflow-wrap:anywhere;font-size:13px; }
+.restored-host .installed-plugins-heading { margin:9px 0 0; }
+.restored-host .plugin-manager-panel > summary { min-height:44px;display:flex;align-items:center;gap:8px; }
+.mobile-shell .plugin-panel-content { padding:10px 0;gap:14px; }
+.mobile-shell .plugin-panel-copy { font-size:12px;line-height:1.6;margin:0;color:var(--mobile-muted); }
+.mobile-shell .plugin-panel-content > .installed-plugins { gap:9px; }
+.mobile-shell .installed-plugins > li { padding:12px; }
+@media (max-width: 360px) {
+  .restored-host .registry-plugin-card { gap:7px;padding:10px 8px; }
+  .restored-host .registry-plugin-card button { padding-inline:9px; }
+}
