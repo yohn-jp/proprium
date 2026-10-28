@@ -31,6 +31,13 @@ export async function showPanel(page: Page, panel: "outline" | "editor" | "inspe
   }
   throw new Error(`Could not find the ${panel} navigation in the current shell.`);
 }
+/** Open the Host's workspace picker from either shell without bypassing route guards. */
+export async function openWorkspacePicker(page: Page): Promise<void> {
+  if (await page.locator(".mobile-shell").count()) {
+    await page.getByRole("button", { name: "設定を開く" }).click();
+  }
+  await page.getByRole("button", { name: "作品一覧", exact: true }).first().click();
+}
 export async function expectEditorText(page: Page, text: string): Promise<void> {
   await showPanel(page, "editor");
   // The DOM line projection is not the CodeMirror document: a final empty line

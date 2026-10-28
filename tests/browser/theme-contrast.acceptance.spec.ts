@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { chooseFile } from "./restored-ui.helpers.js";
+import { chooseFile, showPanel } from "./restored-ui.helpers.js";
 
 type ContrastResult = {
   foreground: string;

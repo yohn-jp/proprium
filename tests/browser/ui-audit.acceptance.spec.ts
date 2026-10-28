@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
-import { reviewChangedFiles, showPanel } from "./restored-ui.helpers.js";
+import { reviewChangedFiles, showPanel, openWorkspacePicker } from "./restored-ui.helpers.js";
 
 test("a local manuscript can be saved, renamed, reviewed, committed and inspected in history", async ({ page }) => {
   await page.goto("/?e2e=1");
@@ -68,7 +68,7 @@ test("saved workspace files round-trip through an explicitly exported ZIP", asyn
   expect(archive.suggestedFilename()).toBe("workspace-files.zip");
   const archivePath = await archive.path();
   expect(archivePath).toBeTruthy();
-  await page.getByRole("button", { name: "作品一覧", exact: true }).click();
+  await openWorkspacePicker(page);
   await page.getByLabel("作品名", { exact: true }).fill("ZIPから再開");
   await page.getByRole("button", { name: "ローカル作品を作成", exact: true }).click();
   await showPanel(page, "outline");
