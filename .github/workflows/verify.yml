@@ -375,9 +375,11 @@ jobs:
           LIFECYCLE_RESULT: ${{ needs.lifecycle.result }}
         run: |
           set -euo pipefail
+          failed=0
           for lane in PREPARE HOST AUTHORING LIFECYCLE; do
             variable="${lane}_RESULT"
             result="${!variable}"
             echo "$lane: $result"
-            test "$result" = success
+            if [ "$result" != success ]; then failed=1; fi
           done
+          exit "$failed"
