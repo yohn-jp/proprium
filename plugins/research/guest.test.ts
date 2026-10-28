@@ -482,6 +482,26 @@ test("synonym and candidate preference proposals preserve YAML comments and exte
   assert.doesNotMatch(ignoreText, /雨雲/u);
 });
 
+test("new synonym proposals work when no dictionary or merge target exists", async () => {
+  const host = new ResearchHostFixture();
+  const handlers = createResearchHandlers();
+  const lookup = await invoke(handlers["research.synonyms.get"]!, host, "research.synonyms.get", { term: "灯" }) as Record<string, unknown>;
+  assert.deepEqual(lookup, { group: null, alternatives: [], fileRevision: null });
+
+  const proposalInput = { words: ["灯", "明かり"], expectedFileRevision: null };
+  const output = await invoke(handlers["research.synonyms.propose"]!, host, "research.synonyms.propose", proposalInput,
+    { idempotencyKey: "new-synonym-key" }) as Record<string, unknown>;
+  assert.deepEqual(host.proposals.at(-1)!.units[0]!.operations.map(({ path }) => path), [SYNONYMS]);
+  assert.deepEqual(output.groupsAfter, [{ words: ["灯", "明かり"] }]);
+
+  const schemaPath = process.env.PROPRIUM_AUTHORING_SCHEMA ?? fileURLToPath(new URL("../../app/src/browser/proprium/authoring/schema.ts", import.meta.url));
+  const { assertValue } = await import(pathToFileURL(schemaPath).href);
+  const manifest = JSON.parse(readFileSync(new URL("./plugin.json", import.meta.url), "utf8"));
+  assertValue(manifest.actions.find((item: any) => item.action_id === "research.synonyms.get").output_schema, lookup, "empty synonym lookup");
+  assertValue(manifest.actions.find((item: any) => item.action_id === "research.synonyms.propose").input_schema, proposalInput, "new synonym proposal input");
+  assertValue(manifest.actions.find((item: any) => item.action_id === "research.synonyms.propose").output_schema, output, "new synonym proposal output");
+});
+
 test("large registry proposals seal a scoped artifact before referencing its bytes", async () => {
   const host = new ResearchHostFixture();
   const target = file("bible/characters/aria.yaml", "name: Aria\n");

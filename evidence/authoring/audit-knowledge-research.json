@@ -860,7 +860,7 @@
       ],
       "priority": "P0",
       "verification": [
-        "Research suite: 28 passed including UI-only fusion envelope/source-span checks.",
+        "Research suite: 30 passed including UI-only fusion envelope/source-span checks.",
         "Host component and unit test exist in parent integration commit 6aa641b; current signed browser acceptance is not checked."
       ]
     },
@@ -895,7 +895,7 @@
       ],
       "priority": "P0",
       "verification": [
-        "Current branch: node --import tsx --test plugins/research/*.test.ts — 28 passed.",
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ]
@@ -928,7 +928,7 @@
       ],
       "priority": "P1",
       "verification": [
-        "Current branch: node --import tsx --test plugins/research/*.test.ts — 28 passed.",
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ]
@@ -963,7 +963,7 @@
       ],
       "priority": "P0",
       "verification": [
-        "Current branch: node --import tsx --test plugins/research/*.test.ts — 28 passed.",
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ]
@@ -1000,7 +1000,7 @@
       ],
       "priority": "P1",
       "verification": [
-        "Current branch: node --import tsx --test plugins/research/*.test.ts — 28 passed.",
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ]
@@ -1034,7 +1034,7 @@
       ],
       "priority": "P1",
       "verification": [
-        "Current branch: node --import tsx --test plugins/research/*.test.ts — 28 passed.",
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ]
@@ -1052,7 +1052,6 @@
       "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
       "ui_path": "plugins/research/plugin.json#terms (search expansion/detail); Research.terms.variants action.",
       "existing_tests": [
-        "plugins/research/guest.test.ts",
         "plugins/research/guest.test.ts"
       ],
       "gaps": [
@@ -1067,7 +1066,7 @@
       ],
       "priority": "P2",
       "verification": [
-        "Current branch: node --import tsx --test plugins/research/*.test.ts — 28 passed.",
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ]
@@ -1085,10 +1084,11 @@
       "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
       "ui_path": "plugins/research/plugin.json#synonyms (同義語 tabs); Host Review.",
       "existing_tests": [
-        "plugins/research/guest.test.ts"
+        "plugins/research/guest.test.ts",
+        "plugins/research/manifest.test.ts"
       ],
       "gaps": [
-        "Comment/unknown-field preservation is unit-tested; stable identity merge, cancel and stale revision UX are not signed-browser checked."
+        "Empty-group lookup output and new-group proposal input now pass manifest/guest schema tests; stale revision conflict and browser review/cancel flows remain unchecked."
       ],
       "required_fixes": [
         "Run RES-A008 with unknown YAML, append/merge, cancel and stale revision cases."
@@ -1099,7 +1099,7 @@
       ],
       "priority": "P2",
       "verification": [
-        "Current branch: node --import tsx --test plugins/research/*.test.ts — 28 passed.",
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ]
@@ -1132,7 +1132,7 @@
       ],
       "priority": "P1",
       "verification": [
-        "Current branch: node --import tsx --test plugins/research/*.test.ts — 28 passed.",
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ]
@@ -1165,7 +1165,7 @@
       ],
       "priority": "P2",
       "verification": [
-        "Current branch: node --import tsx --test plugins/research/*.test.ts — 28 passed.",
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ]
@@ -1197,7 +1197,7 @@
       ],
       "priority": "P1",
       "verification": [
-        "Current branch: node --import tsx --test plugins/research/*.test.ts — 28 passed.",
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ]
@@ -1228,7 +1228,7 @@
       ],
       "priority": "P1",
       "verification": [
-        "Current branch: node --import tsx --test plugins/research/*.test.ts — 28 passed.",
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ]

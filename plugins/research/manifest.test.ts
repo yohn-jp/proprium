@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { pathToFileURL, fileURLToPath } from "node:url";
 const schemaPath = process.env.PROPRIUM_AUTHORING_SCHEMA ?? fileURLToPath(new URL("../../app/src/browser/proprium/authoring/schema.ts", import.meta.url));
-const { assertDescriptor, assertSurface } = await import(pathToFileURL(schemaPath).href);
+const { assertDescriptor, assertSurface, assertValue } = await import(pathToFileURL(schemaPath).href);
 import { createResearchHandlers } from "./guest.js";
 
 test("Research official manifest declares every implemented action and only actionable Host surfaces", async () => {
@@ -68,6 +68,20 @@ test("search fusion accepts typed Host action results only from the user interfa
   assert.ok(action.required_capabilities.includes("workspace.file.read"));
   assert.ok(action.required_capabilities.includes("workspace.derived.cache"));
   assert.ok(!action.required_capabilities.includes("workspace.change.propose"));
+});
+
+test("synonym contracts support absent groups and revision-bound add or merge proposals", async () => {
+  const metadata = JSON.parse(await readFile(new URL("./plugin.json", import.meta.url), "utf8"));
+  const lookup = metadata.actions.find((item: any) => item.action_id === "research.synonyms.get");
+  const propose = metadata.actions.find((item: any) => item.action_id === "research.synonyms.propose");
+
+  assertValue(lookup.output_schema, { group: null, alternatives: [], fileRevision: null }, "empty synonym lookup");
+  assertValue(propose.input_schema, { words: ["灯", "明かり"], expectedFileRevision: null }, "new synonym group");
+  assertValue(propose.input_schema, {
+    words: ["山", "峰"], context: "positive",
+    mergeGroupRef: { fileRevision: "a".repeat(64), ordinal: 0, words: ["山", "丘"], context: "positive" },
+    expectedFileRevision: "a".repeat(64),
+  }, "revision-bound synonym merge");
 });
 
 test("analyzer exposes local literal analysis and its results", async () => {

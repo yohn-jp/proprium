@@ -3293,7 +3293,6 @@
         },
         "required": [
           "group",
-          "groupRef",
           "alternatives",
           "fileRevision"
         ],
@@ -3386,8 +3385,6 @@
         },
         "required": [
           "words",
-          "context",
-          "mergeGroupRef",
           "expectedFileRevision"
         ],
         "additionalProperties": false
