@@ -119,6 +119,7 @@
       "integration_requirement": "The outer Semantic guest must persist tensor/range progress across multiple async action slices while preserving the component worker. Do not change shared limits."
     },
     "component_import_contract": {
+      "build_config": "plugins/semantic/.cargo/config.toml",
       "wit_extraction": "evidence/authoring/validation/reranker-component-wit.txt",
       "imports": [],
       "exports": [
@@ -170,6 +171,7 @@
     "tract-core-0.23.9/src/model/typed.rs",
     "plugins/semantic/reranker/src/lib.rs",
     "plugins/semantic/reranker/wit/world.wit",
+    "plugins/semantic/.cargo/config.toml",
     "plugins/semantic/reranker/model-source.json",
     "plugins/semantic/reranker/README.md",
     "plugins/semantic/reranker/scripts/wasm-smoke.mjs",
