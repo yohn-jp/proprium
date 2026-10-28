@@ -315,7 +315,7 @@ drag以外のMove panelフォーム、keyboardによるtab/resize、hidden panel
 
 ```mermaid
 flowchart TD
-  W01["W01 Mobile Workspace"] --> Nav["作品 / 書く / 確認 / 道具 / 設定"]
+  W01["W01 Mobile Workspace"] --> Nav["作品 / 書く / 変更 / ツール"]
   Nav -->|tap・Back・history・view変更| Guard{"journal flush・scope・navigation世代"}
   Guard -->|不可| Stay["旧view・URL・入力を保持 / 再試行"]
   Guard -->|可| View["対応panel / focus・scroll復帰"]
@@ -323,13 +323,13 @@ flowchart TD
   E01 -->|構成・保存状態を参照| Sheet["outline / inspector sheet"]
   Sheet -->|閉じる・Back| E01
   E01 -->|読書・page操作| E02["E02 reading / F05"]
-  View -->|設定| S01["S01 settings"]
+  W01 -->|ヘッダー設定| S01["S01 settings"]
   S01 -->|Desktopへ / flush成功| Desktop["DesktopShell / 同じWorkspace"]
   Desktop -->|Mobileへ / flush成功| W01
   Stay --> Nav
 ```
 
-sheetのdismissでtriggerへfocusを戻す。keyboard表示・safe area・orientationで主操作を隠さない。幅が変わるだけでeditorを作り直さない。Workspace未選択時はH01へ誘導し、使えない空panelを主操作にしない。モード切替は明示選択を尊重する。
+4つの主要タブは直接タップでき、Settingsは独立したヘッダー入口を使う。書く画面の編集中は下部タブを畳み、ヘッダーから再表示できる。左右スワイプは文章入力・選択・読書・スクロール・OSのedge gestureを奪わず、成功時も通常のnavigation guardを通る。ファイル長押し操作は同一の「…」メニューからも利用できる。sheetのdismissでtriggerへfocusを戻す。keyboard表示・safe area・orientationで主操作を隠さない。幅が変わるだけでeditorを作り直さない。Workspace未選択時はH01へ誘導し、使えない空panelを主操作にしない。モード切替は明示選択を尊重する。
 
 ## F15 — 設定・account・接続先変更
 
@@ -349,7 +349,7 @@ flowchart TD
   S01 -->|戻る| W01
 ```
 
-現在、設定contentはDesktopではトップバーから開くmodal、MobileではWorkspace navigation内の専用settings viewに表示され、Desktop切替も含む。外観、Git author、GitHub接続状態、Gateway URLとAccess linkを扱う。shell headerにもthemeとGitHub connect/sign-out操作があるため、全設定をまとめたDesktop settings pageではない。Proprium MCP認証TokenやOwner Keyは発行も保存もしない。GitHub OAuth Tokenは既存どおりブラウザー内で保持し、MCP認証には使わない。Gateway接続先変更時は新Originへの接続を再確立する。
+現在、設定contentはDesktopではトップバーから開くmodal、Mobileではヘッダーから開く専用settings viewに表示され、Desktop切替も含む。外観、Git author、GitHub接続状態、Gateway URLとAccess linkを扱う。MobileのthemeとGitHub connect/sign-out操作は設定へ集約する。Desktopでは従来のトップバー操作を維持する。Proprium MCP認証TokenやOwner Keyは発行も保存もしない。GitHub OAuth Tokenは既存どおりブラウザー内で保持し、MCP認証には使わない。Gateway接続先変更時は新Originへの接続を再確立する。
 
 ## F16 — 不確実な保存・journal回復・機能別error
 
