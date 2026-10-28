@@ -106,7 +106,7 @@ jobs:
       - name: Derive and verify public test trust root
         run: |
           set -euo pipefail
-          node -e 'const {readFileSync,writeFileSync}=require("node:fs"); const {createPrivateKey,createPublicKey}=require("node:crypto"); const privateKey=createPrivateKey(readFileSync(process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_KEY_FILE)); const publicKey=createPublicKey(privateKey).export({format:"der",type:"spki"}).subarray(-32).toString("base64"); writeFileSync(process.env.PROPRIUM_CI_ARTIFACT_ROOT+"/public-key.txt",publicKey+"\\n");'
+          node -e 'const {readFileSync,writeFileSync}=require("node:fs"); const {createPrivateKey,createPublicKey}=require("node:crypto"); const privateKey=createPrivateKey(readFileSync(process.env.PROPRIUM_E2E_PLUGIN_REGISTRY_KEY_FILE)); const publicKey=createPublicKey(privateKey).export({format:"der",type:"spki"}).subarray(-32).toString("base64"); writeFileSync(process.env.PROPRIUM_CI_ARTIFACT_ROOT+"/public-key.txt",publicKey+"\n");'
           test -s "$PROPRIUM_CI_ARTIFACT_ROOT/public-key.txt"
           PROPRIUM_PLUGIN_OUTPUT_DIR="$PROPRIUM_SIGNED_AUTHORING_RELEASE_DIR" \
             PROPRIUM_PLUGIN_REGISTRY_PUBLIC_KEY="$(cat "$PROPRIUM_CI_ARTIFACT_ROOT/public-key.txt")" \
