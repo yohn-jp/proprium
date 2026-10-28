@@ -94,7 +94,17 @@ test('signed offline authoring panels read saved context and lint Japanese text'
   await openPanel(page, 'Dialogue attribution');
   const speaker = page.getByRole('tabpanel', { name: 'Dialogue attribution', exact: true }).first();
   await speaker.getByRole('button', { name: 'Choose a sceneを読み込む', exact: true }).click();
-  await speaker.getByRole('button', { name: /雨の夜/ }).click();
+  // Preserve the real signed plugin read. Distinguish an action error from an
+  // empty or still-loading list instead of reporting an opaque click timeout.
+  const scene = speaker.getByRole('button', { name: /雨の夜/ });
+  await expect.poll(async () => {
+    const error = speaker.locator('.authoring-error');
+    if (await error.isVisible()) return `read failed: ${await error.innerText()}`;
+    if (await scene.isVisible()) return 'scene ready';
+    const stillLoading = await speaker.locator('.authoring-surface-body[aria-busy="true"]').isVisible();
+    return stillLoading ? 'loading' : 'scene missing';
+  }, { message: 'Signed Speaker must load a scene or expose the actual read error' }).toBe('scene ready');
+  await scene.click();
   await speaker.getByRole('tab', { name: 'Attributions' }).click();
   await expect(speaker).toContainText('行こう');
   expect(outboundWrites).toEqual([]);
