@@ -1140,6 +1140,11 @@ export function createResearchHandlers(): Record<string, Handler> {
         tokenizerIdentity: { id: RESEARCH_TOKENIZER_ID, version: RESEARCH_TOKENIZER_VERSION, digest: RESEARCH_DICTIONARY_MANIFEST_SHA256 },
       };
     },
+    "research.candidates.ignore.list": function* (raw, context, host) {
+      exactFields(object(raw), []);
+      const ignored = yield* readIgnoredCandidateTerms(host, context);
+      return { snapshot: context.snapshot, fileRevision: ignored.revision, terms: [...ignored.terms].sort(utf8PathCompare) };
+    },
     "research.terms.variants": (raw) => {
       const input = object(raw); exactFields(input, ["candidates", "knownTerms"]);
       if (!Array.isArray(input.candidates) || input.candidates.length < 1 || input.candidates.length > 200) throw fail("invalid_input", "candidates are invalid");
