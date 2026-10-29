@@ -53,7 +53,8 @@
       "acceptance_ids": [
         "accept-pw-01",
         "accept-pw-11"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-02",
@@ -100,7 +101,8 @@
       "canon": "docs/canon/plugins/PAIRED-WRITING.md",
       "acceptance_ids": [
         "accept-pw-02"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-03",
@@ -146,7 +148,8 @@
       "canon": "docs/canon/plugins/PAIRED-WRITING.md",
       "acceptance_ids": [
         "accept-pw-03"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-04",
@@ -193,7 +196,8 @@
       "canon": "docs/canon/plugins/PAIRED-WRITING.md",
       "acceptance_ids": [
         "accept-pw-04"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-05",
@@ -240,7 +244,8 @@
       "canon": "docs/canon/plugins/PAIRED-WRITING.md",
       "acceptance_ids": [
         "accept-pw-05"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-06",
@@ -285,7 +290,8 @@
       "canon": "docs/canon/plugins/PAIRED-WRITING.md",
       "acceptance_ids": [
         "accept-pw-06"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-07",
@@ -331,7 +337,8 @@
       "canon": "docs/canon/plugins/PAIRED-WRITING.md",
       "acceptance_ids": [
         "accept-pw-07"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-08",
@@ -377,7 +384,8 @@
       "canon": "docs/canon/plugins/PAIRED-WRITING.md",
       "acceptance_ids": [
         "accept-pw-07"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-09",
@@ -421,7 +429,8 @@
       "canon": "docs/canon/plugins/PAIRED-WRITING.md",
       "acceptance_ids": [
         "accept-pw-07"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-10",
@@ -466,7 +475,8 @@
       "canon": "docs/canon/plugins/PAIRED-WRITING.md",
       "acceptance_ids": [
         "accept-pw-07"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-11",
@@ -512,7 +522,8 @@
       "canon": "docs/canon/plugins/PAIRED-WRITING.md",
       "acceptance_ids": [
         "accept-pw-07"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-12",
@@ -563,7 +574,8 @@
         "accept-pw-04",
         "accept-pw-06",
         "accept-pw-07"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-13",
@@ -609,7 +621,8 @@
       "canon": "docs/canon/plugins/PAIRED-WRITING.md",
       "acceptance_ids": [
         "accept-pw-08"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-14",
@@ -653,7 +666,8 @@
       "canon": "docs/canon/plugins/PAIRED-WRITING.md",
       "acceptance_ids": [
         "accept-pw-09"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-15",
@@ -703,7 +717,8 @@
       "canon": "docs/canon/plugins/PAIRED-WRITING.md",
       "acceptance_ids": [
         "accept-pw-10"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-16",
@@ -750,7 +765,8 @@
       "acceptance_ids": [
         "accept-pw-07",
         "accept-pw-10"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-17",
@@ -797,7 +813,8 @@
       "acceptance_ids": [
         "accept-pw-01",
         "accept-pw-11"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-18",
@@ -845,7 +862,8 @@
       "acceptance_ids": [
         "accept-pw-02",
         "accept-pw-08"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-19",
@@ -890,7 +908,8 @@
       "canon": "docs/canon/plugins/PAIRED-WRITING.md",
       "acceptance_ids": [
         "accept-pw-06"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-20",
@@ -936,7 +955,8 @@
       "acceptance_ids": [
         "accept-pw-08",
         "accept-pw-10"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PW-21",
@@ -992,7 +1012,8 @@
       "acceptance_ids": [
         "accept-pw-10",
         "accept-pw-21"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     }
   ],
   "paired_only_cross_plugin_requirements": [
@@ -1048,5 +1069,8 @@
       "KNO-24 remains an active mixed Knowledge requirement; only its Paired optional generation route is frozen.",
       "DIA-11 contradiction verdict and its shared Diagnostics/Semantic evidence remain active."
     ]
-  }
+  },
+  "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
+  "assessed_at": "2026-10-29",
+  "assessment_scope": "Reconciled against this source snapshot. Prior base_sha is retained as the original audit anchor. Implementation status does not substitute for the current R01–R14 acceptance result. Browser failures and unsupported coverage remain explicit."
 }

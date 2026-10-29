@@ -3,8 +3,8 @@
   "note": "Implementation assessment is separate from PASS/FAIL acceptance. Verification is limited to the recorded commands and source revisions; historical evidence is not current-source certification.",
   "counts": {
     "IMPLEMENTED": 0,
-    "PARTIAL": 21,
-    "MISSING": 2,
+    "PARTIAL": 23,
+    "MISSING": 0,
     "UNVERIFIED": 68,
     "FROZEN": 23
   },
@@ -44,6 +44,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -75,6 +76,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -109,6 +111,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -141,6 +144,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -175,6 +179,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -210,6 +215,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -245,6 +251,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -278,6 +285,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -295,18 +303,17 @@
         "plugins/diagnostics/plugin.json",
         "plugins/diagnostics/src/core.ts"
       ],
-      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx",
-      "ui_path": "Host-owned DiagnosticsFindings component (integration pending in HostApp); plugin result and feedback.read.v1 action in plugins/diagnostics/guest.ts",
+      "host_path": "Diagnostics guest supplies normalized current findings and feedback.read.v1; the Host-owned DiagnosticsFindings component is implemented but HostApp mounting remains pending.",
+      "ui_path": "Host-owned DiagnosticsFindings component implements kind/severity/state filters, decision freshness and quoted evidence, but is not yet mounted in HostApp.",
       "existing_tests": [
         "plugins/diagnostics/tests/feedbackGuest.test.ts",
         "plugins/diagnostics/tests/sceneGuest.test.ts"
       ],
       "gaps": [
-        "Kind, severity and open/decided filter logic, stale-decision presentation, and feedback.read.v1 now exist with focused unit coverage. The Host-owned component is not yet mounted in the signed browser flow; report normalization, feedback attachment, actual interaction and reload behavior still require Host integration and browser proof.",
-        "Stable fingerprints exclude ephemeral workspace generation/snapshot IDs while retaining exact source revisions, text/config and analyzer/provider identity; verify unchanged-source decisions survive reload and changed-source/config decisions remain stale in the real Host."
+        "Filter logic, stale-decision presentation and feedback.read.v1 have focused coverage. Host integration of DiagnosticsFindings, report normalization, feedback attachment, proposal approval/reload and actual source navigation are pending."
       ],
       "required_fixes": [
-        "Integrate DiagnosticsFindings with Host-validated scene.run and feedback.read results, then run signed browser checks for kind/severity/state filters, paired evidence navigation, proposal approval/reload, unchanged-source decision retention and changed-source stale display."
+        "Mount DiagnosticsFindings in HostApp with Host-validated scene.run and feedback.read data; verify filters, evidence navigation, review/reload, unchanged-source retention and stale decisions on changed sources in signed browser tests."
       ],
       "dependencies": [
         "proprium.knowledge",
@@ -321,6 +328,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -357,6 +365,7 @@
           "requirement": "**FROZEN — Paired Writing-owned cross-plugin chapter first-read report.** Preserve the questions, expectations and confusion report as an interpretive feature; this feature is excluded from the active seven-plugin completion gate while Paired Writing is frozen. `FROZEN` is not `PASS`.\naccept-dia-a12 — Only an explicit user-run request with consented Paired Writing provider receives manuscript context. Result identifies the exact chapter and model/provider, labels questions/expectations/confusion as an interpretation, and cites bounded source context. Network/model unavailable returns a recoverable error while ordinary diagnostics remains available; no report is silently persisted."
         }
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -375,19 +384,18 @@
         "plugins/paired-writing/guest.ts",
         "plugins/semantic/guest.ts"
       ],
-      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx",
-      "ui_path": "Host-owned DiagnosticsFindings paired-evidence and legacy-migration controls (HostApp integration pending); scene.run findings plus legacy-dismissals.inspect.v1/propose.v1 actions",
+      "host_path": "Diagnostics guest normalizes deterministic and Semantic paired-evidence findings and implements revision-pinned legacy-dismissals.inspect.v1/propose.v1; the Host review component and legacy controls are not yet mounted.",
+      "ui_path": "Host DiagnosticsFindings contains paired evidence and explicit legacy migration controls as a component, awaiting HostApp integration. The optional Paired Writing verdict stays FROZEN.",
       "existing_tests": [
         "plugins/diagnostics/tests/sceneGuest.test.ts",
         "plugins/semantic/guest.test.ts",
         "plugins/paired-writing/test/guest.test.ts"
       ],
       "gaps": [
-        "Diagnostics now normalizes Semantic embedding candidates into top-level findings with two revision-pinned quote sources, stable fingerprints, feedback read/proposal support, and explicit legacy JSONL inspect/propose actions that retain unknown fields and leave the source unchanged. Signed Host UI integration/browser verification remains outstanding.",
-        "The optional Paired Writing model-verdict interaction remains FROZEN and is excluded from active DIA-11 completion; this is not a PASS."
+        "Guest actions preserve unknown JSONL fields and source bytes and propose only explicitly selected rows to Diagnostics feedback. Signed Host review wiring and browser verification are outstanding; Paired verdict remains FROZEN and is not a PASS."
       ],
       "required_fixes": [
-        "Wire the findings/migration component through Host review and run signed browser scenarios for paired quote display and source jumps, exact dismissal after reload, stale-source reappearance, legacy import preserving unknown fields/source bytes, unresolved/conflict display, and proposal cancellation."
+        "Integrate DiagnosticsFindings into HostApp using the Host proposal broker; verify preview, selected-row migration, conflict/stale/reject handling and unchanged legacy JSONL in signed Desktop/Mobile flows."
       ],
       "dependencies": [
         "proprium.paired-writing",
@@ -405,6 +413,7 @@
           "requirement": "RECOVERY — Build evidence-paired contradiction candidates, let an author request optional interpretation, distinguish compatible/insufficient/contradiction and review dismissal against its source scope.\naccept-dia-a13 — Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale; optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction` remain distinguishable. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact.\nFROZEN subrequirement: optional Paired Writing verdicts compatible/insufficient/contradiction; deterministic and Semantic evidence plus Diagnostics dismissal remain active."
         }
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -418,16 +427,16 @@
         "app/src/browser/proprium/host/PluginPanel.tsx",
         "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx"
       ],
-      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx",
-      "ui_path": "Diagnostics finding list and feedback proposal controls exist; Host editor margin marker integration is pending the shared diagnostic_margin change.",
+      "host_path": "A CodeMirror diagnostic margin module exists, but Host editor props and HostApp do not currently supply validated Diagnostics findings or wire its jump handler.",
+      "ui_path": "DiagnosticsFindings has a reviewable list/evidence-navigation component and a separate editor-margin module exists; neither is connected to the current Host editor as one findings flow.",
       "existing_tests": [
         "plugins/diagnostics/tests/feedbackGuest.test.ts"
       ],
       "gaps": [
-        "No Host editor decoration/jump control is present on this base branch; list-to-source open and intentional-marking do not preserve the editor location as DIA-A10/DIA-A11 require."
+        "The margin module has focused isolated browser coverage, but it is not mounted in HostApp or connected to current source revisions; list-to-source selection and editor-location preservation are incomplete."
       ],
       "required_fixes": [
-        "Integrate the Host-owned marker with validated Diagnostics findings and Host-bound source identity; verify selection/focus preservation and the explicit feedback proposal."
+        "Wire Host-validated findings and navigation to the margin through the retained editor, then verify selection/focus preservation and explicit feedback proposals on signed Desktop/Mobile browsers."
       ],
       "dependencies": [
         "proprium.narrative"
@@ -438,6 +447,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -472,6 +482,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -507,6 +518,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -542,6 +554,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -575,6 +588,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -609,6 +623,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -643,6 +658,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -678,6 +694,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -712,6 +729,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -744,6 +762,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -778,6 +797,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -810,6 +830,7 @@
       "verification": [
         "Knowledge graph unit tests cover legacy tree ordering; current integrated Narrative browser proof is not present in this audit."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -846,6 +867,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -880,6 +902,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -911,6 +934,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -947,6 +971,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -981,6 +1006,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1015,6 +1041,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1049,6 +1076,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1083,6 +1111,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1117,6 +1146,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1154,6 +1184,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1189,6 +1220,7 @@
         "Knowledge suite: 55 passed including shared-scene-cursor projection test.",
         "Scene Lens UI assertion added to tests/browser/authoring-knowledge.acceptance.ts; signed browser execution not checked."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1222,6 +1254,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1258,6 +1291,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1293,6 +1327,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1343,6 +1378,7 @@
           "status": "UNVERIFIED"
         }
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1377,6 +1413,7 @@
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1400,11 +1437,10 @@
         "tests/browser/authoring-official.acceptance.spec.ts: signed Narrative explains an unrecognized repository and leaves generic Files available"
       ],
       "gaps": [
-        "The guest tests pass, but the signed browser test has not been executed against the integrated current worktree.",
-        "The new unrecognized-repository browser assertion has only been parsed by Playwright, not executed."
+        "A current signed browser run opened a workspace containing 604 local Git files, but the Narrative structure panel showed no work items for a seeded “Volume One” before its later checks could run. The exact cause and repeat on the current signed Narrative artifact remain under investigation. Generic Files stays available; no acceptance PASS is inferred."
       ],
       "required_fixes": [
-        "Run the fresh signed browser acceptance for recognized and unrecognized repositories and record the rendered status and generic Files path."
+        "Trace the seeded workspace through Narrative recognition, hierarchy.tree, Host paging and the visible Work Outline; repair the first failing boundary and rerun the signed Desktop and Mobile flow."
       ],
       "dependencies": [
         "workspace.identity.read",
@@ -1414,10 +1450,9 @@
       ],
       "priority": "P0",
       "verification": [
-        "PASS: pnpm --filter @proprium/plugin-narrative test (30 tests)",
-        "PASS: pnpm --filter @proprium/plugin-narrative typecheck",
-        "NOT_RUN: fresh signed browser acceptance"
+        "FAIL: Current Host browser flow with the 855a44e signed plugin fixture reached an empty Narrative structure despite the seeded file tree; the volume assertion timed out on Desktop and Mobile before subsequent acceptance steps. Retest the current signed artifact."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1440,10 +1475,10 @@
         "tests/browser/authoring-official.acceptance.spec.ts: signed Narrative installs and navigates a large work in the real Host"
       ],
       "gaps": [
-        "Current browser proof has not been run on this integrated branch; unit action coverage is not proof of the Host navigation path."
+        "The current signed large-work browser scenario did not show its seeded volume in the Work Outline, so scene paging/navigation and linked manuscript-open assertions did not execute. Unit action tests do not establish the Host path."
       ],
       "required_fixes": [
-        "Run the signed large-work browser flow and verify the exact linked body opens without eager manuscript reads."
+        "Repair the observed empty Outline path; rerun the signed large-work scenario and verify exact linked manuscript bytes open without eager manuscript reads."
       ],
       "dependencies": [
         "NAR-01",
@@ -1453,9 +1488,9 @@
       ],
       "priority": "P0",
       "verification": [
-        "PASS: Narrative plugin guest test suite, including paged tree and explicit link",
-        "NOT_RUN: fresh signed desktop and mobile browser acceptance"
+        "NOT_CHECKED after the earlier NAR-01 failure: hierarchy tree and scene navigation assertions were not reached."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1496,6 +1531,7 @@
         "PASS: Narrative component and guest validation tests",
         "NOT_RUN: fresh reload/stale/foreign browser acceptance"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1534,6 +1570,7 @@
         "PASS: Narrative action tests for scene metadata/body proposal",
         "NOT_RUN: fresh signed creation browser acceptance"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1548,8 +1585,8 @@
         "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx",
         "app/src/browser/proprium/host/authoring/WorkspaceAuthoringPanels.tsx"
       ],
-      "host_path": "The UI submits the complete same-parent sibling set and expected tree revision through structure.reorder; Host reviews and applies the resulting ChangeSet.",
-      "ui_path": "Accessible chapter/scene move controls and declarative reorder forms in Work Outline.",
+      "host_path": "The accessible ordered-list controls in app/src/browser/proprium/host/authoring/AuthoringSurface.tsx submit the complete sibling set and expected tree revision through structure.reorder; the Host reviews and applies the resulting ChangeSet.",
+      "ui_path": "Work Outline declarative reorder fields expose labeled up/down buttons; user reviews the proposed sibling ordering in Host AuthoringReview.",
       "existing_tests": [
         "plugins/narrative/src/actions.test.ts: manifest action inventory and closed output schemas match the guest contract",
         "plugins/narrative/src/actions.test.ts: hierarchy keeps tied and missing order rows accessible with diagnostics",
@@ -1557,11 +1594,10 @@
         "tests/browser/authoring-official.acceptance.spec.ts: signed Narrative reorders chapters and scenes with accessible move controls"
       ],
       "gaps": [
-        "The accessible Host ordered-list controls are implemented in companion commit 966b44bbf217480d0f15e464e62fe4c6fdb66b1d but are not yet integrated into this Narrative worktree.",
-        "The new signed browser test has only been parsed by Playwright; the review/apply and persisted sibling order path is not yet run."
+        "Ordered-list controls are integrated in the current Host source, but the signed browser run failed on the empty Work Outline before the reorder flow was reached. Review/apply and persisted order remain unverified."
       ],
       "required_fixes": [
-        "Integrate the companion Host commit and run the signed browser acceptance for accessible chapter and scene ordering, review and saved order."
+        "Repair the observed empty Work Outline path, then run the signed browser acceptance for accessible chapter and scene ordering, review and saved order."
       ],
       "dependencies": [
         "NAR-02",
@@ -1570,10 +1606,9 @@
       ],
       "priority": "P0",
       "verification": [
-        "PASS: Narrative action/schema tests",
-        "PASS: companion Host commit 966b44bbf217480d0f15e464e62fe4c6fdb66b1d unit tests 19/19, typecheck, and diff check; not yet integrated",
-        "NOT_RUN: signed accessible reorder browser acceptance"
+        "NOT_CHECKED: Playwright collection succeeds; the current Desktop/Mobile run fails earlier at the seeded volume visibility assertion and never reaches reorder."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1613,6 +1648,7 @@
         "PASS: Narrative guest tests for guarded rename/relink",
         "NOT_RUN: fresh signed title/relink browser acceptance"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1652,6 +1688,7 @@
         "PASS: existing targeted Host writing-resume unit tests in repository history; not rerun as full suite for this branch",
         "NOT_RUN: fresh NAR-A07 desktop/mobile browser acceptance"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1667,8 +1704,8 @@
         "app/src/browser/proprium/host/HostApp.tsx",
         "tests/browser/authoring-navigation.acceptance.ts"
       ],
-      "host_path": "Next-scene navigation is connected through NarrativeNavigation and scene.open; quick append requires Host RestoredEditor append registration and idempotent BrowserJournal persistence; scratch remains Host-owned.",
-      "ui_path": "Quick append component exposes read-only last-three-paragraph context and IME-capable text input; signed browser tests cover append and next-scene routes when Host wiring lands.",
+      "host_path": "HostApp registers the existing editor quick-append callback with the durable BrowserJournal and mounts NarrativeQuickAppend for a clean selected manuscript; next-scene navigation remains Host-guarded. Scratch position and quota are Host-owned.",
+      "ui_path": "Mounted NarrativeQuickAppend shows read-only recent paragraphs and an IME-capable append field for the clean selected scene; Work Outline exposes next-scene navigation.",
       "existing_tests": [
         "app/src/browser/proprium/host/authoring/NarrativeNavigation.test.ts",
         "app/src/browser/proprium/host/authoring/NarrativeQuickAppend.test.ts",
@@ -1676,13 +1713,10 @@
         "tests/browser/authoring-navigation.acceptance.ts: Mobile quick append writes to the existing editor and keeps the exact text locally"
       ],
       "gaps": [
-        "NarrativeQuickAppend is not yet mounted/wired to HostApp in this branch; shared Host integration is pending.",
-        "The new append browser test has only been listed by Playwright, not run.",
-        "NAR-A08 scratch reload, current-scene binding, camera quota and unsupported voice checks remain outside this Narrative component test."
+        "Quick append is mounted in current HostApp source. The signed run failed earlier at the empty Work Outline and did not reach append/navigation. Scratch reload, current-scene binding, camera quota and unsupported voice checks also remain unverified."
       ],
       "required_fixes": [
-        "Integrate the Host append registration with stable operation IDs and awaited journal writes.",
-        "Run the signed Mobile append/navigation acceptance and verify text scratch reload/binding and camera capacity in the Host acceptance suite."
+        "Repair the observed empty Work Outline path; run signed Mobile append/navigation, then verify scratch reload/binding, camera capacity and unsupported voice behavior in Host acceptance."
       ],
       "dependencies": [
         "Host RestoredEditor append operation",
@@ -1692,10 +1726,9 @@
       ],
       "priority": "P0",
       "verification": [
-        "PASS: NarrativeNavigation and NarrativeQuickAppend component tests",
-        "PASS: Playwright parsed the updated navigation acceptance (listing only)",
-        "NOT_RUN: browser append, scratch, and camera acceptance"
+        "NOT_CHECKED: Current signed browser run failed before the quick-append control was reached."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1738,6 +1771,7 @@
         "PASS: targeted Narrative guest malformed, scale and preservation tests",
         "NOT_RUN: full current Host failure/disable/offline browser matrix"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1778,6 +1812,7 @@
         "PASS: targeted Narrative compiler unit tests listed above",
         "FROZEN: NAR-A10 full Paired integration acceptance not run and not counted as PASS"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1794,8 +1829,8 @@
         "app/src/browser/proprium/host/HostApp.tsx",
         "tests/browser/authoring-readingmarks.acceptance.ts"
       ],
-      "host_path": "Narrative list/create/delete actions return revision-checked metadata proposals; Host renders ranges in CodeMirror and review/apply owns mutations. Selected-range delete now has an exact-range and captured-revision resolver, pending Host callback wiring.",
-      "ui_path": "Reader list/jump surface and editor selection capture controls; the new selected-mark removal action preserves editor text and selection.",
+      "host_path": "HostApp wires selected reading-mark removal through an exact selected-range resolver and checks scene identity, saved bytes, captured revisions, clean Draft and composition state before proposing; Host Writer still controls application.",
+      "ui_path": "Reader list/jump and selected-mark removal use the existing editor selection; the Host presents the revision-bound proposal for review.",
       "existing_tests": [
         "plugins/narrative/src/actions.test.ts: reading marks preserve malformed rows, YAML comments and unknown fields with UTF-16 spans",
         "plugins/narrative/src/actions.test.ts: reading mark navigation validates saved UTF-16 range and rejects stale marks",
@@ -1803,12 +1838,10 @@
         "tests/browser/authoring-readingmarks.acceptance.ts: add, list, jump and selected-range removal browser flow"
       ],
       "gaps": [
-        "HostApp selected-range delete callback is not present in this branch; shared Host wiring is pending.",
-        "The updated signed browser test has only been parsed, not run; NAR-A11 dirty Draft, malformed legacy rows, stale removal and full Desktop/Mobile review matrix also remain to verify."
+        "Selected-range removal callback and stale guards exist in current HostApp; the signed run failed earlier at the empty Work Outline and did not reach this UI. Dirty Draft, malformed legacy rows, stale removal and full Desktop/Mobile review remain unverified."
       ],
       "required_fixes": [
-        "Integrate Host list/unique exact selection/revision guards and typed reading-marks.delete proposal callback.",
-        "Run current signed browser acceptance and finish the NAR-A11 preservation/stale/dirty Draft matrix."
+        "Repair the observed empty Work Outline; run the signed browser review/apply/reject, stale-source, malformed-row and dirty-Draft cases and verify source bytes and editor selection."
       ],
       "dependencies": [
         "NAR-02",
@@ -1819,12 +1852,9 @@
       ],
       "priority": "P1",
       "verification": [
-        "PASS: Narrative plugin test suite (30 tests)",
-        "PASS: Narrative reading-mark component unit tests",
-        "PASS: Playwright parsed updated reading-mark test (listing only)",
-        "FAIL / integration pending: app typecheck reports missing HostApp removeSelected prop until shared Host callback lands",
-        "NOT_RUN: selected delete signed browser flow and remaining NAR-A11 acceptance"
+        "NOT_CHECKED: Current signed browser run failed before the reading-mark flow was reached."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1841,8 +1871,8 @@
         "app/src/browser/proprium/host/HostApp.tsx",
         "tests/browser/authoring-navigation.acceptance.ts"
       ],
-      "host_path": "The guest lists and proposes bounded Git marker metadata; Host validates the active saved position and author/repository scope, then submits a reviewable proposal. Capture/propose callback wiring is pending the shared Host branch.",
-      "ui_path": "端末別の保存位置 list/validate/open surface plus the new 現在の位置を共有用に提案 action; Host Review controls local application and explicit publication remains separate.",
+      "host_path": "HostApp captures only the current saved clean manuscript position, revalidates scene/revision/cursor identity on proposal and sends the marker through the normal Narrative Host proposal broker; publication remains a separate explicit action.",
+      "ui_path": "The mounted Narrative portable-resume surface lists, validates and opens per-device positions and offers a reviewed marker proposal; Host Review controls local apply.",
       "existing_tests": [
         "plugins/narrative/src/actions.test.ts: resume.marks.list pages scoped markers and checks linked body revisions",
         "plugins/narrative/src/actions.test.ts: resume.mark.propose updates/creates only this device marker and preserves unknown YAML",
@@ -1851,12 +1881,10 @@
         "tests/browser/authoring-navigation.acceptance.ts: portable marker creation is reviewed and remains local until explicit publication"
       ],
       "gaps": [
-        "Host capture/propose wiring is not present in this branch; shared Host integration is pending.",
-        "The new local-only browser test has only been parsed, not executed; two-profile publication/synchronization, rejected proposal, duplicate marker and offline cases remain unverified."
+        "Host capture/propose and mounted UI exist in current source. The signed run failed earlier at the empty Work Outline and did not reach this flow. Two-profile publish/sync, rejected/stale proposal and offline behavior remain unverified."
       ],
       "required_fixes": [
-        "Integrate the Host callback with saved clean GitHub scene position and exact current source marker revision; reject dirty, composing, stale or unbound workspaces.",
-        "Run the signed browser proposal/review/local-only case and verify two-profile explicit publish/sync and stale/offline safety."
+        "Repair the observed empty Work Outline; run signed local-only, reject/stale, duplicate-marker and offline scenarios, then verify cross-profile visibility only after explicit publish/sync."
       ],
       "dependencies": [
         "NAR-03",
@@ -1866,11 +1894,9 @@
       ],
       "priority": "P1",
       "verification": [
-        "PASS: Narrative resume guest tests and portable marker component tests",
-        "PASS: Playwright parsed updated navigation test (listing only)",
-        "FAIL / integration pending: app typecheck reports missing HostApp capture/propose props until shared Host callbacks land",
-        "NOT_RUN: fresh create/review/local-only browser path and two-profile publish/sync acceptance"
+        "NOT_CHECKED: Current signed browser run failed before the portable-resume flow was reached."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1917,6 +1943,7 @@
           "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
         }
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -1965,6 +1992,7 @@
           "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
         }
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2013,6 +2041,7 @@
           "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
         }
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2058,6 +2087,7 @@
           "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
         }
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2102,6 +2132,7 @@
           "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
         }
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2145,6 +2176,7 @@
           "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
         }
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2193,6 +2225,7 @@
           "evidence": "This Publishing lane did not rerun the broad Host suite; only Publishing package tests ran."
         }
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2208,8 +2241,8 @@
         "app/src/browser/proprium/host/authoring/PublishingHostTokenRecovery.tsx",
         "app/src/browser/proprium/host/authoring/PublishingHostTokenRecovery.test.ts"
       ],
-      "host_path": "Repository-retained episode/grant recovery uses pinned workspace.file.read and one workspace.change.propose ChangeSet with source and target preconditions. Retained grants require exact legacy projectId plus typed confirmation of current numeric repository ID and branch; safe extensions survive, sensitive fields/raw bearer-shaped values are rejected, and hierarchy scopes are checked. A separate Host-local importer component parses a user-selected JSON file in memory, strips owner/token-prefix fields and calls the declared hash-only recovery.hostgrants.propose action with the raw-file SHA-256. That action is present and tested in the plugin, but the Host component is not yet mounted or connected to the action dispatcher.",
-      "ui_path": "publishing.episode-map → 旧データの復旧 lists repository-scoped episode/grant sources and offers reviewed proposals. The `PublishingHostTokenRecovery` component has an accessible file picker and explicit mapping controls, but no Host surface currently mounts it, so browser-local token-map recovery has no reachable user flow yet.",
+      "host_path": "HostApp mounts PublishingHostTokenRecovery under the active Publishing registration. It parses a user-selected file in memory, removes owner/token-prefix values and dispatches the declared hash-only recovery.hostgrants.propose action after the explicit user gesture; normal Host Review owns any resulting mutation.",
+      "ui_path": "Mounted Publishing recovery component provides the local JSON file picker, explicit identity mapping and a proposal preview; repository-retained episode/grant recovery remains a separate source path.",
       "existing_tests": [
         "plugins/publishing/guest.test.ts: legacy episode recovery proposes exact source bytes with source and absent-target guards",
         "plugins/publishing/guest.test.ts: retained hashed grants require an explicit repository and branch mapping and use a guarded Host proposal",
@@ -2220,13 +2253,10 @@
         "tests/browser/authoring-publishing.acceptance.ts: signed retained episode and grant recovery controls submit reviewed proposals"
       ],
       "gaps": [
-        "Host token-recovery component is not mounted and its inspect/propose callbacks are not connected to `recovery.hostgrants.propose`; local-source recovery is not yet usable from the Host UI.",
-        "The updated signed Publishing browser acceptance has been listed but not run in Chromium or Mobile WebKit on the integrated signed registry.",
-        "No real browser/e2e run has verified install, approval, apply, reload and offline recovery for the retained grant import path."
+        "The Host file importer is now mounted and connected in the current source, but neither this local file path nor repository-retained grant recovery has current signed browser proof for approval, rejection, reload, offline and secret non-disclosure."
       ],
       "required_fixes": [
-        "Mount the Host-owned local file recovery component in an appropriate Host UI and connect its callbacks to the UI-only Publishing action under the exact Host scope and fresh gesture.",
-        "Run the signed Publishing browser acceptance in Chromium and Mobile WebKit and inspect both ChangeSet diffs."
+        "Run the signed Publishing browser acceptance on Desktop and Mobile for local import and retained grants; inspect both proposal diffs and verify raw token values never enter guest calls, Git files or browser console."
       ],
       "dependencies": [
         "workspace.file.read",
@@ -2237,27 +2267,9 @@
       ],
       "priority": "P2",
       "verification": [
-        {
-          "command": "pnpm --filter @proprium/plugin-publishing test",
-          "result": "PASS",
-          "evidence": "Fresh run on this worktree; 43 tests passed."
-        },
-        {
-          "command": "pnpm --filter @proprium/plugin-publishing typecheck",
-          "result": "PASS",
-          "evidence": "Fresh strict TypeScript check on this worktree."
-        },
-        {
-          "command": "pnpm exec playwright test --config tests/browser/authoring-publishing.playwright.config.ts --list",
-          "result": "PASS",
-          "evidence": "The signed Publishing acceptance is registered for desktop Chromium and Mobile WebKit. Listing is not execution."
-        },
-        {
-          "command": "pnpm exec playwright test --config tests/browser/authoring-publishing.playwright.config.ts",
-          "result": "NOT_CHECKED",
-          "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
-        }
+        "NOT_CHECKED: Host component and action wiring are source-present; browser install/review/apply/reload/offline recovery has not been certified."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2309,6 +2321,7 @@
         "accept-pw-01",
         "accept-pw-11"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2357,6 +2370,7 @@
       "acceptance_ids": [
         "accept-pw-02"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2404,6 +2418,7 @@
       "acceptance_ids": [
         "accept-pw-03"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2452,6 +2467,7 @@
       "acceptance_ids": [
         "accept-pw-04"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2500,6 +2516,7 @@
       "acceptance_ids": [
         "accept-pw-05"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2546,6 +2563,7 @@
       "acceptance_ids": [
         "accept-pw-06"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2593,6 +2611,7 @@
       "acceptance_ids": [
         "accept-pw-07"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2640,6 +2659,7 @@
       "acceptance_ids": [
         "accept-pw-07"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2685,6 +2705,7 @@
       "acceptance_ids": [
         "accept-pw-07"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2731,6 +2752,7 @@
       "acceptance_ids": [
         "accept-pw-07"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2778,6 +2800,7 @@
       "acceptance_ids": [
         "accept-pw-07"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2830,6 +2853,7 @@
         "accept-pw-06",
         "accept-pw-07"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2877,6 +2901,7 @@
       "acceptance_ids": [
         "accept-pw-08"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2922,6 +2947,7 @@
       "acceptance_ids": [
         "accept-pw-09"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -2973,6 +2999,7 @@
       "acceptance_ids": [
         "accept-pw-10"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3021,6 +3048,7 @@
         "accept-pw-07",
         "accept-pw-10"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3069,6 +3097,7 @@
         "accept-pw-01",
         "accept-pw-11"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3118,6 +3147,7 @@
         "accept-pw-02",
         "accept-pw-08"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3164,6 +3194,7 @@
       "acceptance_ids": [
         "accept-pw-06"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3211,6 +3242,7 @@
         "accept-pw-08",
         "accept-pw-10"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3268,6 +3300,7 @@
         "accept-pw-10",
         "accept-pw-21"
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3308,6 +3341,7 @@
         "Research suite: 30 passed including UI-only fusion envelope/source-span checks.",
         "Host component and unit test exist in parent integration commit 6aa641b; current signed browser acceptance is not checked."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3345,6 +3379,7 @@
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3379,6 +3414,7 @@
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3392,18 +3428,18 @@
         "plugins/research/plugin.json",
         "plugins/research/nlp.ts"
       ],
-      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
-      "ui_path": "No CodeMirror decoration contribution is wired by Research; Host editor owns decorations and selection. Research exposes research.terms.resolve.",
+      "host_path": "Research.terms.resolve returns exact revision-bound ranges. A generic termAdornmentsExtension exists in ManuscriptInput, but current HostApp/RestoredEditor does not provide this Research resolver/navigator to that extension.",
+      "ui_path": "Research exposes research.terms.resolve and candidate/term panels. Research-specific CodeMirror adornments and navigation are not connected to the active Host editor.",
       "existing_tests": [
         "plugins/research/core.test.ts",
         "plugins/research/guest.test.ts",
         "app/src/editor/terms.test.ts"
       ],
       "gaps": [
-        "Resolver computes exact ranges/collisions; Host CodeMirror decoration lifecycle is absent from the current Research path."
+        "The generic editor adornment module is source-present; no current Host path supplies Research term resolutions and exact navigation callbacks, so Research highlighting is not user-visible."
       ],
       "required_fixes": [
-        "Host editor to request research.terms.resolve and render non-editing decorations; verify NFKC/emoji/IME/undo in RES-A004."
+        "Pass the Research resolver and guarded navigator through HostApp to the retained editor extension; verify normalization collisions, Japanese/emoji offsets, IME, undo and stale revisions on browser."
       ],
       "dependencies": [
         "Host CodeMirror term-decorations lifecycle",
@@ -3415,6 +3451,7 @@
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3453,6 +3490,7 @@
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3488,6 +3526,7 @@
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3521,6 +3560,7 @@
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3555,6 +3595,7 @@
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3589,6 +3630,7 @@
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3623,6 +3665,7 @@
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3656,6 +3699,7 @@
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3688,6 +3732,7 @@
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3724,6 +3769,7 @@
         "Current branch: changed/added files alone are reread; unchanged document records are reused and deleted records dropped.",
         "Progress/cancel acceptance RES-A013 remains unverified."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3738,8 +3784,8 @@
         "plugins/semantic/tasks.ts",
         "plugins/semantic/plugin.json"
       ],
-      "host_path": "app/src/browser/proprium/authoring/service.ts -> app/src/browser/proprium/authoring/tasks.ts -> plugins/shared/guest.ts; durable scheduler and derived-cache prefix operations are being integrated by Host.",
-      "ui_path": "plugins/semantic/plugin.json -> Host SemanticTaskControls in app/src/browser/proprium/host/authoring/SemanticTaskControls.tsx; Research rebuild/prepare control.",
+      "host_path": "Host BrowserAuthoringService drives one signed Semantic index.step action per private task permit; AuthoringTaskRegistry keeps scoped status/cancel/resume metadata in IndexedDB and derived-cache operations use the normal capability dispatcher.",
+      "ui_path": "Host SemanticTaskControls is mounted for explicit index build/model preparation and exposes task state, cancel and resume; E5 asset admission uses a separate user-confirmed asset panel.",
       "existing_tests": [
         "plugins/semantic/index-operations.test.ts",
         "plugins/semantic/inference.test.ts",
@@ -3747,14 +3793,10 @@
         "app/src/browser/proprium/host/authoring/SemanticTaskControls.test.tsx"
       ],
       "gaps": [
-        "Host scheduler and cache-prefix operations are not in this isolated branch base.",
-        "Source listing and corpus parsing still run in one scheduler invocation; worst-case browser scan time is not measured.",
-        "No current-main real-browser proof of real model inference, 120-passage timing, reload recovery, quota handling, offline behavior or cross-repository isolation."
+        "Corpus listing/parsing is still one synchronous plugin step, and worst-case scan duration is not measured. The latest signed Chromium run reaches source_scan but has failed with dispatcher invalid_input during cache-prefix preparation; a repair and fresh browser rerun are required. Real inference timing, reload recovery, quota, offline and cross-repository cases remain unverified."
       ],
       "required_fixes": [
-        "Integrate Host durable job journal, private step permits and bounded cache eviction operations.",
-        "Measure corpus scanning under the Host deadline and slice it further if the supported source bound exceeds the budget.",
-        "Run current signed-artifact Browser tests for install, inference, cancellation, reload across a new pin ID/scope generation, same-source resume and previous-manifest preservation."
+        "Resolve the current dispatcher failure and rerun signed Desktop browser indexing, cancellation, same-snapshot reload resume, quota and offline cases. Measure worst-case source scan; if its bounded source limit exceeds the Host step budget, slice scan/parser state rather than increasing timeouts."
       ],
       "dependencies": [
         "Host private job scheduler",
@@ -3769,6 +3811,7 @@
         "PASS: pnpm --dir plugins/semantic test (48 tests plus asset-build test) on this worktree; covers >256 passages, checksum pages, cross-snapshot reuse, wrong-branch cache rejection, warm-only model loading, and fresh-worker resume across rotated pin ID and scope generation with staged-vector revalidation.",
         "NOT_CHECKED: integrated Host scheduler cancellation after a completed vector slice, signed Browser component and desktop/mobile real-model acceptance."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3785,8 +3828,8 @@
         "plugins/semantic/plugin.json",
         "plugins/research/guest.ts"
       ],
-      "host_path": "Research calls proprium.semantic.passages.query through Host plugin dispatch; query verifies the current source revision and evidence span before returning results.",
-      "ui_path": "app/src/browser/proprium/host/authoring/ResearchSemanticSearch.tsx (branch feat/authoring-semantic-search-ui, commit 6aa641b); HostApp mount remains pending integration.",
+      "host_path": "ResearchSemanticSearch invokes the Research hybrid action, which calls Semantic passages.query through Host dependency dispatch; Host revalidates returned quote spans before navigation. The exact pinned BGE component exists as a standalone component, while signed-asset admission and a separately consented Host reranker profile are still in progress.",
+      "ui_path": "Mounted app/src/browser/proprium/host/authoring/ResearchSemanticSearch.tsx provides hybrid/semantic search controls, source labels, exact quote navigation and lexical fallback. Rerank is unavailable until the BGE Host admission and action path is integrated.",
       "existing_tests": [
         "plugins/semantic/index-operations.test.ts",
         "plugins/semantic/index.test.ts",
@@ -3795,12 +3838,10 @@
         "plugins/research/guest.test.ts"
       ],
       "gaps": [
-        "The exact BGE reranker has no runtime path; proprium.semantic.rerank returns model_unavailable.",
-        "Real browser E5 inference, RRF source navigation, performance and offline cache behavior are not verified."
+        "Current signed desktop E5 indexing browser case has not passed; source_scan failed while beginning the index. The standalone BGE component has real model scoring evidence, but is not admitted/composed into the signed official Semantic release and has no Host consented rerank path."
       ],
       "required_fixes": [
-        "Integrate and verify exact-fp32 BGE runtime or preserve the explicit unavailable state and leave SEM-A2 failing.",
-        "Complete Research hybrid/RRF UI and run real Browser retrieval with exact source navigation."
+        "Pass real signed E5 inference/query/navigation/offline browser checks, then finish the separate consented BGE signed asset, capacity, Host profile, source revalidation and bounded range-read flow and verify reranking with exact cited spans."
       ],
       "dependencies": [
         "SEM-01 current index and resident E5 model",
@@ -3813,31 +3854,32 @@
         "PASS: Semantic package unit/asset tests cover ranking, source evidence, stale-source rejection and model transfer bounds.",
         "NOT_CHECKED: actual browser inference and reranker."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
       "feature_id": "SEM-03",
       "plugin_id": "proprium.semantic",
       "requirement": "Find expressive sentences in Research search while retaining and labeling the remaining results and their exact navigable sources.",
-      "status": "MISSING",
+      "status": "PARTIAL",
       "implementation_files": [
         "plugins/research/guest.ts",
         "plugins/research/plugin.json",
-        "plugins/semantic/plugin.json"
+        "plugins/semantic/plugin.json",
+        "app/src/browser/proprium/host/authoring/ResearchSemanticSearch.tsx",
+        "app/src/browser/proprium/host/HostApp.tsx"
       ],
-      "host_path": "Research owns lexical/provider composition; Semantic only supplies passages.query and does not expose an expression contribution action.",
-      "ui_path": "No expression mode exists in HostApp at base SHA. A Search UI component is available only on unmerged branch feat/authoring-semantic-search-ui at commit 6aa641b.",
+      "host_path": "Research owns lexical/semantic composition and expression candidate prioritization; Semantic supplies revision-bound passages.query through Host dependency dispatch. The Host search surface is mounted in HostApp.",
+      "ui_path": "Mounted ResearchSemanticSearch provides the expression-priority control, keeps the remaining results visible/labeled and routes selected exact source spans through Host navigation.",
       "existing_tests": [
         "plugins/research/guest.test.ts",
         "plugins/semantic/index-operations.test.ts"
       ],
       "gaps": [
-        "No expression-result filter/order contribution is wired to the user search UI at base SHA.",
-        "Unmerged ResearchSemanticSearch component does not yet have its Research fusion action or HostApp mount; no real-model browser run."
+        "The feature is implemented in the current source; no signed browser run has yet proven expression prioritization together with retained result ordering, exact-span navigation and return state. Current desktop signed Semantic index preparation remains failing earlier in source_scan."
       ],
       "required_fixes": [
-        "Merge and integrate Research-owned expression mode using the pinned tokenizer; preserve the full result set with labels.",
-        "Run Browser coverage for expression prioritization, exact-span navigation and return."
+        "Run signed Desktop/Mobile browser checks for expression candidates, retained/labeled remaining hits, exact-span navigation and return state after repairing the Semantic source_scan Host failure."
       ],
       "dependencies": [
         "Research tokenizer",
@@ -3846,8 +3888,9 @@
       ],
       "priority": "P1",
       "verification": [
-        "NOT_CHECKED: audited base SHA has no expression mode or expression-specific Browser test; component work is on an unmerged branch."
+        "PARTIAL: Research fusion and mounted Host controls are present; current browser behavior has not yet passed this expression-specific scenario."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3888,6 +3931,7 @@
         "PASS: source tests cover deterministic clustering and an embedding-only semantic pair using supplied vectors.",
         "NOT_CHECKED: real E5 and Browser author loop."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3929,6 +3973,7 @@
         "PASS: Semantic package tests cover mention filtering, midband scoring and evidence spans with deterministic vectors.",
         "NOT_CHECKED: real-model Diagnostics Browser workflow and mobile UI."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -3966,35 +4011,32 @@
         "PASS: Semantic source tests cover preference read and Host form routing.",
         "NOT_CHECKED: browser-profile persistence, network and Git side effects."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
       "feature_id": "SEM-07",
       "plugin_id": "proprium.semantic",
       "requirement": "Recover author-reviewed contradiction dismissals while retaining Diagnostics as the sole owner of review decisions.",
-      "status": "MISSING",
+      "status": "PARTIAL",
       "implementation_files": [
         "plugins/diagnostics/guest.ts",
-        "plugins/diagnostics/tests/feedbackGuest.test.ts",
-        "plugins/semantic/guest.ts",
+        "plugins/diagnostics/plugin.json",
+        "app/src/browser/proprium/host/authoring/DiagnosticsFindings.tsx",
         "docs/canon/plugins/SEMANTIC.md"
       ],
-      "host_path": "Diagnostics owns current feedback.yaml proposals; Semantic emits candidate identities and does not persist dismissals. The legacy dismissal reader/preview/migration path is absent at the audited base SHA.",
-      "ui_path": "Current Diagnostics feedback/review controls in plugins/diagnostics/plugin.json; there is no legacy dismissal migration preview.",
+      "host_path": "Diagnostics guest provides read-only legacy JSONL inspect and explicit reviewed migration actions while Diagnostics feedback remains the single decision owner. Host DiagnosticsFindings includes the migration preview component but it is not yet mounted in HostApp.",
+      "ui_path": "A Host-owned DiagnosticsFindings component provides the read-only legacy dismissal preview, conflict/unresolved display and selected-row proposal controls; HostApp integration is pending.",
       "existing_tests": [
         "plugins/diagnostics/tests/feedbackGuest.test.ts",
         "plugins/diagnostics/tests/sceneGuest.test.ts",
         "plugins/semantic/index-operations.test.ts"
       ],
       "gaps": [
-        "No reader or preview recognizes the legacy `meta/scriptorium/modules/semantic/contradiction-dismissals.jsonl`; current feedback.yaml code handles only current Diagnostics proposals.",
-        "No migration preserves unknown legacy fields or previews conflicts between legacy decisions and existing Diagnostics proposals.",
-        "No end-to-end browser migration preview/recovery path."
+        "Guest inspect/propose preserves opaque legacy rows and unknown fields and proposes only to Diagnostics feedback. The migration controls are not yet mounted in the signed Host UI; browser preview/reload/stale/conflict verification is outstanding."
       ],
       "required_fixes": [
-        "Implement read-only legacy dismissal discovery and a Diagnostics-owned explicit migration proposal that preserves opaque source bytes until Host review.",
-        "Add fixture coverage for malformed/unknown JSONL fields, conflicting decisions, reload and unchanged source bytes; then verify migration in Browser.",
-        "Verify uninstalling Semantic only evicts derived cache and never deletes author feedback."
+        "Mount the Diagnostics legacy migration controls in HostApp and verify discovery, unchanged source bytes, unknown-field preservation, explicit selected migration, conflict/stale/reject behavior and reload on signed Desktop/Mobile."
       ],
       "dependencies": [
         "Diagnostics feedback owner",
@@ -4003,8 +4045,9 @@
       ],
       "priority": "P2",
       "verification": [
-        "NOT_CHECKED: targeted source inspection found no legacy dismissal reader/preview/migration in the audited base SHA; Diagnostics package/browser migration tests were not run in this Semantic worktree."
+        "PARTIAL: guest and component tests exist; no signed Browser migration flow has run."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -4042,6 +4085,7 @@
         "PASS: source tests cover Diagnostics route shapes and Semantic evidence output with deterministic vectors.",
         "NOT_CHECKED: Browser review flow on desktop/mobile."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -4079,6 +4123,7 @@
       "verification": [
         "NOT_CHECKED: cross-plugin Browser/disabled-plugin workflow was not run in this Semantic worktree."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -4112,6 +4157,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -4152,6 +4198,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -4188,6 +4235,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -4222,6 +4270,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -4258,6 +4307,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -4291,6 +4341,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -4328,6 +4379,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -4365,6 +4417,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -4402,6 +4455,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -4438,6 +4492,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -4476,6 +4531,7 @@
           "requirement": "Restore preserved correction/model files (`RECOVERY`)\naccept-spk-a11 — From the `speaker.recovery` panel, inspect the legacy correction/model files, then request migration with an idempotency key. Verify only absent targets are proposed through Host review and that proposal operations contain the exact original bytes and source/target revisions. Identical target reports unchanged; conflicting target remains untouched and reviewable; disabled Speaker makes no proposal. Preserve unknown JSON fields, malformed lines and original bytes; reject/stale review leaves all source and target files unchanged."
         }
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     },
     {
@@ -4513,6 +4569,7 @@
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
       ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
     }
   ]

@@ -34,7 +34,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-02",
@@ -66,7 +67,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-03",
@@ -99,7 +101,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-04",
@@ -132,7 +135,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-05",
@@ -166,7 +170,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-06",
@@ -199,7 +204,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-07",
@@ -230,7 +236,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-08",
@@ -263,7 +270,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-09",
@@ -294,7 +302,8 @@
       "priority": "P1",
       "verification": [
         "Knowledge graph unit tests cover legacy tree ordering; current integrated Narrative browser proof is not present in this audit."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-10",
@@ -329,7 +338,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-11",
@@ -362,7 +372,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-12",
@@ -392,7 +403,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-13",
@@ -427,7 +439,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-14",
@@ -460,7 +473,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-15",
@@ -493,7 +507,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-16",
@@ -526,7 +541,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-17",
@@ -559,7 +575,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-18",
@@ -592,7 +609,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-19",
@@ -628,7 +646,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-20",
@@ -662,7 +681,8 @@
       "verification": [
         "Knowledge suite: 55 passed including shared-scene-cursor projection test.",
         "Scene Lens UI assertion added to tests/browser/authoring-knowledge.acceptance.ts; signed browser execution not checked."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-21",
@@ -694,7 +714,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-22",
@@ -729,7 +750,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-23",
@@ -763,7 +785,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-24",
@@ -812,7 +835,8 @@
           "scope": "Knowledge source-bound suggestion ingestion and review",
           "status": "UNVERIFIED"
         }
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "KNO-25",
@@ -845,7 +869,8 @@
         "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
         "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
         "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "RES-001",
@@ -884,7 +909,8 @@
       "verification": [
         "Research suite: 30 passed including UI-only fusion envelope/source-span checks.",
         "Host component and unit test exist in parent integration commit 6aa641b; current signed browser acceptance is not checked."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "RES-002",
@@ -920,7 +946,8 @@
         "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "RES-003",
@@ -953,7 +980,8 @@
         "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "RES-004",
@@ -966,18 +994,18 @@
         "plugins/research/plugin.json",
         "plugins/research/nlp.ts"
       ],
-      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
-      "ui_path": "No CodeMirror decoration contribution is wired by Research; Host editor owns decorations and selection. Research exposes research.terms.resolve.",
+      "host_path": "Research.terms.resolve returns exact revision-bound ranges. A generic termAdornmentsExtension exists in ManuscriptInput, but current HostApp/RestoredEditor does not provide this Research resolver/navigator to that extension.",
+      "ui_path": "Research exposes research.terms.resolve and candidate/term panels. Research-specific CodeMirror adornments and navigation are not connected to the active Host editor.",
       "existing_tests": [
         "plugins/research/core.test.ts",
         "plugins/research/guest.test.ts",
         "app/src/editor/terms.test.ts"
       ],
       "gaps": [
-        "Resolver computes exact ranges/collisions; Host CodeMirror decoration lifecycle is absent from the current Research path."
+        "The generic editor adornment module is source-present; no current Host path supplies Research term resolutions and exact navigation callbacks, so Research highlighting is not user-visible."
       ],
       "required_fixes": [
-        "Host editor to request research.terms.resolve and render non-editing decorations; verify NFKC/emoji/IME/undo in RES-A004."
+        "Pass the Research resolver and guarded navigator through HostApp to the retained editor extension; verify normalization collisions, Japanese/emoji offsets, IME, undo and stale revisions on browser."
       ],
       "dependencies": [
         "Host CodeMirror term-decorations lifecycle",
@@ -988,7 +1016,8 @@
         "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "RES-005",
@@ -1025,7 +1054,8 @@
         "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "RES-006",
@@ -1059,7 +1089,8 @@
         "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "RES-007",
@@ -1091,7 +1122,8 @@
         "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "RES-008",
@@ -1124,7 +1156,8 @@
         "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "RES-009",
@@ -1157,7 +1190,8 @@
         "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "RES-010",
@@ -1190,7 +1224,8 @@
         "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "RES-011",
@@ -1222,7 +1257,8 @@
         "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "RES-012",
@@ -1253,7 +1289,8 @@
         "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
         "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
         "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "RES-013",
@@ -1288,7 +1325,11 @@
       "verification": [
         "Current branch: changed/added files alone are reread; unchanged document records are reused and deleted records dropped.",
         "Progress/cancel acceptance RES-A013 remains unverified."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     }
-  ]
+  ],
+  "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
+  "assessed_at": "2026-10-29",
+  "assessment_scope": "Reconciled against this source snapshot. Prior base_sha is retained as the original audit anchor. Implementation status does not substitute for the current R01–R14 acceptance result. Browser failures and unsupported coverage remain explicit."
 }

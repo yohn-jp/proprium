@@ -23,11 +23,10 @@
         "tests/browser/authoring-official.acceptance.spec.ts: signed Narrative explains an unrecognized repository and leaves generic Files available"
       ],
       "gaps": [
-        "The guest tests pass, but the signed browser test has not been executed against the integrated current worktree.",
-        "The new unrecognized-repository browser assertion has only been parsed by Playwright, not executed."
+        "A current signed browser run opened a workspace containing 604 local Git files, but the Narrative structure panel showed no work items for a seeded “Volume One” before its later checks could run. The exact cause and repeat on the current signed Narrative artifact remain under investigation. Generic Files stays available; no acceptance PASS is inferred."
       ],
       "required_fixes": [
-        "Run the fresh signed browser acceptance for recognized and unrecognized repositories and record the rendered status and generic Files path."
+        "Trace the seeded workspace through Narrative recognition, hierarchy.tree, Host paging and the visible Work Outline; repair the first failing boundary and rerun the signed Desktop and Mobile flow."
       ],
       "dependencies": [
         "workspace.identity.read",
@@ -37,10 +36,9 @@
       ],
       "priority": "P0",
       "verification": [
-        "PASS: pnpm --filter @proprium/plugin-narrative test (30 tests)",
-        "PASS: pnpm --filter @proprium/plugin-narrative typecheck",
-        "NOT_RUN: fresh signed browser acceptance"
-      ]
+        "FAIL: Current Host browser flow with the 855a44e signed plugin fixture reached an empty Narrative structure despite the seeded file tree; the volume assertion timed out on Desktop and Mobile before subsequent acceptance steps. Retest the current signed artifact."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "NAR-02",
@@ -62,10 +60,10 @@
         "tests/browser/authoring-official.acceptance.spec.ts: signed Narrative installs and navigates a large work in the real Host"
       ],
       "gaps": [
-        "Current browser proof has not been run on this integrated branch; unit action coverage is not proof of the Host navigation path."
+        "The current signed large-work browser scenario did not show its seeded volume in the Work Outline, so scene paging/navigation and linked manuscript-open assertions did not execute. Unit action tests do not establish the Host path."
       ],
       "required_fixes": [
-        "Run the signed large-work browser flow and verify the exact linked body opens without eager manuscript reads."
+        "Repair the observed empty Outline path; rerun the signed large-work scenario and verify exact linked manuscript bytes open without eager manuscript reads."
       ],
       "dependencies": [
         "NAR-01",
@@ -75,9 +73,9 @@
       ],
       "priority": "P0",
       "verification": [
-        "PASS: Narrative plugin guest test suite, including paged tree and explicit link",
-        "NOT_RUN: fresh signed desktop and mobile browser acceptance"
-      ]
+        "NOT_CHECKED after the earlier NAR-01 failure: hierarchy tree and scene navigation assertions were not reached."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "NAR-03",
@@ -116,7 +114,8 @@
       "verification": [
         "PASS: Narrative component and guest validation tests",
         "NOT_RUN: fresh reload/stale/foreign browser acceptance"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "NAR-04",
@@ -153,7 +152,8 @@
       "verification": [
         "PASS: Narrative action tests for scene metadata/body proposal",
         "NOT_RUN: fresh signed creation browser acceptance"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "NAR-05",
@@ -167,8 +167,8 @@
         "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx",
         "app/src/browser/proprium/host/authoring/WorkspaceAuthoringPanels.tsx"
       ],
-      "host_path": "The UI submits the complete same-parent sibling set and expected tree revision through structure.reorder; Host reviews and applies the resulting ChangeSet.",
-      "ui_path": "Accessible chapter/scene move controls and declarative reorder forms in Work Outline.",
+      "host_path": "The accessible ordered-list controls in app/src/browser/proprium/host/authoring/AuthoringSurface.tsx submit the complete sibling set and expected tree revision through structure.reorder; the Host reviews and applies the resulting ChangeSet.",
+      "ui_path": "Work Outline declarative reorder fields expose labeled up/down buttons; user reviews the proposed sibling ordering in Host AuthoringReview.",
       "existing_tests": [
         "plugins/narrative/src/actions.test.ts: manifest action inventory and closed output schemas match the guest contract",
         "plugins/narrative/src/actions.test.ts: hierarchy keeps tied and missing order rows accessible with diagnostics",
@@ -176,11 +176,10 @@
         "tests/browser/authoring-official.acceptance.spec.ts: signed Narrative reorders chapters and scenes with accessible move controls"
       ],
       "gaps": [
-        "The accessible Host ordered-list controls are implemented in companion commit 966b44bbf217480d0f15e464e62fe4c6fdb66b1d but are not yet integrated into this Narrative worktree.",
-        "The new signed browser test has only been parsed by Playwright; the review/apply and persisted sibling order path is not yet run."
+        "Ordered-list controls are integrated in the current Host source, but the signed browser run failed on the empty Work Outline before the reorder flow was reached. Review/apply and persisted order remain unverified."
       ],
       "required_fixes": [
-        "Integrate the companion Host commit and run the signed browser acceptance for accessible chapter and scene ordering, review and saved order."
+        "Repair the observed empty Work Outline path, then run the signed browser acceptance for accessible chapter and scene ordering, review and saved order."
       ],
       "dependencies": [
         "NAR-02",
@@ -189,10 +188,9 @@
       ],
       "priority": "P0",
       "verification": [
-        "PASS: Narrative action/schema tests",
-        "PASS: companion Host commit 966b44bbf217480d0f15e464e62fe4c6fdb66b1d unit tests 19/19, typecheck, and diff check; not yet integrated",
-        "NOT_RUN: signed accessible reorder browser acceptance"
-      ]
+        "NOT_CHECKED: Playwright collection succeeds; the current Desktop/Mobile run fails earlier at the seeded volume visibility assertion and never reaches reorder."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "NAR-06",
@@ -230,7 +228,8 @@
       "verification": [
         "PASS: Narrative guest tests for guarded rename/relink",
         "NOT_RUN: fresh signed title/relink browser acceptance"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "NAR-07",
@@ -268,7 +267,8 @@
       "verification": [
         "PASS: existing targeted Host writing-resume unit tests in repository history; not rerun as full suite for this branch",
         "NOT_RUN: fresh NAR-A07 desktop/mobile browser acceptance"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "NAR-08",
@@ -283,8 +283,8 @@
         "app/src/browser/proprium/host/HostApp.tsx",
         "tests/browser/authoring-navigation.acceptance.ts"
       ],
-      "host_path": "Next-scene navigation is connected through NarrativeNavigation and scene.open; quick append requires Host RestoredEditor append registration and idempotent BrowserJournal persistence; scratch remains Host-owned.",
-      "ui_path": "Quick append component exposes read-only last-three-paragraph context and IME-capable text input; signed browser tests cover append and next-scene routes when Host wiring lands.",
+      "host_path": "HostApp registers the existing editor quick-append callback with the durable BrowserJournal and mounts NarrativeQuickAppend for a clean selected manuscript; next-scene navigation remains Host-guarded. Scratch position and quota are Host-owned.",
+      "ui_path": "Mounted NarrativeQuickAppend shows read-only recent paragraphs and an IME-capable append field for the clean selected scene; Work Outline exposes next-scene navigation.",
       "existing_tests": [
         "app/src/browser/proprium/host/authoring/NarrativeNavigation.test.ts",
         "app/src/browser/proprium/host/authoring/NarrativeQuickAppend.test.ts",
@@ -292,13 +292,10 @@
         "tests/browser/authoring-navigation.acceptance.ts: Mobile quick append writes to the existing editor and keeps the exact text locally"
       ],
       "gaps": [
-        "NarrativeQuickAppend is not yet mounted/wired to HostApp in this branch; shared Host integration is pending.",
-        "The new append browser test has only been listed by Playwright, not run.",
-        "NAR-A08 scratch reload, current-scene binding, camera quota and unsupported voice checks remain outside this Narrative component test."
+        "Quick append is mounted in current HostApp source. The signed run failed earlier at the empty Work Outline and did not reach append/navigation. Scratch reload, current-scene binding, camera quota and unsupported voice checks also remain unverified."
       ],
       "required_fixes": [
-        "Integrate the Host append registration with stable operation IDs and awaited journal writes.",
-        "Run the signed Mobile append/navigation acceptance and verify text scratch reload/binding and camera capacity in the Host acceptance suite."
+        "Repair the observed empty Work Outline path; run signed Mobile append/navigation, then verify scratch reload/binding, camera capacity and unsupported voice behavior in Host acceptance."
       ],
       "dependencies": [
         "Host RestoredEditor append operation",
@@ -308,10 +305,9 @@
       ],
       "priority": "P0",
       "verification": [
-        "PASS: NarrativeNavigation and NarrativeQuickAppend component tests",
-        "PASS: Playwright parsed the updated navigation acceptance (listing only)",
-        "NOT_RUN: browser append, scratch, and camera acceptance"
-      ]
+        "NOT_CHECKED: Current signed browser run failed before the quick-append control was reached."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "NAR-09",
@@ -352,7 +348,8 @@
       "verification": [
         "PASS: targeted Narrative guest malformed, scale and preservation tests",
         "NOT_RUN: full current Host failure/disable/offline browser matrix"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "NAR-10",
@@ -391,7 +388,8 @@
       "verification": [
         "PASS: targeted Narrative compiler unit tests listed above",
         "FROZEN: NAR-A10 full Paired integration acceptance not run and not counted as PASS"
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "NAR-11",
@@ -407,8 +405,8 @@
         "app/src/browser/proprium/host/HostApp.tsx",
         "tests/browser/authoring-readingmarks.acceptance.ts"
       ],
-      "host_path": "Narrative list/create/delete actions return revision-checked metadata proposals; Host renders ranges in CodeMirror and review/apply owns mutations. Selected-range delete now has an exact-range and captured-revision resolver, pending Host callback wiring.",
-      "ui_path": "Reader list/jump surface and editor selection capture controls; the new selected-mark removal action preserves editor text and selection.",
+      "host_path": "HostApp wires selected reading-mark removal through an exact selected-range resolver and checks scene identity, saved bytes, captured revisions, clean Draft and composition state before proposing; Host Writer still controls application.",
+      "ui_path": "Reader list/jump and selected-mark removal use the existing editor selection; the Host presents the revision-bound proposal for review.",
       "existing_tests": [
         "plugins/narrative/src/actions.test.ts: reading marks preserve malformed rows, YAML comments and unknown fields with UTF-16 spans",
         "plugins/narrative/src/actions.test.ts: reading mark navigation validates saved UTF-16 range and rejects stale marks",
@@ -416,12 +414,10 @@
         "tests/browser/authoring-readingmarks.acceptance.ts: add, list, jump and selected-range removal browser flow"
       ],
       "gaps": [
-        "HostApp selected-range delete callback is not present in this branch; shared Host wiring is pending.",
-        "The updated signed browser test has only been parsed, not run; NAR-A11 dirty Draft, malformed legacy rows, stale removal and full Desktop/Mobile review matrix also remain to verify."
+        "Selected-range removal callback and stale guards exist in current HostApp; the signed run failed earlier at the empty Work Outline and did not reach this UI. Dirty Draft, malformed legacy rows, stale removal and full Desktop/Mobile review remain unverified."
       ],
       "required_fixes": [
-        "Integrate Host list/unique exact selection/revision guards and typed reading-marks.delete proposal callback.",
-        "Run current signed browser acceptance and finish the NAR-A11 preservation/stale/dirty Draft matrix."
+        "Repair the observed empty Work Outline; run the signed browser review/apply/reject, stale-source, malformed-row and dirty-Draft cases and verify source bytes and editor selection."
       ],
       "dependencies": [
         "NAR-02",
@@ -432,12 +428,9 @@
       ],
       "priority": "P1",
       "verification": [
-        "PASS: Narrative plugin test suite (30 tests)",
-        "PASS: Narrative reading-mark component unit tests",
-        "PASS: Playwright parsed updated reading-mark test (listing only)",
-        "FAIL / integration pending: app typecheck reports missing HostApp removeSelected prop until shared Host callback lands",
-        "NOT_RUN: selected delete signed browser flow and remaining NAR-A11 acceptance"
-      ]
+        "NOT_CHECKED: Current signed browser run failed before the reading-mark flow was reached."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "NAR-12",
@@ -453,8 +446,8 @@
         "app/src/browser/proprium/host/HostApp.tsx",
         "tests/browser/authoring-navigation.acceptance.ts"
       ],
-      "host_path": "The guest lists and proposes bounded Git marker metadata; Host validates the active saved position and author/repository scope, then submits a reviewable proposal. Capture/propose callback wiring is pending the shared Host branch.",
-      "ui_path": "端末別の保存位置 list/validate/open surface plus the new 現在の位置を共有用に提案 action; Host Review controls local application and explicit publication remains separate.",
+      "host_path": "HostApp captures only the current saved clean manuscript position, revalidates scene/revision/cursor identity on proposal and sends the marker through the normal Narrative Host proposal broker; publication remains a separate explicit action.",
+      "ui_path": "The mounted Narrative portable-resume surface lists, validates and opens per-device positions and offers a reviewed marker proposal; Host Review controls local apply.",
       "existing_tests": [
         "plugins/narrative/src/actions.test.ts: resume.marks.list pages scoped markers and checks linked body revisions",
         "plugins/narrative/src/actions.test.ts: resume.mark.propose updates/creates only this device marker and preserves unknown YAML",
@@ -463,12 +456,10 @@
         "tests/browser/authoring-navigation.acceptance.ts: portable marker creation is reviewed and remains local until explicit publication"
       ],
       "gaps": [
-        "Host capture/propose wiring is not present in this branch; shared Host integration is pending.",
-        "The new local-only browser test has only been parsed, not executed; two-profile publication/synchronization, rejected proposal, duplicate marker and offline cases remain unverified."
+        "Host capture/propose and mounted UI exist in current source. The signed run failed earlier at the empty Work Outline and did not reach this flow. Two-profile publish/sync, rejected/stale proposal and offline behavior remain unverified."
       ],
       "required_fixes": [
-        "Integrate the Host callback with saved clean GitHub scene position and exact current source marker revision; reject dirty, composing, stale or unbound workspaces.",
-        "Run the signed browser proposal/review/local-only case and verify two-profile explicit publish/sync and stale/offline safety."
+        "Repair the observed empty Work Outline; run signed local-only, reject/stale, duplicate-marker and offline scenarios, then verify cross-profile visibility only after explicit publish/sync."
       ],
       "dependencies": [
         "NAR-03",
@@ -478,11 +469,12 @@
       ],
       "priority": "P1",
       "verification": [
-        "PASS: Narrative resume guest tests and portable marker component tests",
-        "PASS: Playwright parsed updated navigation test (listing only)",
-        "FAIL / integration pending: app typecheck reports missing HostApp capture/propose props until shared Host callbacks land",
-        "NOT_RUN: fresh create/review/local-only browser path and two-profile publish/sync acceptance"
-      ]
+        "NOT_CHECKED: Current signed browser run failed before the portable-resume flow was reached."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     }
-  ]
+  ],
+  "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
+  "assessed_at": "2026-10-29",
+  "assessment_scope": "Reconciled against this source snapshot. Prior base_sha is retained as the original audit anchor. Implementation status does not substitute for the current R01–R14 acceptance result. Browser failures and unsupported coverage remain explicit."
 }

@@ -36,7 +36,8 @@
         "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "DIA-02",
@@ -66,7 +67,8 @@
         "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "DIA-03",
@@ -99,7 +101,8 @@
         "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "DIA-04",
@@ -130,7 +133,8 @@
         "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "DIA-05",
@@ -163,7 +167,8 @@
         "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "DIA-06",
@@ -197,7 +202,8 @@
         "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "DIA-07",
@@ -231,7 +237,8 @@
         "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "DIA-08",
@@ -263,7 +270,8 @@
         "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "DIA-09",
@@ -280,18 +288,17 @@
         "plugins/diagnostics/plugin.json",
         "plugins/diagnostics/src/core.ts"
       ],
-      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx",
-      "ui_path": "Host-owned DiagnosticsFindings component (integration pending in HostApp); plugin result and feedback.read.v1 action in plugins/diagnostics/guest.ts",
+      "host_path": "Diagnostics guest supplies normalized current findings and feedback.read.v1; the Host-owned DiagnosticsFindings component is implemented but HostApp mounting remains pending.",
+      "ui_path": "Host-owned DiagnosticsFindings component implements kind/severity/state filters, decision freshness and quoted evidence, but is not yet mounted in HostApp.",
       "existing_tests": [
         "plugins/diagnostics/tests/feedbackGuest.test.ts",
         "plugins/diagnostics/tests/sceneGuest.test.ts"
       ],
       "gaps": [
-        "Kind, severity and open/decided filter logic, stale-decision presentation, and feedback.read.v1 now exist with focused unit coverage. The Host-owned component is not yet mounted in the signed browser flow; report normalization, feedback attachment, actual interaction and reload behavior still require Host integration and browser proof.",
-        "Stable fingerprints exclude ephemeral workspace generation/snapshot IDs while retaining exact source revisions, text/config and analyzer/provider identity; verify unchanged-source decisions survive reload and changed-source/config decisions remain stale in the real Host."
+        "Filter logic, stale-decision presentation and feedback.read.v1 have focused coverage. Host integration of DiagnosticsFindings, report normalization, feedback attachment, proposal approval/reload and actual source navigation are pending."
       ],
       "required_fixes": [
-        "Integrate DiagnosticsFindings with Host-validated scene.run and feedback.read results, then run signed browser checks for kind/severity/state filters, paired evidence navigation, proposal approval/reload, unchanged-source decision retention and changed-source stale display."
+        "Mount DiagnosticsFindings in HostApp with Host-validated scene.run and feedback.read data; verify filters, evidence navigation, review/reload, unchanged-source retention and stale decisions on changed sources in signed browser tests."
       ],
       "dependencies": [
         "proprium.knowledge",
@@ -305,7 +312,8 @@
         "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "DIA-10",
@@ -340,7 +348,8 @@
           "ledger_revision": "da78cf7df4c5ea78713157ba5aa4b852408a5727",
           "requirement": "**FROZEN — Paired Writing-owned cross-plugin chapter first-read report.** Preserve the questions, expectations and confusion report as an interpretive feature; this feature is excluded from the active seven-plugin completion gate while Paired Writing is frozen. `FROZEN` is not `PASS`.\naccept-dia-a12 — Only an explicit user-run request with consented Paired Writing provider receives manuscript context. Result identifies the exact chapter and model/provider, labels questions/expectations/confusion as an interpretation, and cites bounded source context. Network/model unavailable returns a recoverable error while ordinary diagnostics remains available; no report is silently persisted."
         }
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "DIA-11",
@@ -358,19 +367,18 @@
         "plugins/paired-writing/guest.ts",
         "plugins/semantic/guest.ts"
       ],
-      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx",
-      "ui_path": "Host-owned DiagnosticsFindings paired-evidence and legacy-migration controls (HostApp integration pending); scene.run findings plus legacy-dismissals.inspect.v1/propose.v1 actions",
+      "host_path": "Diagnostics guest normalizes deterministic and Semantic paired-evidence findings and implements revision-pinned legacy-dismissals.inspect.v1/propose.v1; the Host review component and legacy controls are not yet mounted.",
+      "ui_path": "Host DiagnosticsFindings contains paired evidence and explicit legacy migration controls as a component, awaiting HostApp integration. The optional Paired Writing verdict stays FROZEN.",
       "existing_tests": [
         "plugins/diagnostics/tests/sceneGuest.test.ts",
         "plugins/semantic/guest.test.ts",
         "plugins/paired-writing/test/guest.test.ts"
       ],
       "gaps": [
-        "Diagnostics now normalizes Semantic embedding candidates into top-level findings with two revision-pinned quote sources, stable fingerprints, feedback read/proposal support, and explicit legacy JSONL inspect/propose actions that retain unknown fields and leave the source unchanged. Signed Host UI integration/browser verification remains outstanding.",
-        "The optional Paired Writing model-verdict interaction remains FROZEN and is excluded from active DIA-11 completion; this is not a PASS."
+        "Guest actions preserve unknown JSONL fields and source bytes and propose only explicitly selected rows to Diagnostics feedback. Signed Host review wiring and browser verification are outstanding; Paired verdict remains FROZEN and is not a PASS."
       ],
       "required_fixes": [
-        "Wire the findings/migration component through Host review and run signed browser scenarios for paired quote display and source jumps, exact dismissal after reload, stale-source reappearance, legacy import preserving unknown fields/source bytes, unresolved/conflict display, and proposal cancellation."
+        "Integrate DiagnosticsFindings into HostApp using the Host proposal broker; verify preview, selected-row migration, conflict/stale/reject handling and unchanged legacy JSONL in signed Desktop/Mobile flows."
       ],
       "dependencies": [
         "proprium.paired-writing",
@@ -387,7 +395,8 @@
           "ledger_revision": "da78cf7df4c5ea78713157ba5aa4b852408a5727",
           "requirement": "RECOVERY — Build evidence-paired contradiction candidates, let an author request optional interpretation, distinguish compatible/insufficient/contradiction and review dismissal against its source scope.\naccept-dia-a13 — Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale; optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction` remain distinguishable. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact.\nFROZEN subrequirement: optional Paired Writing verdicts compatible/insufficient/contradiction; deterministic and Semantic evidence plus Diagnostics dismissal remain active."
         }
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "DIA-12",
@@ -400,16 +409,16 @@
         "app/src/browser/proprium/host/PluginPanel.tsx",
         "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx"
       ],
-      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx",
-      "ui_path": "Diagnostics finding list and feedback proposal controls exist; Host editor margin marker integration is pending the shared diagnostic_margin change.",
+      "host_path": "A CodeMirror diagnostic margin module exists, but Host editor props and HostApp do not currently supply validated Diagnostics findings or wire its jump handler.",
+      "ui_path": "DiagnosticsFindings has a reviewable list/evidence-navigation component and a separate editor-margin module exists; neither is connected to the current Host editor as one findings flow.",
       "existing_tests": [
         "plugins/diagnostics/tests/feedbackGuest.test.ts"
       ],
       "gaps": [
-        "No Host editor decoration/jump control is present on this base branch; list-to-source open and intentional-marking do not preserve the editor location as DIA-A10/DIA-A11 require."
+        "The margin module has focused isolated browser coverage, but it is not mounted in HostApp or connected to current source revisions; list-to-source selection and editor-location preservation are incomplete."
       ],
       "required_fixes": [
-        "Integrate the Host-owned marker with validated Diagnostics findings and Host-bound source identity; verify selection/focus preservation and the explicit feedback proposal."
+        "Wire Host-validated findings and navigation to the margin through the retained editor, then verify selection/focus preservation and explicit feedback proposals on signed Desktop/Mobile browsers."
       ],
       "dependencies": [
         "proprium.narrative"
@@ -419,7 +428,8 @@
         "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "DIA-13",
@@ -452,7 +462,8 @@
         "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "DIA-14",
@@ -486,7 +497,8 @@
         "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "SPK-01",
@@ -518,7 +530,8 @@
         "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "SPK-02",
@@ -557,7 +570,8 @@
         "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "SPK-03",
@@ -592,7 +606,8 @@
         "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "SPK-04",
@@ -625,7 +640,8 @@
         "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "SPK-05",
@@ -660,7 +676,8 @@
         "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "SPK-06",
@@ -692,7 +709,8 @@
         "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "SPK-07",
@@ -728,7 +746,8 @@
         "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "SPK-08",
@@ -764,7 +783,8 @@
         "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "SPK-09",
@@ -800,7 +820,8 @@
         "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "SPK-10",
@@ -835,7 +856,8 @@
         "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "SPK-11",
@@ -872,7 +894,8 @@
           "ledger_revision": "da78cf7df4c5ea78713157ba5aa4b852408a5727",
           "requirement": "Restore preserved correction/model files (`RECOVERY`)\naccept-spk-a11 — From the `speaker.recovery` panel, inspect the legacy correction/model files, then request migration with an idempotency key. Verify only absent targets are proposed through Host review and that proposal operations contain the exact original bytes and source/target revisions. Identical target reports unchanged; conflicting target remains untouched and reviewable; disabled Speaker makes no proposal. Preserve unknown JSON fields, malformed lines and original bytes; reject/stale review leaves all source and target files unchanged."
         }
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "SPK-12",
@@ -908,7 +931,11 @@
         "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
         "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
         "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     }
-  ]
+  ],
+  "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
+  "assessed_at": "2026-10-29",
+  "assessment_scope": "Reconciled against this source snapshot. Prior base_sha is retained as the original audit anchor. Implementation status does not substitute for the current R01–R14 acceptance result. Browser failures and unsupported coverage remain explicit."
 }

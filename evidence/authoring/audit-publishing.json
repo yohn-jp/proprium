@@ -45,7 +45,8 @@
           "result": "NOT_CHECKED",
           "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
         }
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PUB-02",
@@ -92,7 +93,8 @@
           "result": "NOT_CHECKED",
           "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
         }
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PUB-03",
@@ -139,7 +141,8 @@
           "result": "NOT_CHECKED",
           "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
         }
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PUB-04",
@@ -183,7 +186,8 @@
           "result": "NOT_CHECKED",
           "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
         }
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PUB-05",
@@ -226,7 +230,8 @@
           "result": "NOT_CHECKED",
           "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
         }
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PUB-06",
@@ -268,7 +273,8 @@
           "result": "NOT_CHECKED",
           "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
         }
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PUB-07",
@@ -315,7 +321,8 @@
           "result": "NOT_CHECKED",
           "evidence": "This Publishing lane did not rerun the broad Host suite; only Publishing package tests ran."
         }
-      ]
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     },
     {
       "feature_id": "PUB-08",
@@ -330,8 +337,8 @@
         "app/src/browser/proprium/host/authoring/PublishingHostTokenRecovery.tsx",
         "app/src/browser/proprium/host/authoring/PublishingHostTokenRecovery.test.ts"
       ],
-      "host_path": "Repository-retained episode/grant recovery uses pinned workspace.file.read and one workspace.change.propose ChangeSet with source and target preconditions. Retained grants require exact legacy projectId plus typed confirmation of current numeric repository ID and branch; safe extensions survive, sensitive fields/raw bearer-shaped values are rejected, and hierarchy scopes are checked. A separate Host-local importer component parses a user-selected JSON file in memory, strips owner/token-prefix fields and calls the declared hash-only recovery.hostgrants.propose action with the raw-file SHA-256. That action is present and tested in the plugin, but the Host component is not yet mounted or connected to the action dispatcher.",
-      "ui_path": "publishing.episode-map → 旧データの復旧 lists repository-scoped episode/grant sources and offers reviewed proposals. The `PublishingHostTokenRecovery` component has an accessible file picker and explicit mapping controls, but no Host surface currently mounts it, so browser-local token-map recovery has no reachable user flow yet.",
+      "host_path": "HostApp mounts PublishingHostTokenRecovery under the active Publishing registration. It parses a user-selected file in memory, removes owner/token-prefix values and dispatches the declared hash-only recovery.hostgrants.propose action after the explicit user gesture; normal Host Review owns any resulting mutation.",
+      "ui_path": "Mounted Publishing recovery component provides the local JSON file picker, explicit identity mapping and a proposal preview; repository-retained episode/grant recovery remains a separate source path.",
       "existing_tests": [
         "plugins/publishing/guest.test.ts: legacy episode recovery proposes exact source bytes with source and absent-target guards",
         "plugins/publishing/guest.test.ts: retained hashed grants require an explicit repository and branch mapping and use a guarded Host proposal",
@@ -342,13 +349,10 @@
         "tests/browser/authoring-publishing.acceptance.ts: signed retained episode and grant recovery controls submit reviewed proposals"
       ],
       "gaps": [
-        "Host token-recovery component is not mounted and its inspect/propose callbacks are not connected to `recovery.hostgrants.propose`; local-source recovery is not yet usable from the Host UI.",
-        "The updated signed Publishing browser acceptance has been listed but not run in Chromium or Mobile WebKit on the integrated signed registry.",
-        "No real browser/e2e run has verified install, approval, apply, reload and offline recovery for the retained grant import path."
+        "The Host file importer is now mounted and connected in the current source, but neither this local file path nor repository-retained grant recovery has current signed browser proof for approval, rejection, reload, offline and secret non-disclosure."
       ],
       "required_fixes": [
-        "Mount the Host-owned local file recovery component in an appropriate Host UI and connect its callbacks to the UI-only Publishing action under the exact Host scope and fresh gesture.",
-        "Run the signed Publishing browser acceptance in Chromium and Mobile WebKit and inspect both ChangeSet diffs."
+        "Run the signed Publishing browser acceptance on Desktop and Mobile for local import and retained grants; inspect both proposal diffs and verify raw token values never enter guest calls, Git files or browser console."
       ],
       "dependencies": [
         "workspace.file.read",
@@ -359,27 +363,12 @@
       ],
       "priority": "P2",
       "verification": [
-        {
-          "command": "pnpm --filter @proprium/plugin-publishing test",
-          "result": "PASS",
-          "evidence": "Fresh run on this worktree; 43 tests passed."
-        },
-        {
-          "command": "pnpm --filter @proprium/plugin-publishing typecheck",
-          "result": "PASS",
-          "evidence": "Fresh strict TypeScript check on this worktree."
-        },
-        {
-          "command": "pnpm exec playwright test --config tests/browser/authoring-publishing.playwright.config.ts --list",
-          "result": "PASS",
-          "evidence": "The signed Publishing acceptance is registered for desktop Chromium and Mobile WebKit. Listing is not execution."
-        },
-        {
-          "command": "pnpm exec playwright test --config tests/browser/authoring-publishing.playwright.config.ts",
-          "result": "NOT_CHECKED",
-          "evidence": "The signed browser suite has not been executed in this Publishing worktree; the integrated signed registry and shared Host wiring are pending parent integration."
-        }
-      ]
+        "NOT_CHECKED: Host component and action wiring are source-present; browser install/review/apply/reload/offline recovery has not been certified."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
     }
-  ]
+  ],
+  "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
+  "assessed_at": "2026-10-29",
+  "assessment_scope": "Reconciled against this source snapshot. Prior base_sha is retained as the original audit anchor. Implementation status does not substitute for the current R01–R14 acceptance result. Browser failures and unsupported coverage remain explicit."
 }
