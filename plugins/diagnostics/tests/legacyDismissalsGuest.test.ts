@@ -40,8 +40,9 @@ test("legacy dismissal import preserves source JSONL, unknown fields, and unreso
   const model = { id: "test-embedding", revision: "1", role: "embedding", digest: null, byte_length: null, license: "test", status: "ready" };
   guest.initialize({ pluginId: "proprium.diagnostics", version: "0.1.0", workspaceId: scope.workspace_id });
   const proposals: Array<Record<string, unknown>> = [];
-  const run = (actionId: string, input: Record<string, unknown>, requestId: string) => {
-    let result = JSON.parse(guest.invoke(JSON.stringify({ schema_version: 1, request_id: requestId, plugin_id: "proprium.diagnostics", action_id: actionId, scope, snapshot, input, deadline_ms: 30_000, ...(input.idempotencyKey ? { idempotency_key: input.idempotencyKey } : {}) })));
+  const run = (actionId: string, input: Record<string, unknown>, requestId: string, envelopeIdempotencyKey?: string) => {
+    let result = JSON.parse(guest.invoke(JSON.stringify({ schema_version: 1, request_id: requestId, plugin_id: "proprium.diagnostics", action_id: actionId, scope, snapshot, input, deadline_ms: 30_000,
+      ...((envelopeIdempotencyKey ?? input.idempotencyKey) ? { idempotency_key: envelopeIdempotencyKey ?? input.idempotencyKey } : {}) })));
     while (result.kind === "host_call") {
       const payload = result.payload as Record<string, unknown>;
       if (result.operation === "workspace.file.read") {
@@ -95,17 +96,21 @@ test("legacy dismissal import preserves source JSONL, unknown fields, and unreso
   assert.equal(inspected.value.rows[4].disposition, "invalid");
   assert.equal(inspected.value.rows[4].rawLine, malformedLine, "malformed source rows remain visible byte-for-byte");
 
-  const proposed = run("proprium.diagnostics.legacy-dismissals.propose.v1", {
+  const hostIdempotencyKey = "host-issued-legacy-import";
+  const proposalInput = {
     rows: [{ sourcePath: legacyPath, sourceRevision: legacyRevision, rowId: inspected.value.rows[0].rowId }],
-    expectedFeedbackRevision: feedbackRevision, idempotencyKey: "legacy-import-1",
-  }, "legacy-propose");
-  assert.equal(proposed.ok, true, JSON.stringify(proposed.error));
+    expectedFeedbackRevision: feedbackRevision,
+  };
   const proposedDescriptor = inspectManifest.actions.find((action: { action_id: string }) => action.action_id === "proprium.diagnostics.legacy-dismissals.propose.v1");
+  assertValue(proposedDescriptor.input_schema, proposalInput);
+  const proposed = run("proprium.diagnostics.legacy-dismissals.propose.v1", proposalInput, "legacy-propose", hostIdempotencyKey);
+  assert.equal(proposed.ok, true, JSON.stringify(proposed.error));
   assertValue(proposedDescriptor.output_schema, proposed.value);
   assert.equal(proposed.value.importedRowIds[0], inspected.value.rows[0].rowId);
   assert.equal(sources.get(legacyPath), legacyBytes, "the legacy source bytes are never rewritten");
   assert.equal(proposals.length, 1);
   const changeSet = proposals[0];
+  assert.equal(changeSet.idempotency_key, hostIdempotencyKey, "the Host invocation envelope supplies the proposal's stable idempotency key");
   assert.deepEqual((changeSet.read_set as Array<Record<string, unknown>>).find((row) => row.path === legacyPath), { path: legacyPath, revision: legacyRevision });
   assert.ok((changeSet.evidence as Array<Record<string, unknown>>).some((row) => row.path === legacyPath && row.revision === legacyRevision));
   const operation = (((changeSet.units as Array<Record<string, unknown>>)[0].operations as Array<Record<string, unknown>>)[0]);

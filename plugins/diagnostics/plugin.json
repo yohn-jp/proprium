@@ -9698,8 +9698,7 @@
         "additionalProperties": false,
         "required": [
           "rows",
-          "expectedFeedbackRevision",
-          "idempotencyKey"
+          "expectedFeedbackRevision"
         ],
         "properties": {
           "rows": {
