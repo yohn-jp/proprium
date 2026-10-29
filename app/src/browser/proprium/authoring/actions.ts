@@ -567,7 +567,8 @@ export class AuthoringActionDispatcher {
     if (operation.startsWith("workspace.derived.cache.")) {
       if (["workspace.derived.cache.get_previous", "workspace.derived.cache.evict_previous", "workspace.derived.cache.evict_prefix", "workspace.derived.cache.evict_previous_prefix"].includes(operation)) {
         if (!isRecord(payload.selector)) throw new ActionDispatchError("invalid_input", "Cache selector required");
-        exactKeys(payload.selector, ["plugin_id", "schema_version", "config_digest", "model_digest", "key"], "Cache selector");
+        const entryField = operation.endsWith("_prefix") ? "key_prefix" : "key";
+        exactKeys(payload.selector, ["plugin_id", "schema_version", "config_digest", "model_digest", entryField], "Cache selector");
       } else if (!isRecord(payload.key)) throw new ActionDispatchError("invalid_input", "Cache key required");
     }
     if (operation === "artifact.create") { str("media_type", 256); str("filename", 256); }
@@ -591,7 +592,7 @@ export class AuthoringActionDispatcher {
     if (operation.startsWith("workspace.derived.cache.")) {
       if (isRecord(payload.key)) bound.key = { ...payload.key, plugin_id: request.plugin_id, snapshot: request.snapshot };
       else if (isRecord(payload.selector)) {
-        if (payload.selector.plugin_id !== request.plugin_id) throw new ActionDispatchError("capability_denied", "Cache selector belongs to another plugin");
+        if (payload.selector.plugin_id !== undefined && payload.selector.plugin_id !== request.plugin_id) throw new ActionDispatchError("capability_denied", "Cache selector belongs to another plugin");
         bound.selector = { ...payload.selector, plugin_id: request.plugin_id };
       } else bound.plugin_id = request.plugin_id;
     }
