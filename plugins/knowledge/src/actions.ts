@@ -10,7 +10,7 @@ import {
 } from "./domain/index.js";
 import type { GuestHost, HostCall, Handler } from "../../shared/guest.js";
 import { HOST_OPERATIONS, invokeAction } from "../../shared/operations.js";
-import type { ActionRequest, Scope, Snapshot } from "../../../app/src/browser/proprium/authoring/types.js";
+import type { ActionRequest, Scope, Snapshot, SourceSpan } from "../../../app/src/browser/proprium/authoring/types.js";
 import { attachSceneManuscripts, createSnapshotReader, readKnowledgeSnapshot, readOptionalPath, type LoadedKnowledgeSnapshot, type StoryFile } from "./snapshot.js";
 import { sha256Hex } from "./sha256.js";
 import { seriesBindingPreferenceKey } from "./seriesBindingFingerprint.js";
@@ -1907,11 +1907,13 @@ function parseYamlRecord(file: StoryFile, kind: string): Record<string, unknown>
 }
 
 function* entityCreate(input: Record<string, unknown>, context: ActionRequest, host: GuestHost) {
-  assertKeys(input, ["type", "values", "expectedCollectionRevision"]);
+  assertKeys(input, ["type", "values", "expectedCollectionRevision", "evidence"]);
   const type = requiredString(input, "type") as StoryEntityType;
   if (!BIBLE_ENTITY_TYPES.includes(type)) throw error("unsupported_schema", `Knowledge cannot create ${type}`);
   const values = requireRecord(input.values, "values");
   validateJsonSize(values);
+  const evidence = entityCreateEvidence(input.evidence);
+  if (input.evidence !== undefined) validateJsonSize(evidence);
   const story = yield* storyFor(context, host);
   const expected = requiredString(input, "expectedCollectionRevision");
   if (expected !== collectionRevision(story)) throw error("snapshot_stale", "Bible collection changed after the selected snapshot", { expectedCollectionRevision: expected, actualCollectionRevision: collectionRevision(story) });
@@ -1927,12 +1929,48 @@ function* entityCreate(input: Record<string, unknown>, context: ActionRequest, h
   if (exact) throw error("conflict", `Entity path already exists: ${path}`, { path, revision: exact.revision });
   const reads = entitySetReads(story);
   reads.push({ path, revision: null });
+  for (const span of evidence) {
+    const sourceRevision = story.revisions.get(span.path);
+    if (sourceRevision !== undefined && sourceRevision !== span.revision) {
+      throw error("snapshot_stale", `Evidence source changed in the selected snapshot: ${span.path}`, { path: span.path, expectedRevision: span.revision, actualRevision: sourceRevision });
+    }
+    reads.push({ path: span.path, revision: span.revision, evidence: span });
+  }
   const submitted = yield* submitProposal({
     context, host, title: `Create ${type} ${id}`, reason: `Add a ${type} record to the pinned Bible snapshot.`,
     reads: [...reads, ...readsForReferences(story, references)],
     writes: [{ path, expected_revision: null, content: YAML.stringify(raw) }],
+    ...(evidence.length ? { domain_evidence: [{ kind: "knowledge.entity.create", source_spans: evidence }] } : {}),
   });
   return { entityId: id, path, proposalId: submitted.proposalId, preview: submitted.preview };
+}
+
+function entityCreateEvidence(value: unknown): SourceSpan[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 64) throw error("invalid_input", "evidence must contain at most 64 source spans");
+  const spans: SourceSpan[] = [];
+  const seen = new Set<string>();
+  for (const [index, row] of value.entries()) {
+    if (!isRecord(row)) throw error("invalid_input", `evidence[${index}] must be a source span`);
+    assertKeys(row, ["path", "revision", "start", "end", "quote"]);
+    const path = requiredString(row, "path");
+    if (path.length > 1024 || path.startsWith("/") || path.includes("\\") || path.includes("\0") ||
+        path.split("/").some((part) => !part || part === "." || part === "..")) {
+      throw error("invalid_path", `evidence[${index}].path is unsafe`, { path });
+    }
+    const revision = requiredString(row, "revision");
+    if (!/^[a-f0-9]{64}$/u.test(revision)) throw error("invalid_input", `evidence[${index}].revision must be a SHA-256 source revision`);
+    const start = row.start, end = row.end, quote = row.quote;
+    if (!Number.isSafeInteger(start) || (start as number) < 0 || !Number.isSafeInteger(end) || (end as number) <= (start as number) ||
+        typeof quote !== "string" || quote.length === 0 || quote.length > 100_000 || (end as number) - (start as number) !== quote.length) {
+      throw error("invalid_input", `evidence[${index}] must contain a non-empty bounded UTF-16 quote and range`);
+    }
+    const key = `${path}\0${revision}\0${start}\0${end}`;
+    if (seen.has(key)) throw error("invalid_input", `evidence[${index}] duplicates a source span`);
+    seen.add(key);
+    spans.push({ path, revision, start: start as number, end: end as number, quote });
+  }
+  return spans;
 }
 
 function* entityUpdate(input: Record<string, unknown>, context: ActionRequest, host: GuestHost) {

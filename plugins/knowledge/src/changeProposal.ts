@@ -3,7 +3,7 @@ import type { GuestHost, HostCall } from "../../shared/guest.js";
 import { propose } from "../../shared/operations.js";
 import { sha256Hex } from "./sha256.js";
 
-export interface ProposalRead { path: string; revision: string | null; content?: string; evidence?: SourceSpan }
+export interface ProposalRead { path: string; revision: string | null; content?: string; evidence?: SourceSpan | readonly SourceSpan[] }
 export interface ProposalWrite { path: string; expected_revision: string | null; content: string }
 export interface ProposalResult { proposalId: string; status: string; preview: unknown }
 
@@ -24,6 +24,7 @@ export function* submitProposal(input: {
   reason: string;
   reads: readonly ProposalRead[];
   writes: readonly ProposalWrite[];
+  domain_evidence?: unknown;
 }): Generator<HostCall, ProposalResult, unknown> {
   const key = input.context.idempotency_key;
   if (!key || !key.trim()) throw Object.assign(new Error("Host idempotency_key is required for a proposal"), { code: "invalid_input" });
@@ -32,7 +33,13 @@ export function* submitProposal(input: {
   for (const read of input.reads) {
     const prior = readMap.get(read.path);
     if (prior && prior.revision !== read.revision) throw Object.assign(new Error(`Conflicting source revisions for ${read.path}`), { code: "snapshot_stale", details: { path: read.path } });
-    readMap.set(read.path, read);
+    if (!prior) readMap.set(read.path, read);
+    else {
+      const evidence = [...(Array.isArray(prior.evidence) ? prior.evidence : prior.evidence ? [prior.evidence] : []),
+        ...(Array.isArray(read.evidence) ? read.evidence : read.evidence ? [read.evidence] : [])];
+      readMap.set(read.path, { ...prior, ...read, content: read.content ?? prior.content,
+        ...(evidence.length ? { evidence } : { evidence: undefined }) });
+    }
   }
   const reads = [...readMap.values()].sort((left, right) => left.path.localeCompare(right.path));
   const paths = new Set<string>();
@@ -54,7 +61,9 @@ export function* submitProposal(input: {
     reason: input.reason,
     read_set: reads.map(({ path, revision }): ReadPrecondition => ({ path, revision })),
     units: [{ id: unitId, label: input.title, depends_on: [], operations }],
-    evidence: [...sourceEvidence(reads.filter((read) => input.writes.some((write) => write.path === read.path))), ...reads.flatMap((read) => read.evidence ? [read.evidence] : [])],
+    evidence: [...sourceEvidence(reads.filter((read) => input.writes.some((write) => write.path === read.path))),
+      ...reads.flatMap((read) => Array.isArray(read.evidence) ? read.evidence : read.evidence ? [read.evidence] : [])],
+    ...(input.domain_evidence === undefined ? {} : { domain_evidence: input.domain_evidence }),
   };
   const receipt = yield* propose(input.host, changeset);
   const value = receipt as Record<string, unknown> | null;

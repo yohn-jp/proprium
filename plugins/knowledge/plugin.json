@@ -205,6 +205,22 @@
             "type": "string",
             "pattern": "^[a-f0-9]{64}$",
             "maxLength": 64
+          },
+          "evidence": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string", "minLength": 1, "maxLength": 1024 },
+                "revision": { "type": "string", "pattern": "^[a-f0-9]{64}$", "maxLength": 64 },
+                "start": { "type": "integer", "minimum": 0 },
+                "end": { "type": "integer", "minimum": 1 },
+                "quote": { "type": "string", "minLength": 1, "maxLength": 100000 }
+              },
+              "required": ["path", "revision", "start", "end", "quote"],
+              "additionalProperties": false
+            }
           }
         },
         "required": [

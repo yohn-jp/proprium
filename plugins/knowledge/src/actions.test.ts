@@ -207,6 +207,40 @@ test("entity create emits a deterministic Host-reviewed file proposal with an ab
   guest.dispose();
 });
 
+test("entity create pins optional quoted source spans in the proposal read set and evidence", () => {
+  guest.initialize({ pluginId: "proprium.knowledge", version: "0.1.0", workspaceId: "workspace-1" });
+  const host = new HostFixture();
+  const expectedCollectionRevision = (request(host, {}, "knowledge.entities.collection-revision").value as { collectionRevision: string }).collectionRevision;
+  const source = "bible/locations/loc-a.yaml";
+  const file = host.files.get(source)!;
+  const quote = "name: Harbor";
+  const start = file.content.indexOf(quote);
+  const result = request(host, {
+    type: "location", expectedCollectionRevision, values: { name: "New Place" },
+    evidence: [{ path: source, revision: file.revision, start, end: start + quote.length, quote }],
+  }, "knowledge.entities.create", "idem-create-evidence");
+  assert.equal(result.ok, true);
+  const change = host.proposals[0]!;
+  assert.ok((change.read_set as Array<Record<string, unknown>>).some((item) => item.path === source && item.revision === file.revision));
+  assert.ok((change.evidence as Array<Record<string, unknown>>).some((item) => item.path === source && item.revision === file.revision &&
+    item.start === start && item.end === start + quote.length && item.quote === quote));
+  assert.deepEqual(change.domain_evidence, [{ kind: "knowledge.entity.create", source_spans: [{ path: source, revision: file.revision,
+    start, end: start + quote.length, quote }] }]);
+  guest.dispose();
+});
+
+test("entity create rejects malformed optional source spans before proposal submission", () => {
+  guest.initialize({ pluginId: "proprium.knowledge", version: "0.1.0", workspaceId: "workspace-1" });
+  const host = new HostFixture();
+  const expectedCollectionRevision = (request(host, {}, "knowledge.entities.collection-revision").value as { collectionRevision: string }).collectionRevision;
+  const result = request(host, { type: "location", expectedCollectionRevision, values: { name: "New Place" },
+    evidence: [{ path: "../outside.md", revision: "a".repeat(64), start: 0, end: 1, quote: "x" }] },
+  "knowledge.entities.create", "idem-create-invalid-evidence");
+  assert.equal(result.ok, false);
+  assert.equal(host.proposals.length, 0);
+  guest.dispose();
+});
+
 test("entity update preserves unknown YAML fields and pins both target and referenced entity revisions", () => {
   const bytes = encode.encode("id: char-a\ntype: character\nname: 灯\naliases: [あかり]\ntags: [lead]\nrelations:\n  - target: loc-a\n    kind: related\nunknownLegacyField: keep-me\nnotes:\n  lead: []\n  sections: []\n");
   const host = new HostFixture();
