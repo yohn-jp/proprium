@@ -36,6 +36,8 @@ export interface StoredAuthoringTask {
   readonly owner_id: string;
   readonly step_sequence: number;
   readonly progress: HostTaskProgress;
+  /** Host diagnostic classification only; never store guest messages or source text. */
+  readonly failure_code?: string;
   readonly updated_at: number;
 }
 export interface AuthoringTaskStore {
@@ -70,6 +72,12 @@ const keyFor = (pluginId: string, scope: Scope, taskId: string) => "task:" + enc
   encodeURIComponent(taskId);
 const invalid = () => Object.assign(new Error("Task progress does not belong to an authorized Host task invocation"), { code: "invalid_input" });
 const failure = (code: string, message: string) => Object.assign(new Error(message), { code });
+function safeFailureCode(code: string): string {
+  return new Set(["capability_denied", "missing_capability", "storage_unknown", "snapshot_stale", "incompatible_abi",
+    "plugin_unavailable", "dependency_unavailable", "idempotency_conflict", "invalid_input", "invalid_result", "invalid_path",
+    "file_not_found", "cache_corrupt", "index_stale", "provider_unavailable", "capacity", "timeout", "cancelled",
+    "guest_trap", "invalid_encoding", "unsupported_schema", "unsupported_format"]).has(code) ? code : "guest_trap";
+}
 
 function randomId(): string {
   if (typeof crypto?.randomUUID === "function") return crypto.randomUUID();
@@ -208,7 +216,7 @@ export class AuthoringTaskRegistry {
         }
         if (current.progress.state === "complete") return { next: current, value: { disposition: "complete" as const, task: current } };
         const resumed: StoredAuthoringTask = {
-          ...current, scope: structuredClone(scope), snapshot: structuredClone(snapshot), activation_epoch: epoch, owner_id: this.sessionId,
+          ...current, failure_code: undefined, scope: structuredClone(scope), snapshot: structuredClone(snapshot), activation_epoch: epoch, owner_id: this.sessionId,
           progress: { ...current.progress, state: "running", resumable: true,
             ...(current.progress.phase === "model_loading" ? { completed: 0 } : {}) }, updated_at: this.now(),
         };
@@ -363,7 +371,7 @@ export class AuthoringTaskRegistry {
         const progress = { ...current.progress,
           state: code === "cancelled" ? "cancelled" as const : "failed" as const,
           resumable: current.progress.resumable && !["snapshot_stale", "storage_unknown", "capability_denied", "incompatible_abi"].includes(code) };
-        const next = { ...current, owner_id: "", progress, updated_at: this.now() };
+        const next = { ...current, owner_id: "", progress, failure_code: safeFailureCode(code), updated_at: this.now() };
         return { next, value: next };
       });
       if (updated) this.emit(updated);
@@ -382,7 +390,7 @@ export class AuthoringTaskRegistry {
       if (!current || current.progress.state === "complete" || current.progress.state === "cancelled") return { next: current, value: undefined };
       const resumable = current.progress.resumable && !["snapshot_stale", "storage_unknown", "capability_denied", "incompatible_abi"].includes(code ?? "");
       const progress = { ...current.progress, state, resumable };
-      const next = { ...current, owner_id: "", progress, updated_at: this.now() };
+      const next = { ...current, owner_id: "", progress, failure_code: code ? safeFailureCode(code) : undefined, updated_at: this.now() };
       return { next, value: next };
     });
     if (updated) this.emit(updated);

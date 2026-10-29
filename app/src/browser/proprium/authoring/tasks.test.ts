@@ -11,6 +11,17 @@ const identity: AuthoringTaskIdentity = {
   config_digest: "b".repeat(64), idempotency_key: "job-key",
 };
 
+test("terminal task diagnostics retain only an allowlisted code and clear it on explicit resume", async () => {
+  const tasks = new AuthoringTaskRegistry(new MemoryAuthoringTaskStore(), () => 1000, "diagnostics");
+  const begun = await tasks.begin("start", 1, scope, snapshot, "task", identity, new AbortController());
+  await tasks.finishTask(begun.task.key, "failed", "capability_denied");
+  assert.equal((await tasks.taskByKey(begun.task.key))?.failure_code, "capability_denied");
+  await tasks.begin("retry", 1, scope, snapshot, "task", identity, new AbortController());
+  assert.equal((await tasks.taskByKey(begun.task.key))?.failure_code, undefined);
+  await tasks.finishTask(begun.task.key, "failed", "private_source_text_is_not_an_error_code");
+  assert.equal((await tasks.taskByKey(begun.task.key))?.failure_code, "guest_trap");
+});
+
 test("task progress is Host-bound to one start or permitted step and completes monotonically", async () => {
   const store = new MemoryAuthoringTaskStore();
   const tasks = new AuthoringTaskRegistry(store, () => 1000, "session-a");

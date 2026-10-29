@@ -27,6 +27,25 @@ interface HostTestWindow extends Window {
   propriumHostTest?: { openWorkspace(identity: { provider: 'local'; name: string; branch: string; localWorkspaceId: string }, files?: Record<string, string>): Promise<void> };
 }
 
+test.afterEach(async ({ page }, testInfo) => {
+  if (testInfo.status === testInfo.expectedStatus || page.isClosed()) return;
+  const failures = await page.evaluate(() => new Promise<unknown[]>(resolve => {
+    const request = indexedDB.open('proprium-authoring-tasks-v1', 1);
+    request.onerror = () => resolve([]);
+    request.onsuccess = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains('tasks')) { db.close(); resolve([]); return; }
+      const read = db.transaction('tasks', 'readonly').objectStore('tasks').getAll();
+      read.onsuccess = () => { db.close(); resolve(read.result.map(row => ({
+        state: row.progress?.state, phase: row.progress?.phase, failure_code: row.failure_code,
+      }))); };
+      read.onerror = () => { db.close(); resolve([]); };
+    };
+  })).catch(() => []);
+  console.log('Host task failure classifications:', JSON.stringify(failures));
+  await testInfo.attach('host-task-failures.json', { contentType: 'application/json', body: Buffer.from(JSON.stringify(failures)) });
+});
+
 async function showWorkspacePanel(page: Page, panel: 'editor' | 'review'): Promise<void> {
   const desktopName = panel === 'editor' ? 'ワークスペース' : 'レビューとツール';
   const desktop = page.getByRole('button', { name: `パネル：${desktopName}`, exact: true });
@@ -214,7 +233,13 @@ test('signed E5 admission gates by real device capacity; semantic search works l
   await rebuild.click();
   const progress = tasks.getByRole('progressbar').first();
   await expect(progress).toBeVisible({ timeout: 90_000 });
-  await expect.poll(() => progress.evaluate(element => (element as HTMLProgressElement).value), { timeout: 90_000 }).toBeGreaterThan(0);
+  await page.waitForFunction(() => {
+    const region = document.querySelector("section[aria-label='Semantic タスク']");
+    return region && (/:\s*failed\b/u.test(region.textContent ?? '') ||
+      Array.from(region.querySelectorAll('progress')).some(element => element.value > 0));
+  }, undefined, { timeout: 90_000 });
+  expect(await tasks.innerText()).not.toMatch(/:\s*failed\b/u);
+  expect(await progress.evaluate(element => (element as HTMLProgressElement).value)).toBeGreaterThan(0);
   const cancel = tasks.getByRole('button', { name: 'キャンセル', exact: true });
   await expect(cancel).toBeVisible();
   await cancel.click();
