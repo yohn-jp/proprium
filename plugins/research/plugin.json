@@ -1881,6 +1881,11 @@
           },
           "force": {
             "type": "boolean"
+          },
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
           }
         },
         "required": [],
@@ -1888,25 +1893,107 @@
       },
       "output_schema": {
         "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "taskId",
+          "jobId",
+          "state",
+          "phase",
+          "completed",
+          "total",
+          "progress"
+        ],
         "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              }
+            }
+          },
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
+          },
           "jobId": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 256
+            "maxLength": 128
           },
           "state": {
             "enum": [
-              "indexing",
-              "current"
+              "running",
+              "complete"
             ]
+          },
+          "phase": {
+            "enum": [
+              "source_scan",
+              "index_build",
+              "cache_publish",
+              "complete"
+            ]
+          },
+          "completed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "indexSnapshot": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 512
+            "maxLength": 256
           },
           "progress": {
             "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "completed",
+              "total"
+            ],
             "properties": {
               "completed": {
                 "type": "integer",
@@ -1918,31 +2005,356 @@
                 "minimum": 0,
                 "maximum": 9007199254740991
               }
-            },
-            "required": [
-              "completed"
-            ],
-            "additionalProperties": false
+            }
           }
-        },
-        "required": [
-          "jobId",
-          "state",
-          "indexSnapshot",
-          "progress"
-        ],
-        "additionalProperties": false
+        }
       },
       "required_capabilities": [
         "workspace.file.read",
         "workspace.derived.cache"
       ],
       "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": true
+    },
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.index.step",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "taskId",
+          "sequence"
+        ],
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "taskId",
+          "state",
+          "phase",
+          "completed",
+          "total"
+        ],
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              }
+            }
+          },
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
+          },
+          "state": {
+            "enum": [
+              "running",
+              "complete"
+            ]
+          },
+          "phase": {
+            "enum": [
+              "source_scan",
+              "index_build",
+              "cache_publish",
+              "complete"
+            ]
+          },
+          "completed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "indexSnapshot": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.derived.cache"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.task.status",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "activeTasks"
+        ],
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              }
+            }
+          },
+          "activeTasks": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "taskId",
+                "state",
+                "phase",
+                "completed",
+                "total",
+                "resumable"
+              ],
+              "properties": {
+                "taskId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$",
+                  "maxLength": 128
+                },
+                "state": {
+                  "enum": [
+                    "queued",
+                    "running",
+                    "paused",
+                    "cancelled",
+                    "failed",
+                    "complete"
+                  ]
+                },
+                "phase": {
+                  "enum": [
+                    "source_scan",
+                    "index_build",
+                    "cache_publish",
+                    "complete"
+                  ]
+                },
+                "completed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "total": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "resumable": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      "required_capabilities": [],
+      "callers": [
         "ui",
         "mcp",
         "plugin"
       ],
       "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.research",
+      "action_id": "research.task.cancel",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "taskId"
+        ],
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "taskId",
+          "cancelled"
+        ],
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              }
+            }
+          },
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
+          },
+          "cancelled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "required_capabilities": [],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": true
     },
     {
       "plugin_id": "proprium.research",
