@@ -3743,7 +3743,7 @@
       "required_fixes": [
         "Integrate Host durable job journal, private step permits and bounded cache eviction operations.",
         "Measure corpus scanning under the Host deadline and slice it further if the supported source bound exceeds the budget.",
-        "Run current signed-artifact Browser tests for install, inference, cancellation, reload, same-snapshot resume and previous-manifest preservation."
+        "Run current signed-artifact Browser tests for install, inference, cancellation, reload across a new pin ID/scope generation, same-source resume and previous-manifest preservation."
       ],
       "dependencies": [
         "Host private job scheduler",
@@ -3755,7 +3755,7 @@
       ],
       "priority": "P0",
       "verification": [
-        "PASS: pnpm --dir plugins/semantic test (45 tests plus asset-build test) on this worktree; covers >256 passages, checksum pages, cross-snapshot reuse, wrong-branch cache rejection, warm-only model loading and simulated fresh-worker resume after persisted vectors.",
+        "PASS: pnpm --dir plugins/semantic test (48 tests plus asset-build test) on this worktree; covers >256 passages, checksum pages, cross-snapshot reuse, wrong-branch cache rejection, warm-only model loading, and fresh-worker resume across rotated pin ID and scope generation with staged-vector revalidation.",
         "NOT_CHECKED: integrated Host scheduler cancellation after a completed vector slice, signed Browser component and desktop/mobile real-model acceptance."
       ],
       "audit_base_sha": "75816593cec3dbca9080ec7073679ab3998993a7"
