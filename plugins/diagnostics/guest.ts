@@ -25,8 +25,16 @@ const MAX_PROPOSAL_BYTES = 64 * 1024 * 1024;
 const INLINE_PROPOSAL_BYTES = 48 * 1024;
 const ARTIFACT_CHUNK_BYTES = 32 * 1024;
 const FEEDBACK_PATH = "meta/proprium/plugins/proprium.diagnostics/feedback.yaml";
+const LEGACY_DISMISSAL_PATHS = [
+  "meta/scriptorium/modules/semantic/contradiction-dismissals.jsonl",
+  "meta/contradiction-dismissals.jsonl",
+  "meta/scriptorium/modules/semantic/legacy/files/meta/contradiction-dismissals.jsonl",
+] as const;
 const MAX_FEEDBACK_BYTES = 8 * 1024 * 1024;
 const MAX_FEEDBACK_ENTRIES = 100_000;
+const MAX_LEGACY_BYTES = 8 * 1024 * 1024;
+const MAX_LEGACY_ROWS = 10_000;
+const MAX_LEGACY_ROW_CHARS = 1024 * 1024;
 
 interface RememberedFinding {
   sourceIdentity: Record<string, unknown>;
@@ -240,18 +248,18 @@ function metricSentences(result: ReturnType<typeof validateResearchAnalysis>, fu
   return { text: body, tokens, sentences };
 }
 
-function metricFinding(kind: string, message: string, textHash: string, context: Parameters<Handler>[1], source: { documentPath?: string; documentRevision?: string; draftGeneration?: string }, configRevisions: Record<string, string>, evidenceRows: Array<{ start: number; end: number; quote: string }>, providerIdentity: Record<string, unknown> = {}, extraSources: Array<Record<string, unknown>> = []): Record<string, unknown> {
+function metricFinding(kind: string, message: string, textHash: string, context: Parameters<Handler>[1], source: { documentPath?: string; documentRevision?: string; draftGeneration?: string; sceneId?: string }, configRevisions: Record<string, string>, evidenceRows: Array<{ start: number; end: number; quote: string }>, providerIdentity: Record<string, unknown> = {}, extraSources: Array<Record<string, unknown>> = []): Record<string, unknown> {
   const sources = [...(source.documentPath && source.documentRevision ? evidenceRows.slice(0, 24).map((item) => ({
     path: source.documentPath!, fileRevision: source.documentRevision!, textHash, span: { start: item.start, end: item.end }, quote: item.quote,
   })) : []), ...extraSources];
   const fingerprint = sha256(JSON.stringify([
-    context.scope.workspace_id, context.scope.repository_id, context.scope.branch, context.scope.generation,
-    context.snapshot.id, kind, message, textHash, configRevisions, providerIdentity, sources, source.draftGeneration ?? null,
+    context.scope.repository_id, context.scope.branch, kind, message, textHash, configRevisions, providerIdentity, sources, source.draftGeneration ?? null,
   ]));
   const quote = evidenceRows.map((item) => item.quote).join(" / ").slice(0, 1000);
   const sourceIdentity = {
     actionId: "proprium.diagnostics.text.analyze.v1", repositoryId: context.scope.repository_id, branch: context.scope.branch,
     generation: context.scope.generation, snapshot: context.snapshot.id, findingFingerprint: fingerprint,
+    ...(source.sceneId ? { sceneId: source.sceneId } : {}),
     analyzer: { id: "proprium.diagnostics.cpu", version: "1.0.0" }, sources,
     ...(Object.keys(configRevisions).length ? { configRevisions } : {}), ...(Object.keys(providerIdentity).length ? { providerIdentity } : {}), ...(source.draftGeneration ? { draftGeneration: source.draftGeneration } : {}),
   };
@@ -386,7 +394,7 @@ function makeChangeSet(input: {
     evidence: input.evidence,
   };
 }
-function sourceFields(input: Record<string, unknown>): { documentPath?: string; documentRevision?: string; draftGeneration?: string } {
+function sourceFields(input: Record<string, unknown>): { documentPath?: string; documentRevision?: string; draftGeneration?: string; sceneId?: string } {
   if (input.documentPath !== undefined && (typeof input.documentPath !== "string" || input.documentPath.length > 1024 || !input.documentPath || input.documentPath.startsWith("/") || input.documentPath.includes("\\") || input.documentPath.includes("\0") || input.documentPath.split("/").some((part) => !part || part === "." || part === ".."))) throw new DiagnosticActionError("invalid_input", "documentPath must be a safe relative path");
   if (input.documentRevision !== undefined && (typeof input.documentRevision !== "string" || !/^[a-f0-9]{64}$/u.test(input.documentRevision))) throw new DiagnosticActionError("invalid_input", "documentRevision must be a SHA-256 revision");
   if (input.draftGeneration !== undefined && (typeof input.draftGeneration !== "string" || input.draftGeneration.length > 256)) throw new DiagnosticActionError("invalid_input", "draftGeneration must be a bounded string");
@@ -630,8 +638,7 @@ const plotGoalCheck: Handler = function* (raw, context, host) {
     goalPath, goalRevision, lexicon: config.lexicon,
   }).map((warning) => {
     const fingerprint = sha256(JSON.stringify([
-      context.scope.workspace_id, context.scope.repository_id, context.scope.branch, context.scope.generation,
-      context.snapshot.id, input.sceneId, path, savedRevision, draftGeneration ?? null, textHash,
+      context.scope.repository_id, context.scope.branch, input.sceneId, path, savedRevision, draftGeneration ?? null, textHash,
       goalPath, goalRevision, config.revision, bodyResult.engine.digest, warning.kind, warning.archetype ?? null,
       warning.violationDensity ?? null, warning.similarity ?? null,
     ]));
@@ -677,8 +684,7 @@ const plotGoalCheck: Handler = function* (raw, context, host) {
 
 function projectFinding(issue: ValidationIssue, context: Parameters<Handler>[1], scope?: ProjectScope): Record<string, unknown> {
   const fingerprint = sha256(JSON.stringify([
-    context.scope.workspace_id, context.scope.repository_id, context.scope.branch, context.scope.generation,
-    context.snapshot.id, issue.filePath ?? null, issue.sourceRevision ?? null, issue.code, issue.entityId ?? null,
+    context.scope.repository_id, context.scope.branch, issue.filePath ?? null, issue.sourceRevision ?? null, issue.code, issue.entityId ?? null,
     ...(issue.evidence ?? []).map((item) => [item.path, item.revision]), issue.message,
   ]));
   const evidence = issue.evidence?.length ? issue.evidence.map((item) => ({ path: item.path, revision: item.revision, quote: issue.message.slice(0, 1000) }))
@@ -714,8 +720,7 @@ function projectFinding(issue: ValidationIssue, context: Parameters<Handler>[1],
 
 function continuityFinding(issue: ReturnType<typeof checkProjectContinuity>["findings"][number], context: Parameters<Handler>[1], scope?: ProjectScope): Record<string, unknown> {
   const fingerprint = sha256(JSON.stringify([
-    context.scope.workspace_id, context.scope.repository_id, context.scope.branch, context.scope.generation,
-    context.snapshot.id, issue.reason, issue.previousSceneId, issue.sceneId, issue.characterEntityId,
+    context.scope.repository_id, context.scope.branch, issue.reason, issue.previousSceneId, issue.sceneId, issue.characterEntityId,
     issue.fromLocationId, issue.toLocationId, issue.itemId ?? null, issue.expectedOwnerId ?? null, issue.detail ?? null,
     issue.evidence.map((item) => [item.path, item.revision]),
   ]));
@@ -765,9 +770,18 @@ function continuityCursor(cursor: unknown, snapshotId: string, scope: ProjectSco
   return offset;
 }
 
+function legacyCandidateId(finding: Record<string, unknown>): string | null {
+  if (finding.kind !== "item-owner-mismatch" && finding.kind !== "unrecorded-teleport") return null;
+  if (typeof finding.scene_id !== "string" || typeof finding.character_entity_id !== "string") return null;
+  const previous = typeof finding.previous_scene_id === "string" ? finding.previous_scene_id : "_";
+  const suffix = typeof finding.item_id === "string" ? finding.item_id : typeof finding.to_location_id === "string" ? finding.to_location_id : "";
+  return `rule:${finding.kind}:${previous}:${finding.scene_id}:${finding.character_entity_id}:${suffix}`;
+}
+
 const projectContinuity: Handler = function* (raw, context, host) {
   const input = object(raw, "project.continuity input");
-  closed(input, ["scope", "cursor", "pageSize"], "project.continuity input");
+  closed(input, ["scope", "cursor", "pageSize", "candidateIds"], "project.continuity input");
+  if (input.candidateIds !== undefined && (!Array.isArray(input.candidateIds) || input.candidateIds.length > MAX_LEGACY_ROWS || input.candidateIds.some((id) => typeof id !== "string" || id.length > 1024))) throw new DiagnosticActionError("invalid_input", "candidateIds must contain bounded legacy Semantic IDs");
   const scope = parseProjectScope(input.scope);
   const pageSize = input.pageSize === undefined ? 50 : input.pageSize;
   if (!Number.isSafeInteger(pageSize) || (pageSize as number) < 1 || (pageSize as number) > 100) throw new DiagnosticActionError("invalid_input", "pageSize must be an integer from 1 through 100");
@@ -813,6 +827,14 @@ const projectContinuity: Handler = function* (raw, context, host) {
   }
   const report = checkProjectContinuity(graph.entities, graph.links, manuscriptText, scope);
   const findings = report.findings.map((finding) => continuityFinding(finding, context, scope));
+  if (Array.isArray(input.candidateIds)) {
+    const wanted = new Set(input.candidateIds as string[]);
+    const matched = findings.filter((finding) => {
+      const id = legacyCandidateId(finding);
+      return id !== null && wanted.has(id);
+    });
+    return { scope: scope ?? null, recognized: report.recognized, findings: matched, counts: { warning: matched.length }, cursor: null, complete: true, snapshot: context.snapshot, total_findings: matched.length };
+  }
   if (start > findings.length) throw new DiagnosticActionError("snapshot_stale", "Project cursor is outside this snapshot", true);
   const from = start;
   const end = Math.min(findings.length, from + (pageSize as number));
@@ -918,6 +940,7 @@ const textAnalyze: Handler = function* (raw, context, host) {
     if (sha256(savedText) !== source.documentRevision) throw new DiagnosticActionError("snapshot_stale", "Host file revision does not match exact manuscript bytes", true);
     if (!source.draftGeneration && savedText !== text) throw new DiagnosticActionError("snapshot_stale", "Text does not match the named saved-file revision", true);
   }
+  if (typeof input.sceneId === "string") source = { ...source, sceneId: input.sceneId };
 
   const config = yield* configuredLintRules(host, context);
   const analysis = analyzeText(text, config.rules);
@@ -929,6 +952,7 @@ const textAnalyze: Handler = function* (raw, context, host) {
     snapshotId: context.snapshot.id,
     ...source,
     configRevision: config.revision,
+    ...(source.sceneId ? { sceneId: source.sceneId } : {}),
   });
   const bodyStart = bodyOffset(text);
   const body = text.slice(bodyStart);
@@ -1021,7 +1045,7 @@ const textAnalyze: Handler = function* (raw, context, host) {
         const spans = metrics.tokens.filter((token) => weights[token.base ?? token.surface] !== undefined || weights[token.surface] !== undefined)
           .slice(0, 24).map((token) => ({ path: source.documentPath, revision: source.documentRevision, text_hash: analysis.textHash, start: token.start, end: token.end, quote: token.surface }));
         const message = String(warning.message ?? "Tone differs from declared intent");
-        const fingerprint = sha256(JSON.stringify([context.scope.workspace_id, context.scope.repository_id, context.scope.branch, context.scope.generation, context.snapshot.id, input.sceneId, source.documentPath ?? null, source.documentRevision ?? null, analysis.textHash, tone.revision, intendedTone, dominant]));
+        const fingerprint = sha256(JSON.stringify([context.scope.repository_id, context.scope.branch, input.sceneId, source.documentPath ?? null, source.documentRevision ?? null, analysis.textHash, tone.revision, intendedTone, dominant]));
         const toneVector = warning.toneVector && typeof warning.toneVector === "object" && !Array.isArray(warning.toneVector)
           ? Object.entries(warning.toneVector as Record<string, unknown>).map(([toneName, weight]) => ({ tone: toneName, weight: typeof weight === "number" ? weight : 0 }))
           : [];
@@ -1141,11 +1165,86 @@ const lintRun: Handler = function* (raw, context, host) {
 
 const SCENE_SECTIONS = ["structural", "continuity", "prose", "plotGoal", "declaredVoice", "speaker", "semanticHypotheses"] as const;
 type SceneSection = typeof SCENE_SECTIONS[number];
+
+function* semanticCandidateFinding(candidate: Record<string, unknown>, model: unknown, context: Parameters<Handler>[1], host: Parameters<Handler>[2]) {
+  if (typeof candidate.id !== "string" || !candidate.id || candidate.id.length > 1024 ||
+      typeof candidate.kind !== "string" || typeof candidate.suspicion !== "string") throw new DiagnosticActionError("dependency_unavailable", "Semantic returned a malformed contradiction candidate", true);
+  const modelRow = model && typeof model === "object" && !Array.isArray(model) ? model as Record<string, unknown> : {};
+  const modelIdentity = {
+    id: typeof modelRow.id === "string" ? modelRow.id : "unknown",
+    revision: typeof modelRow.revision === "string" ? modelRow.revision : null,
+    digest: typeof modelRow.digest === "string" ? modelRow.digest : null,
+  };
+  const resolvedEvidence: Array<Record<string, unknown>> = [];
+  const sources: Array<Record<string, unknown>> = [];
+  for (const key of ["evidenceA", "evidenceB"] as const) {
+    const source = object(candidate[key], `Semantic ${key}`);
+    if (typeof source.sceneId !== "string" || source.sceneId.length > 256 || typeof source.quote !== "string" || !source.quote || source.quote.length > 4000) {
+      throw new DiagnosticActionError("dependency_unavailable", `Semantic ${key} is missing a bounded scene and quote`, true);
+    }
+    let path: string, revision: string;
+    if (typeof source.path === "string" && typeof source.revision === "string") {
+      path = source.path;
+      revision = safeRevision(source.revision, `Semantic ${key} revision`);
+      if (!safeManuscriptPath(path)) throw new DiagnosticActionError("invalid_path", `Semantic ${key} path is unsafe`);
+    } else {
+      const scene = yield* invokeAction<Record<string, unknown>>(host, "proprium.narrative", "proprium.narrative.scene.context", { scene_id: source.sceneId });
+      if (scene.scene_id !== source.sceneId || !safeManuscriptPath(scene.manuscript_path)) throw new DiagnosticActionError("snapshot_stale", `Semantic ${key} does not resolve to a Narrative manuscript`, true);
+      path = scene.manuscript_path;
+      revision = safeRevision(scene.manuscript_revision, `Semantic ${key} manuscript revision`);
+    }
+    const file = yield* readFileVersioned(host, context.snapshot, path, revision);
+    if (file.bytes.byteLength > MAX_PROPOSAL_BYTES) throw new DiagnosticActionError("capacity", "Semantic evidence source exceeds the review limit", true);
+    let text: string;
+    try { text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(file.bytes); }
+    catch { throw new DiagnosticActionError("invalid_encoding", `Semantic evidence source is not UTF-8: ${path}`); }
+    const at = text.indexOf(source.quote);
+    const repeated = at >= 0 && text.indexOf(source.quote, at + 1) >= 0;
+    const span = at >= 0 && !repeated ? { start: at, end: at + source.quote.length } : undefined;
+    const evidence = {
+      sceneId: source.sceneId, path, revision, quote: source.quote,
+      ...(span ? { start: span.start, end: span.end } : {}),
+      ...(Number.isSafeInteger(source.sentenceIndex) ? { sentenceIndex: source.sentenceIndex } : {}),
+    };
+    resolvedEvidence.push(evidence);
+    sources.push({
+      path, fileRevision: revision,
+      ...(typeof source.entityId === "string" ? { entityId: source.entityId } : {}),
+      ...(span ? { span, quote: source.quote } : { quote: source.quote }),
+    });
+  }
+  if (sources[0].path === sources[1].path && sources[0].fileRevision !== sources[1].fileRevision) throw new DiagnosticActionError("snapshot_stale", "Semantic candidate cites conflicting revisions of one source", true);
+  const fingerprint = sha256(JSON.stringify([
+    context.scope.repository_id, context.scope.branch, candidate.id, candidate.kind,
+    { id: modelIdentity.id, revision: modelIdentity.revision, digest: modelIdentity.digest }, sources,
+  ]));
+  const sourceIdentity = {
+    actionId: "proprium.diagnostics.scene.run.v1", repositoryId: context.scope.repository_id,
+    branch: context.scope.branch, generation: context.scope.generation, snapshot: context.snapshot.id,
+    findingFingerprint: fingerprint, analyzer: { id: "proprium.diagnostics.semantic-embedding", version: "1.0.0" },
+    modelIdentity, sources,
+  };
+  const candidateView = {
+    id: candidate.id, kind: candidate.kind, score: candidate.score, suspicion: candidate.suspicion,
+    entityId: typeof candidate.entityId === "string" ? candidate.entityId : "unknown",
+    evidenceA: resolvedEvidence[0], evidenceB: resolvedEvidence[1],
+  };
+  const finding = {
+    fingerprint, class: "semantic_hypothesis", kind: "embedding_midband", severity: "warning", basis: "hypothesis",
+    analyzer_id: "proprium.diagnostics.semantic-embedding", analyzer_version: "1.0.0",
+    message: candidate.suspicion, evidence: resolvedEvidence, sourceIdentity,
+    ...(resolvedEvidence[0].path === resolvedEvidence[1].path ? { source_path: resolvedEvidence[0].path, source_revision: resolvedEvidence[0].revision } : {}),
+    quote: resolvedEvidence.map((row) => row.quote).join(" / ").slice(0, 1000),
+  };
+  return { candidateView, finding };
+}
+
 const sceneRun: Handler = function* (raw, context, host) {
   const input = object(raw, "scene.run input");
-  closed(input, ["sceneId", "documentPath", "documentRevision", "draftGeneration", "text", "sections"], "scene.run input");
+  closed(input, ["sceneId", "documentPath", "documentRevision", "draftGeneration", "text", "sections", "semanticCursor"], "scene.run input");
   if (typeof input.sceneId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/u.test(input.sceneId)) throw new DiagnosticActionError("invalid_input", "sceneId must be a stable bounded ID");
   if (input.sections !== undefined && (!Array.isArray(input.sections) || input.sections.length > SCENE_SECTIONS.length || input.sections.some((item) => typeof item !== "string" || !(SCENE_SECTIONS as readonly string[]).includes(item)) || new Set(input.sections).size !== input.sections.length)) throw new DiagnosticActionError("invalid_input", "sections must contain unique supported section IDs");
+  if (input.semanticCursor !== undefined && (typeof input.semanticCursor !== "string" || input.semanticCursor.length > 4096)) throw new DiagnosticActionError("invalid_input", "semanticCursor must be a bounded Semantic cursor");
   const requested = input.sections === undefined ? [...SCENE_SECTIONS] : input.sections as SceneSection[];
   const scene = yield* invokeAction<Record<string, unknown>>(host, "proprium.narrative", "proprium.narrative.scene.context", { scene_id: input.sceneId });
   if (scene.scene_id !== input.sceneId || !safeManuscriptPath(scene.manuscript_path)) throw new DiagnosticActionError("scene_not_found", `Narrative could not resolve ${input.sceneId} to a manuscript`);
@@ -1279,7 +1378,7 @@ const sceneRun: Handler = function* (raw, context, host) {
     // Semantic's index represents saved source, not an unsaved editor draft.
     if (!draftGeneration) {
       try {
-        const result = yield* invokeAction<Record<string, unknown>>(host, "proprium.semantic", "proprium.semantic.contradictions.candidates", { limit: 100 });
+        const result = yield* invokeAction<Record<string, unknown>>(host, "proprium.semantic", "proprium.semantic.contradictions.candidates", { limit: 100, ...(input.semanticCursor ? { cursor: input.semanticCursor } : {}) });
         if (canonicalJson(result.snapshot) !== canonicalJson(context.snapshot)) throw new DiagnosticActionError("snapshot_stale", "Semantic returned a different snapshot", true);
         if (result.indexAvailable === true) {
           const candidates = boundedProviderRows(result.candidates, "Semantic hypotheses") as Array<Record<string, unknown>>;
@@ -1289,8 +1388,17 @@ const sceneRun: Handler = function* (raw, context, host) {
             const b = object(candidate.evidenceB, "Semantic evidence B");
             return a.sceneId === input.sceneId || b.sceneId === input.sceneId;
           });
+          const normalized = [];
+          for (const candidate of selected) {
+            const resolved = yield* semanticCandidateFinding(candidate, result.model, context, host);
+            normalized.push(resolved.candidateView);
+            findings.push(resolved.finding);
+          }
           semanticStatus = "ready";
-          sections.semanticHypotheses = { status: "ready", candidates: selected, model: result.model, complete: result.complete && result.nextCursor === null };
+          sections.semanticHypotheses = {
+            status: "ready", candidates: normalized, model: result.model,
+            nextCursor: result.nextCursor, complete: result.complete === true && result.nextCursor === null,
+          };
         } else if (result.indexAvailable !== false) throw new DiagnosticActionError("dependency_unavailable", "Semantic returned an invalid index state", true);
       } catch (error) {
         if (!optionalProviderError(error)) throw error;
@@ -1332,6 +1440,7 @@ const sceneRun: Handler = function* (raw, context, host) {
       const report = sections[section] as Record<string, unknown> | undefined;
       if (!report || report.status === "unavailable") return false;
       if (section === "prose") return report.status === "ready";
+      if (section === "semanticHypotheses") return report.status === "ready" && report.complete === true;
       return report.complete !== false;
     }),
   };
@@ -1439,11 +1548,356 @@ function feedbackSource(identity: Record<string, unknown>): Record<string, unkno
 function feedbackSourceMatches(existing: unknown, expected: Record<string, unknown>): boolean {
   if (!existing || typeof existing !== "object" || Array.isArray(existing)) return false;
   const row = existing as Record<string, unknown>;
-  const keys = ["repositoryId", "branch", "generation", "snapshot", "evidence", "analyzer", "configRevisions", "providerIdentity", "modelIdentity", "draftGeneration", "sceneId", "scope"];
+  const keys = ["repositoryId", "branch", "evidence", "analyzer", "configRevisions", "providerIdentity", "modelIdentity", "draftGeneration", "sceneId", "scope"];
   const normalized: Record<string, unknown> = {};
   for (const key of keys) if (row[key] !== undefined) normalized[key] = row[key];
-  return canonicalJson(normalized) === canonicalJson(expected);
+  const expectedNormalized: Record<string, unknown> = {};
+  for (const key of keys) if (expected[key] !== undefined) expectedNormalized[key] = expected[key];
+  return canonicalJson(normalized) === canonicalJson(expectedNormalized);
 }
+
+function feedbackDocument(before: string): { document: ReturnType<typeof YAML.parseDocument>; root: Record<string, unknown>; entriesNode: import("yaml").YAMLSeq } {
+  const document = YAML.parseDocument(before || "schemaVersion: 1\nentries: []\n", { strict: true, uniqueKeys: true });
+  if (document.errors.length) throw new DiagnosticActionError("unsupported_format", `Invalid feedback YAML: ${document.errors[0].message}`, false, { path: FEEDBACK_PATH });
+  if (!isMap(document.contents)) throw new DiagnosticActionError("unsupported_format", "Feedback YAML root must be a mapping", false, { path: FEEDBACK_PATH });
+  let decoded: unknown;
+  try { decoded = document.toJS({ maxAliasCount: 100 }); }
+  catch (error) { throw new DiagnosticActionError("unsupported_format", `Invalid feedback YAML: ${error instanceof Error ? error.message : "alias error"}`, false, { path: FEEDBACK_PATH }); }
+  const root = object(decoded, "feedback YAML root");
+  if (root.schemaVersion !== 1 || !Array.isArray(root.entries)) throw new DiagnosticActionError("unsupported_format", "Feedback YAML requires schemaVersion: 1 and an entries sequence", false, { path: FEEDBACK_PATH });
+  const entriesNode = document.get("entries", true);
+  if (!isSeq(entriesNode)) throw new DiagnosticActionError("unsupported_format", "Feedback entries must be a sequence", false, { path: FEEDBACK_PATH });
+  return { document, root, entriesNode };
+}
+
+const feedbackRead: Handler = function* (raw, context, host) {
+  const input = object(raw, "feedback.read input");
+  closed(input, ["sceneId", "documentPath", "documentRevision", "findingFingerprints"], "feedback.read input");
+  if (typeof input.sceneId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/u.test(input.sceneId) ||
+      !safeManuscriptPath(input.documentPath)) throw new DiagnosticActionError("invalid_input", "sceneId and a safe documentPath are required");
+  const documentRevision = safeRevision(input.documentRevision, "documentRevision");
+  if (!Array.isArray(input.findingFingerprints) || input.findingFingerprints.length > MAX_FEEDBACK_ENTRIES ||
+      input.findingFingerprints.some((value) => typeof value !== "string" || !/^[a-f0-9]{64}$/u.test(value)) ||
+      new Set(input.findingFingerprints).size !== input.findingFingerprints.length) {
+    throw new DiagnosticActionError("invalid_input", "findingFingerprints must be unique SHA-256 identities");
+  }
+  const current = new Map<string, Record<string, unknown>>();
+  for (const fingerprint of input.findingFingerprints as string[]) {
+    const key = canonicalJson([context.scope.workspace_id, canonicalJson(context.scope), context.snapshot.id, fingerprint]);
+    const row = rememberedFindings.get(key);
+    if (!row || row.scopeKey !== canonicalJson(context.scope) || row.snapshotId !== context.snapshot.id ||
+        row.sourceIdentity.findingFingerprint !== fingerprint || (row.sourceIdentity.sceneId !== undefined && row.sourceIdentity.sceneId !== input.sceneId) ||
+        !Array.isArray(row.sourceIdentity.sources) || !(row.sourceIdentity.sources as Array<Record<string, unknown>>).some((source) =>
+          source.path === input.documentPath && source.fileRevision === documentRevision)) {
+      throw new DiagnosticActionError("snapshot_stale", "Refresh Diagnostics before reading decisions for this report", true);
+    }
+    current.set(fingerprint, row.sourceIdentity);
+  }
+
+  let before = "", feedbackRevision: string | null = null;
+  try {
+    const file = yield* readFileVersioned(host, context.snapshot, FEEDBACK_PATH);
+    if (file.bytes.byteLength > MAX_FEEDBACK_BYTES) throw new DiagnosticActionError("capacity", "Feedback file exceeds the Diagnostics limit", true);
+    try { before = new TextDecoder("utf-8", { fatal: true }).decode(file.bytes); }
+    catch { throw new DiagnosticActionError("invalid_encoding", `Feedback file is not valid UTF-8: ${FEEDBACK_PATH}`); }
+    feedbackRevision = file.revision;
+  } catch (error) {
+    if (!(error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === "file_not_found")) throw error;
+  }
+  const { root } = feedbackDocument(before);
+  const decisions: Array<Record<string, unknown>> = [];
+  const staleDecisions: Array<Record<string, unknown>> = [];
+  const active = new Set<string>();
+  for (const rawEntry of root.entries as unknown[]) {
+    if (!rawEntry || typeof rawEntry !== "object" || Array.isArray(rawEntry)) continue;
+    const entry = rawEntry as Record<string, unknown>;
+    if (typeof entry.findingFingerprint !== "string" || typeof entry.decision !== "string" || typeof entry.updatedAt !== "string") continue;
+    const identity = current.get(entry.findingFingerprint);
+    if (identity && feedbackSourceMatches(entry.source, feedbackSource(identity))) {
+      if (!["false_positive", "intentional", "deferred", "legacy_dismissed"].includes(entry.decision)) continue;
+      if (active.has(entry.findingFingerprint)) throw new DiagnosticActionError("unsupported_format", "Feedback contains duplicate exact decisions", false, { path: FEEDBACK_PATH });
+      active.add(entry.findingFingerprint);
+      decisions.push({ findingFingerprint: entry.findingFingerprint, decision: entry.decision, updatedAt: entry.updatedAt,
+        ...(typeof entry.annotation === "string" ? { annotation: entry.annotation } : {}) });
+      continue;
+    }
+    const source = entry.source && typeof entry.source === "object" && !Array.isArray(entry.source) ? entry.source as Record<string, unknown> : {};
+    const sourcePaths = Array.isArray(source.evidence) ? source.evidence.flatMap((item) => item && typeof item === "object" && typeof (item as Record<string, unknown>).path === "string" ? [(item as Record<string, unknown>).path as string] : []) : [];
+    if ((source.sceneId === input.sceneId || sourcePaths.includes(input.documentPath)) &&
+        ["false_positive", "intentional", "deferred", "legacy_dismissed"].includes(entry.decision)) {
+      staleDecisions.push({ findingFingerprint: entry.findingFingerprint, decision: entry.decision, updatedAt: entry.updatedAt, sourcePaths });
+    }
+  }
+  return { feedbackPath: FEEDBACK_PATH, feedbackRevision, decisions, staleDecisions, snapshot: context.snapshot };
+};
+
+interface LegacyDismissalRow {
+  rowId: string;
+  sourcePath: string;
+  sourceRevision: string;
+  lineNumber: number;
+  byteStart: number;
+  byteEnd: number;
+  rawLine: string;
+  candidateId?: string;
+  timestamp?: string;
+  record?: Record<string, unknown>;
+  disposition: "importable" | "already_imported" | "unresolved" | "conflict" | "invalid";
+  detail: string;
+  targetFingerprint?: string;
+  sourcePaths: string[];
+}
+
+function* currentLegacyCandidates(ids: readonly string[], context: Parameters<Handler>[1], host: Parameters<Handler>[2]): Generator<import("../shared/guest.js").HostCall, { candidates: Map<string, Record<string, unknown>>; complete: boolean; errors: Map<string, string> }, unknown> {
+  const wanted = new Set(ids);
+  const candidates = new Map<string, Record<string, unknown>>();
+  const errors = new Map<string, string>();
+  const ruleIds = [...wanted].filter((id) => id.startsWith("rule:"));
+  if (ruleIds.length) {
+    try {
+      const result = yield* invokeLocal(projectContinuity, { candidateIds: ruleIds, pageSize: 100 }, context, host) as Generator<import("../shared/guest.js").HostCall, Record<string, unknown>, unknown>;
+      if (canonicalJson(result.snapshot) !== canonicalJson(context.snapshot) || !Array.isArray(result.findings)) throw new DiagnosticActionError("snapshot_stale", "Continuity migration candidates do not match this snapshot", true);
+      for (const rawFinding of result.findings as Array<Record<string, unknown>>) {
+        const id = legacyCandidateId(rawFinding);
+        if (id && rawFinding.sourceIdentity && typeof rawFinding.sourceIdentity === "object") candidates.set(id, rawFinding);
+      }
+    } catch (error) {
+      for (const id of ruleIds) errors.set(id, error instanceof Error ? error.message : "Current continuity candidates could not be checked");
+    }
+  }
+  const embeddingIds = new Set([...wanted].filter((id) => id.startsWith("embed:")));
+  let complete = true;
+  if (embeddingIds.size) {
+    let cursor: string | undefined;
+    const seenCursors = new Set<string>();
+    try {
+      for (let pageNumber = 0; pageNumber < 100; pageNumber++) {
+        const result = yield* invokeAction<Record<string, unknown>>(host, "proprium.semantic", "proprium.semantic.contradictions.candidates", { limit: 100, ...(cursor ? { cursor } : {}) });
+        if (canonicalJson(result.snapshot) !== canonicalJson(context.snapshot) || typeof result.indexAvailable !== "boolean" || !(result.nextCursor === null || typeof result.nextCursor === "string")) throw new DiagnosticActionError("snapshot_stale", "Semantic migration candidates do not match this snapshot", true);
+        if (!result.indexAvailable) break;
+        const rows = boundedProviderRows(result.candidates, "Semantic migration candidates") as Array<Record<string, unknown>>;
+        for (const candidate of rows) {
+          if (typeof candidate.id !== "string" || !embeddingIds.has(candidate.id)) continue;
+          try { candidates.set(candidate.id, (yield* semanticCandidateFinding(candidate, result.model, context, host)).finding); }
+          catch (error) { errors.set(candidate.id, error instanceof Error ? error.message : "Candidate evidence could not be verified"); }
+        }
+        if (embeddingIds.size === 0 || [...embeddingIds].every((id) => candidates.has(id) || errors.has(id))) break;
+        if (result.nextCursor === null) break;
+        if (seenCursors.has(result.nextCursor)) throw new DiagnosticActionError("snapshot_stale", "Semantic candidate pagination did not advance", true);
+        seenCursors.add(result.nextCursor);
+        cursor = result.nextCursor;
+        if (pageNumber === 99) complete = false;
+      }
+      if ([...embeddingIds].some((id) => !candidates.has(id) && !errors.has(id))) complete = false;
+    } catch (error) {
+      complete = false;
+      const encodedError = JSON.stringify(error);
+      const detail = error instanceof Error ? error.message : (typeof encodedError === "string" ? encodedError.slice(0, 500) : error === undefined ? "Candidate scan failed without a typed error" : String(error));
+      for (const id of embeddingIds) if (!candidates.has(id)) errors.set(id, detail);
+    }
+  }
+  return { candidates, complete, errors };
+}
+
+const legacyDismissalsInspect: Handler = function* (raw, context, host) {
+  const input = object(raw, "legacy-dismissals.inspect input");
+  closed(input, [], "legacy-dismissals.inspect input");
+  let feedbackBefore = "", feedbackRevision: string | null = null;
+  try {
+    const feedback = yield* readFileVersioned(host, context.snapshot, FEEDBACK_PATH);
+    if (feedback.bytes.byteLength > MAX_FEEDBACK_BYTES) throw new DiagnosticActionError("capacity", "Feedback file exceeds the Diagnostics limit", true);
+    feedbackBefore = new TextDecoder("utf-8", { fatal: true }).decode(feedback.bytes);
+    feedbackRevision = feedback.revision;
+  } catch (error) {
+    if (!(error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === "file_not_found")) throw error;
+  }
+  const { root } = feedbackDocument(feedbackBefore);
+  const sources: Array<Record<string, unknown>> = [];
+  const rows: LegacyDismissalRow[] = [];
+  const readSet: ReadPrecondition[] = [{ path: FEEDBACK_PATH, revision: feedbackRevision }];
+  let complete = true;
+  for (const path of LEGACY_DISMISSAL_PATHS) {
+    let file: ReturnType<typeof readFileVersioned> extends Generator<unknown, infer R, unknown> ? R : never;
+    try { file = yield* readFileVersioned(host, context.snapshot, path); }
+    catch (error) {
+      if (error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === "file_not_found") continue;
+      throw error;
+    }
+    readSet.push({ path, revision: file.revision });
+    const sourceInfo: Record<string, unknown> = { path, revision: file.revision, rows: [] as LegacyDismissalRow[] };
+    sources.push(sourceInfo);
+    if (file.bytes.byteLength > MAX_LEGACY_BYTES) {
+      sourceInfo.error = `Source exceeds ${MAX_LEGACY_BYTES} bytes`;
+      complete = false;
+      continue;
+    }
+    let text: string;
+    try { text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(file.bytes); }
+    catch { sourceInfo.error = "Source is not valid UTF-8; original bytes were left unchanged"; complete = false; continue; }
+    let byteOffset = 0;
+    const sourceRows = sourceInfo.rows as LegacyDismissalRow[];
+    const lines = text.split("\n");
+    for (const [index, rawLine] of lines.entries()) {
+      const lineBytes = new TextEncoder().encode(rawLine).byteLength + (index < lines.length - 1 ? 1 : 0);
+      const byteStart = byteOffset;
+      byteOffset += lineBytes;
+      if (!rawLine.trim()) continue;
+      if (rows.length >= MAX_LEGACY_ROWS) { complete = false; break; }
+      const rowId = sha256(JSON.stringify([path, file.revision, index + 1, rawLine]));
+      const row: LegacyDismissalRow = {
+        rowId, sourcePath: path, sourceRevision: file.revision, lineNumber: index + 1,
+        byteStart, byteEnd: Math.max(byteStart, byteOffset - 1), rawLine: rawLine.slice(0, MAX_LEGACY_ROW_CHARS), disposition: "invalid",
+        detail: "Malformed or incomplete JSONL dismissal; source bytes remain unchanged.", sourcePaths: [path],
+      };
+      if (rawLine.length > MAX_LEGACY_ROW_CHARS) {
+        row.detail = `JSONL row exceeds the ${MAX_LEGACY_ROW_CHARS}-character inspection limit; original source bytes remain unchanged.`;
+        rows.push(row); sourceRows.push(row); continue;
+      }
+      try {
+        const decoded: unknown = JSON.parse(rawLine);
+        if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) throw new Error("row must be an object");
+        const record = decoded as Record<string, unknown>;
+        if (typeof record.candidateId !== "string" || !record.candidateId.trim() || record.candidateId.length > 1024 || typeof record.timestamp !== "string" || !record.timestamp.trim()) throw new Error("candidateId and timestamp are required");
+        row.candidateId = record.candidateId;
+        row.timestamp = record.timestamp;
+        row.record = record;
+        row.disposition = "unresolved";
+        row.detail = "The current candidate and its exact sources have not been matched yet.";
+      } catch (error) { row.detail = error instanceof Error ? error.message : row.detail; }
+      rows.push(row); sourceRows.push(row);
+    }
+  }
+  const duplicateIds = new Map<string, LegacyDismissalRow[]>();
+  for (const row of rows) if (row.candidateId) duplicateIds.set(row.candidateId, [...(duplicateIds.get(row.candidateId) ?? []), row]);
+  const current = yield* currentLegacyCandidates([...duplicateIds.keys()], context, host);
+  complete &&= current.complete;
+  for (const [candidateId, duplicates] of duplicateIds) {
+    const matched = current.candidates.get(candidateId);
+    const duplicatePaths = [...new Set(duplicates.map((row) => row.sourcePath))];
+    for (const row of duplicates) {
+      row.sourcePaths = duplicatePaths;
+      if (duplicates.length > 1) {
+        row.disposition = "conflict";
+        row.detail = "The same legacy candidate appears in multiple rows or source paths; choose no automatic winner.";
+        continue;
+      }
+      if (!matched) {
+        row.disposition = "unresolved";
+        row.detail = current.errors.get(candidateId) ?? "No current candidate with this exact legacy ID was found; source row remains preserved.";
+        continue;
+      }
+      const identity = matched.sourceIdentity as Record<string, unknown>;
+      const fingerprint = typeof matched.fingerprint === "string" ? matched.fingerprint : identity.findingFingerprint;
+      if (typeof fingerprint !== "string" || identity.findingFingerprint !== fingerprint) {
+        row.disposition = "conflict"; row.detail = "Current candidate identity is incomplete; no feedback entry can be safely created."; continue;
+      }
+      row.targetFingerprint = fingerprint;
+      const existing = (root.entries as unknown[]).filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry) &&
+        (entry as Record<string, unknown>).findingFingerprint === fingerprint && feedbackSourceMatches((entry as Record<string, unknown>).source, feedbackSource(identity))) as Array<Record<string, unknown>>;
+      if (existing.length > 1 || existing.some((entry) => entry.decision !== "legacy_dismissed")) {
+        row.disposition = "conflict"; row.detail = "A different Diagnostics decision already exists for this exact candidate.";
+      } else if (existing.length === 1 && existing[0].decision === "legacy_dismissed") {
+        row.disposition = "already_imported"; row.detail = "This exact legacy dismissal is already represented in feedback.yaml.";
+      } else {
+        row.disposition = "importable"; row.detail = "Current candidate identity and both source revisions were resolved.";
+      }
+    }
+  }
+  return {
+    feedbackPath: FEEDBACK_PATH, feedbackRevision,
+    sources: sources.map((source) => {
+      const path = String(source.path);
+      const sourceRows = rows.filter((row) => row.sourcePath === path)
+        .map(({ lineNumber: _lineNumber, byteStart: _byteStart, byteEnd: _byteEnd, record: _record, ...row }) => row);
+      return { path, revision: source.revision, rows: sourceRows, ...(typeof source.error === "string" ? { error: source.error } : {}) };
+    }),
+    complete,
+    rows: rows.map(({ lineNumber: _lineNumber, byteStart: _byteStart, byteEnd: _byteEnd, record: _record, ...row }) => row),
+    snapshot: context.snapshot,
+  };
+};
+
+const legacyDismissalsPropose: Handler = function* (raw, context, host) {
+  const input = object(raw, "legacy-dismissals.propose input");
+  closed(input, ["rows", "expectedFeedbackRevision", "idempotencyKey"], "legacy-dismissals.propose input");
+  if (!Array.isArray(input.rows) || input.rows.length < 1 || input.rows.length > 100) throw new DiagnosticActionError("invalid_input", "rows must select 1 through 100 explicit legacy records");
+  if (input.expectedFeedbackRevision !== null && input.expectedFeedbackRevision !== undefined && (typeof input.expectedFeedbackRevision !== "string" || !/^[a-f0-9]{64}$/u.test(input.expectedFeedbackRevision))) throw new DiagnosticActionError("invalid_input", "expectedFeedbackRevision must be null or a SHA-256 revision");
+  const key = idempotencyKey(input, context);
+  const selected = (input.rows as unknown[]).map((rawRow, index) => {
+    const row = object(rawRow, `rows[${index}]`);
+    closed(row, ["sourcePath", "sourceRevision", "rowId"], `rows[${index}]`);
+    if (!(LEGACY_DISMISSAL_PATHS as readonly unknown[]).includes(row.sourcePath) || typeof row.rowId !== "string" || !/^[a-f0-9]{64}$/u.test(row.rowId)) throw new DiagnosticActionError("invalid_input", `rows[${index}] has an invalid source or row identity`);
+    return { sourcePath: row.sourcePath as string, sourceRevision: safeRevision(row.sourceRevision, `rows[${index}].sourceRevision`), rowId: row.rowId };
+  });
+  if (new Set(selected.map((row) => row.rowId)).size !== selected.length) throw new DiagnosticActionError("invalid_input", "rows must not contain duplicate row IDs");
+  const inspected = yield* invokeLocal(legacyDismissalsInspect, {}, context, host) as Generator<import("../shared/guest.js").HostCall, Record<string, unknown>, unknown>;
+  if (inspected.feedbackRevision !== (input.expectedFeedbackRevision ?? null)) throw new DiagnosticActionError("snapshot_stale", "Feedback file changed after migration inspection", true);
+  const allRows = Array.isArray(inspected.rows) ? inspected.rows as Array<Record<string, unknown>> : [];
+  const chosen: Array<Record<string, unknown>> = [];
+  for (const requested of selected) {
+    const row = allRows.find((candidate) => candidate.rowId === requested.rowId && candidate.sourcePath === requested.sourcePath && candidate.sourceRevision === requested.sourceRevision);
+    if (!row || row.disposition !== "importable" || typeof row.targetFingerprint !== "string") throw new DiagnosticActionError("snapshot_stale", "A selected legacy row is no longer importable; inspect the current source again", true);
+    chosen.push(row);
+  }
+  const resolvedCandidates = yield* currentLegacyCandidates(chosen.map((row) => String(row.candidateId)), context, host);
+  const feedbackBeforeFile = inspected.feedbackRevision === null ? null : yield* readFileVersioned(host, context.snapshot, FEEDBACK_PATH, inspected.feedbackRevision as string);
+  const before = feedbackBeforeFile ? new TextDecoder("utf-8", { fatal: true }).decode(feedbackBeforeFile.bytes) : "";
+  const feedbackRevision = feedbackBeforeFile?.revision ?? null;
+  if (feedbackRevision !== (input.expectedFeedbackRevision ?? null)) throw new DiagnosticActionError("snapshot_stale", "Feedback revision changed before migration proposal", true);
+  const { document, root, entriesNode } = feedbackDocument(before);
+  if (root.entries.length + chosen.length > MAX_FEEDBACK_ENTRIES) throw new DiagnosticActionError("capacity", "Feedback entry limit would be exceeded", true);
+  const timestampResult = yield* host.request<{ timestamp: string }>("workspace.change.timestamp", {});
+  if (!timestampResult || typeof timestampResult.timestamp !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/u.test(timestampResult.timestamp)) throw new DiagnosticActionError("storage_unknown", "Host returned an invalid stable change timestamp", true);
+  const evidence: SourceSpan[] = [];
+  const reads: ReadPrecondition[] = [{ path: FEEDBACK_PATH, revision: feedbackRevision }];
+  const importedRowIds: string[] = [];
+  for (const row of chosen) {
+    const sourcePath = String(row.sourcePath), sourceRevision = String(row.sourceRevision);
+    const original = LEGACY_DISMISSAL_PATHS.includes(sourcePath as typeof LEGACY_DISMISSAL_PATHS[number]);
+    if (!original) throw new DiagnosticActionError("invalid_path", "Legacy source path is outside the declared migration inventory");
+    const sourceRead = yield* readFileVersioned(host, context.snapshot, sourcePath, sourceRevision);
+    reads.push({ path: sourcePath, revision: sourceRevision });
+    const sourceText = new TextDecoder("utf-8", { fatal: true }).decode(sourceRead.bytes);
+    const lines = sourceText.split("\n");
+    const rowPosition = lines.findIndex((line, index) => {
+      if (!line.trim()) return false;
+      return sha256(JSON.stringify([sourcePath, sourceRevision, index + 1, line])) === row.rowId;
+    });
+    if (rowPosition < 0) throw new DiagnosticActionError("snapshot_stale", "Legacy source row bytes no longer match the selected identity", true);
+    const rawLine = lines[rowPosition];
+    const record = JSON.parse(rawLine) as Record<string, unknown>;
+    const fingerprint = String(row.targetFingerprint);
+    const current = resolvedCandidates.candidates.get(String(row.candidateId));
+    if (!current || current.fingerprint !== fingerprint || (current.sourceIdentity as Record<string, unknown>).findingFingerprint !== fingerprint) throw new DiagnosticActionError("snapshot_stale", "Current candidate source/config identity changed after inspection", true);
+    for (const source of (current.sourceIdentity as Record<string, unknown>).sources as Array<Record<string, unknown>>) {
+      if (!reads.some((item) => item.path === source.path && item.revision === source.fileRevision)) reads.push({ path: String(source.path), revision: String(source.fileRevision) });
+    }
+    const byteStart = new TextEncoder().encode(lines.slice(0, rowPosition).join("\n") + (rowPosition > 0 ? "\n" : "")).byteLength;
+    const byteEnd = byteStart + new TextEncoder().encode(rawLine).byteLength;
+    evidence.push({ path: sourcePath, revision: sourceRevision, start: byteStart, end: byteEnd, quote: rawLine.slice(0, 4000) });
+    entriesNode.add(document.createNode({
+      id: `legacy-${sha256(JSON.stringify([sourcePath, sourceRevision, row.rowId, fingerprint])).slice(0, 40)}`,
+      findingFingerprint: fingerprint,
+      decision: "legacy_dismissed",
+      source: feedbackSource(current.sourceIdentity as Record<string, unknown>),
+      legacy: { sourcePath, sourceRevision, rowId: row.rowId, candidateId: row.candidateId, timestamp: row.timestamp, rawLine, record },
+      createdAt: timestampResult.timestamp,
+      updatedAt: timestampResult.timestamp,
+    }));
+    importedRowIds.push(String(row.rowId));
+  }
+  const after = document.toString({ lineWidth: 0 });
+  if (new TextEncoder().encode(after).byteLength > MAX_FEEDBACK_BYTES) throw new DiagnosticActionError("capacity", "Proposed feedback file exceeds the Diagnostics limit", true);
+  const content = yield* changeContent(host, context, FEEDBACK_PATH, after);
+  const changeset = makeChangeSet({
+    context, actionId: context.action_id, idempotencyKey: key, path: FEEDBACK_PATH, revision: feedbackRevision,
+    before, after, title: "Diagnostics: migrate legacy Semantic dismissals",
+    reason: "Preserve explicitly selected legacy dismissal records as reasonless decisions for the exact current candidate sources.",
+    evidence, content, read_set: reads,
+  });
+  const proposalId = yield* submitChangeSet(host, changeset, content.artifact_id);
+  return { proposalId, feedbackPath: FEEDBACK_PATH, expectedRevision: feedbackRevision, importedRowIds, snapshot: context.snapshot };
+};
 
 function* feedbackPropose(raw: unknown, context: Parameters<Handler>[1], host: Parameters<Handler>[2]) {
   const input = object(raw, "feedback.propose input");
@@ -1595,5 +2049,8 @@ export const guest = createGuest("proprium.diagnostics", {
   "proprium.diagnostics.chapter.aspects.review.v1": remembering(chapterAspectsReview),
   "proprium.diagnostics.chapter.aspects.preview.v1": chapterAspectsPreview,
   "proprium.diagnostics.scene.plot-goal.check.v1": remembering(plotGoalCheck),
+  "proprium.diagnostics.feedback.read.v1": feedbackRead,
   "proprium.diagnostics.feedback.propose.v1": feedbackPropose,
+  "proprium.diagnostics.legacy-dismissals.inspect.v1": legacyDismissalsInspect,
+  "proprium.diagnostics.legacy-dismissals.propose.v1": legacyDismissalsPropose,
 });

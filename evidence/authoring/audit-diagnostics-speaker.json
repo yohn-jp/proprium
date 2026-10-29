@@ -271,26 +271,31 @@
       "requirement": "RECOVERY — Merge analyzer output to stable finding identities, kind/severity filters, sentence ordering, stale/loading state and resolved-item feedback.\naccept-dia-a10 — Desktop margin marker and panel filters select a finding; mark-intentional and false-positive are distinct explicit decisions. Host shows a reviewable feedback file proposal; after approval/reload, only the exact matching finding is annotated. A new source/config fingerprint reappears. Resolved animation never changes finding truth or severity.\naccept-dia-a11 — Same scene across different repository, branch, overlay, corpus/config, Speaker revision, analyzer version or provider digest never reuses a prior result. Cancel a multi-page check and terminate a Worker; writing remains usable, result is incomplete/not cached and leases are released. Offline cache loss recomputes from local Git files.",
       "status": "PARTIAL",
       "implementation_files": [
+        "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx",
+        "app/src/browser/proprium/host/authoring/DiagnosticsFindings.css",
+        "app/src/browser/proprium/host/authoring/DiagnosticsFindings.test.ts",
+        "app/src/browser/proprium/host/authoring/DiagnosticsFindings.tsx",
+        "app/src/browser/proprium/host/authoring/diagnosticsFindingsModel.ts",
         "plugins/diagnostics/guest.ts",
-        "plugins/diagnostics/src/core.ts",
         "plugins/diagnostics/plugin.json",
-        "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx"
+        "plugins/diagnostics/src/core.ts"
       ],
       "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx",
-      "ui_path": "plugins/diagnostics/plugin.json#diagnostics.analysis; Host surface renderer in app/src/browser/proprium/host/authoring/AuthoringSurface.tsx",
+      "ui_path": "Host-owned DiagnosticsFindings component (integration pending in HostApp); plugin result and feedback.read.v1 action in plugins/diagnostics/guest.ts",
       "existing_tests": [
         "plugins/diagnostics/tests/feedbackGuest.test.ts",
         "plugins/diagnostics/tests/sceneGuest.test.ts"
       ],
       "gaps": [
-        "Findings are normalized, evidence-bound and feedback actions have review proposals, but the current declarative list has no kind/severity filter controls, no resolved-state view/diff, and no editor-connected stale marker path."
+        "Kind, severity and open/decided filter logic, stale-decision presentation, and feedback.read.v1 now exist with focused unit coverage. The Host-owned component is not yet mounted in the signed browser flow; report normalization, feedback attachment, actual interaction and reload behavior still require Host integration and browser proof.",
+        "Stable fingerprints exclude ephemeral workspace generation/snapshot IDs while retaining exact source revisions, text/config and analyzer/provider identity; verify unchanged-source decisions survive reload and changed-source/config decisions remain stale in the real Host."
       ],
       "required_fixes": [
-        "Add accessible kind/severity filters and a resolved/stale presentation using current report identity; validate suppression only for the exact fingerprint/source/config after Host approval."
+        "Integrate DiagnosticsFindings with Host-validated scene.run and feedback.read results, then run signed browser checks for kind/severity/state filters, paired evidence navigation, proposal approval/reload, unchanged-source decision retention and changed-source stale display."
       ],
       "dependencies": [
-        "proprium.narrative",
         "proprium.knowledge",
+        "proprium.narrative",
         "proprium.research",
         "proprium.semantic",
         "proprium.speaker"
@@ -343,27 +348,33 @@
       "requirement": "RECOVERY — Build evidence-paired contradiction candidates and review dismissal against its source scope; the optional Paired Writing interpretation is separately frozen.\naccept-dia-a13 — Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact. **FROZEN subrequirement:** optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction`; this is excluded from the active Diagnostics completion gate while Paired Writing is frozen. `FROZEN` is not `PASS`.",
       "status": "PARTIAL",
       "implementation_files": [
+        "app/src/browser/proprium/host/authoring/DiagnosticsFindings.tsx",
+        "app/src/browser/proprium/host/authoring/diagnosticsFindingsModel.ts",
         "plugins/diagnostics/guest.ts",
         "plugins/diagnostics/plugin.json",
-        "plugins/semantic/guest.ts",
-        "plugins/paired-writing/guest.ts"
+        "plugins/diagnostics/tests/feedbackGuest.test.ts",
+        "plugins/diagnostics/tests/legacyDismissalsGuest.test.ts",
+        "plugins/diagnostics/tests/sceneGuest.test.ts",
+        "plugins/paired-writing/guest.ts",
+        "plugins/semantic/guest.ts"
       ],
       "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx",
-      "ui_path": "plugins/diagnostics/plugin.json#diagnostics.analysis (Semantic evidence panel and feedback actions)",
+      "ui_path": "Host-owned DiagnosticsFindings paired-evidence and legacy-migration controls (HostApp integration pending); scene.run findings plus legacy-dismissals.inspect.v1/propose.v1 actions",
       "existing_tests": [
         "plugins/diagnostics/tests/sceneGuest.test.ts",
         "plugins/semantic/guest.test.ts",
         "plugins/paired-writing/test/guest.test.ts"
       ],
       "gaps": [
-        "Deterministic findings, Semantic evidence candidates and shared feedback remain active; optional Paired model-verdict interaction is FROZEN under the Paired Writing freeze and is not represented as a PASS or as a Diagnostics implementation."
+        "Diagnostics now normalizes Semantic embedding candidates into top-level findings with two revision-pinned quote sources, stable fingerprints, feedback read/proposal support, and explicit legacy JSONL inspect/propose actions that retain unknown fields and leave the source unchanged. Signed Host UI integration/browser verification remains outstanding.",
+        "The optional Paired Writing model-verdict interaction remains FROZEN and is excluded from active DIA-11 completion; this is not a PASS."
       ],
       "required_fixes": [
-        "Browser-verify active deterministic/embedding candidate evidence and Host-reviewed dismissal while keeping the optional Paired verdict explicitly FROZEN."
+        "Wire the findings/migration component through Host review and run signed browser scenarios for paired quote display and source jumps, exact dismissal after reload, stale-source reappearance, legacy import preserving unknown fields/source bytes, unresolved/conflict display, and proposal cancellation."
       ],
       "dependencies": [
-        "proprium.semantic",
-        "proprium.paired-writing"
+        "proprium.paired-writing",
+        "proprium.semantic"
       ],
       "priority": "P1",
       "verification": [

@@ -6572,7 +6572,7 @@
           "id": "accept-dia-a10",
           "canon_title": "finding interaction/feedback",
           "canon_reference": "#accept-dia-a10",
-          "canon_requirement": "Desktop margin marker and panel filters select a finding; mark-intentional and false-positive are distinct explicit decisions. Host shows a reviewable feedback file proposal; after approval/reload, only the exact matching finding is annotated. A new source/config fingerprint reappears. Resolved animation never changes finding truth or severity.",
+          "canon_requirement": "Desktop margin marker and panel kind/severity/state filters select a finding and display quoted evidence; mark-intentional, false-positive and deferred are distinct explicit decisions. Host shows a reviewable feedback file proposal; after approval/reload, the stable fingerprint is active only while exact source/config/model identity still matches. A changed source/config fingerprint reappears and its prior decision is shown as stale. Resolved presentation never changes finding truth or severity.",
           "feature_ids": [
             "DIA-09",
             "DIA-12"
@@ -6594,7 +6594,13 @@
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null,
-          "lifecycle": "ACTIVE"
+          "lifecycle": "ACTIVE",
+          "superseded_canon_metadata": {
+            "ledger_revision": "e02394d8754098df4d0619ff2ba82e017108c47f",
+            "fields": {
+              "canon_requirement": "Desktop margin marker and panel filters select a finding; mark-intentional and false-positive are distinct explicit decisions. Host shows a reviewable feedback file proposal; after approval/reload, only the exact matching finding is annotated. A new source/config fingerprint reappears. Resolved animation never changes finding truth or severity."
+            }
+          }
         },
         {
           "id": "accept-dia-a11",
@@ -6664,7 +6670,7 @@
           "id": "accept-dia-a13",
           "canon_title": "contradiction candidates",
           "canon_reference": "#accept-dia-a13",
-          "canon_requirement": "Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact. **FROZEN subrequirement:** optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction`; this is excluded from the active Diagnostics completion gate while Paired Writing is frozen. `FROZEN` is not `PASS`.",
+          "canon_requirement": "Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact. Inspect legacy dismissal JSONL at its exact revision, retain raw/unknown fields, show unresolved and colliding rows, and propose only explicitly selected unique candidates as `legacy_dismissed`; never alter the JSONL source. **FROZEN subrequirement:** optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction`; this is excluded from the active Diagnostics completion gate while Paired Writing is frozen. `FROZEN` is not `PASS`.",
           "feature_ids": [
             "DIA-11"
           ],
@@ -6697,13 +6703,21 @@
           "blocker": null,
           "lifecycle": "ACTIVE",
           "superseded_canon_metadata": {
-            "ledger_revision": "c247023424a537c87477c07724ad0f0052c3ccc9",
+            "ledger_revision": "e02394d8754098df4d0619ff2ba82e017108c47f",
             "fields": {
-              "canon_title": "contradiction candidates",
-              "canon_reference": "#accept-dia-a13",
-              "canon_requirement": "Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale; optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction` remain distinguishable. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact."
+              "canon_requirement": "Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact. **FROZEN subrequirement:** optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction`; this is excluded from the active Diagnostics completion gate while Paired Writing is frozen. `FROZEN` is not `PASS`."
             }
-          }
+          },
+          "superseded_canon_metadata_history": [
+            {
+              "ledger_revision": "c247023424a537c87477c07724ad0f0052c3ccc9",
+              "fields": {
+                "canon_title": "contradiction candidates",
+                "canon_reference": "#accept-dia-a13",
+                "canon_requirement": "Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale; optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction` remain distinguishable. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact."
+              }
+            }
+          ]
         },
         {
           "id": "accept-dia-a14",
@@ -7598,7 +7612,7 @@
           "feature_id": "DIA-09",
           "source_anchor_state": "UNMAPPED",
           "author_visible_result": "RECOVERY — Merge analyzer output to stable finding identities, kind/severity filters, sentence ordering, stale/loading state and resolved-item feedback.",
-          "source_disposition": "`scene.run.v1`, `project.consistency.run.v1`, `project.continuity.run.v1`, `feedback.propose.v1`.",
+          "source_disposition": "`scene.run.v1`, `project.consistency.run.v1`, `project.continuity.run.v1`, `feedback.read.v1`, `feedback.propose.v1`; Host `DiagnosticsFindings` filters current and decided findings and displays stale decisions without applying them to changed sources.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
             "edc033c2c9466274a334299dadfa426661d957d9"
@@ -7622,7 +7636,13 @@
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null,
-          "lifecycle": "ACTIVE"
+          "lifecycle": "ACTIVE",
+          "superseded_canon_metadata": {
+            "ledger_revision": "e02394d8754098df4d0619ff2ba82e017108c47f",
+            "fields": {
+              "source_disposition": "`scene.run.v1`, `project.consistency.run.v1`, `project.continuity.run.v1`, `feedback.propose.v1`."
+            }
+          }
         },
         {
           "feature_id": "DIA-10",
@@ -7664,7 +7684,7 @@
           "feature_id": "DIA-11",
           "source_anchor_state": "TRACEABILITY_MAPPED",
           "author_visible_result": "RECOVERY — Build evidence-paired contradiction candidates and review dismissal against its source scope; the optional Paired Writing interpretation is separately frozen.",
-          "source_disposition": "Diagnostics owns deterministic declared-state findings and persisted human decisions; Semantic supplies optional embedding candidates; the Paired Writing model-verdict subrequirement is **FROZEN** while Paired Writing is frozen. The same finding is normalized once by Diagnostics.",
+          "source_disposition": "Diagnostics owns deterministic declared-state findings and persisted human decisions; Semantic supplies optional embedding candidates; `feedback.read.v1` attaches only exact current source/config decisions. Legacy inspect/propose actions preserve raw JSONL fields and propose only to Diagnostics feedback. The Paired Writing model-verdict subrequirement is **FROZEN** while Paired Writing is frozen.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
             "edc033c2c9466274a334299dadfa426661d957d9"
@@ -7701,12 +7721,20 @@
           "blocker": null,
           "lifecycle": "ACTIVE",
           "superseded_canon_metadata": {
-            "ledger_revision": "c247023424a537c87477c07724ad0f0052c3ccc9",
+            "ledger_revision": "e02394d8754098df4d0619ff2ba82e017108c47f",
             "fields": {
-              "author_visible_result": "RECOVERY — Build evidence-paired contradiction candidates, let an author request optional interpretation, distinguish compatible/insufficient/contradiction and review dismissal against its source scope.",
-              "source_disposition": "Diagnostics owns deterministic declared-state findings and persisted human decisions; Semantic supplies optional embedding candidates; Paired Writing supplies the explicit model verdict. The same finding is normalized once by Diagnostics."
+              "source_disposition": "Diagnostics owns deterministic declared-state findings and persisted human decisions; Semantic supplies optional embedding candidates; the Paired Writing model-verdict subrequirement is **FROZEN** while Paired Writing is frozen. The same finding is normalized once by Diagnostics."
             }
-          }
+          },
+          "superseded_canon_metadata_history": [
+            {
+              "ledger_revision": "c247023424a537c87477c07724ad0f0052c3ccc9",
+              "fields": {
+                "author_visible_result": "RECOVERY — Build evidence-paired contradiction candidates, let an author request optional interpretation, distinguish compatible/insufficient/contradiction and review dismissal against its source scope.",
+                "source_disposition": "Diagnostics owns deterministic declared-state findings and persisted human decisions; Semantic supplies optional embedding candidates; Paired Writing supplies the explicit model verdict. The same finding is normalized once by Diagnostics."
+              }
+            }
+          ]
         },
         {
           "feature_id": "DIA-12",
