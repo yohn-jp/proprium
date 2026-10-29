@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent, type ReactElement } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type ReactElement, type ReactNode } from "react";
 import type { ActionResult } from "../../authoring/types.js";
 import { isValidEditorRange } from "../../../../editor/terms.js";
 import {
@@ -54,6 +54,8 @@ export interface ResearchReviewProps {
   /** Must change when the active repository, branch, manifest set, or Host snapshot changes. */
   readonly scopeKey: string;
   readonly knowledgeAvailable: boolean;
+  /** Host-owned async index controls; the Research panel provides no privileged runtime path. */
+  readonly taskControls?: ReactNode;
   invokeRead(expectedScope: string, pluginId: string, actionId: string, input: Record<string, unknown>, signal: AbortSignal): Promise<ActionResult>;
   invokeUi(event: Event, pluginId: string, actionId: string, input: Record<string, unknown>): Promise<ActionResult>;
   onProposalCreated?(): void;
@@ -62,7 +64,7 @@ export interface ResearchReviewProps {
 }
 
 /** Host-rendered Research handoffs. All source reading and edits remain signed Host actions. */
-export function ResearchReview({ scopeKey, knowledgeAvailable, invokeRead, invokeUi, onProposalCreated, onOpenPluginManager }: ResearchReviewProps): ReactElement {
+export function ResearchReview({ scopeKey, knowledgeAvailable, taskControls, invokeRead, invokeUi, onProposalCreated, onOpenPluginManager }: ResearchReviewProps): ReactElement {
   const scopeRef = useRef(scopeKey); scopeRef.current = scopeKey;
   const readRef = useRef(invokeRead); readRef.current = invokeRead;
   const uiRef = useRef(invokeUi); uiRef.current = invokeUi;
@@ -130,6 +132,7 @@ export function ResearchReview({ scopeKey, knowledgeAvailable, invokeRead, invok
   };
 
   return <section className="research-review" aria-label="Research 候補のレビュー">
+    {taskControls}
     <details>
       <summary>旧 NLP 外部送信設定と Host 権限</summary>
       <p>旧設定は履歴として表示します。Git 内の値から Host 権限を付与することはありません。外部通信には、署名済みプラグインの権限確認と送信ごとの Host 承認が必要です。</p>

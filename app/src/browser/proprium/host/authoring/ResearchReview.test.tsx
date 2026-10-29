@@ -64,11 +64,13 @@ test("legacy external choices remain visible but never map or grant a Host capab
   ]);
   const html = renderToStaticMarkup(createElement(ResearchReview, {
     scopeKey: "workspace:main", knowledgeAvailable: false,
+    taskControls: createElement("section", { "aria-label": "Research index tasks" }, "Rebuild index"),
     invokeRead: async () => { throw new Error("SSR does not invoke actions"); },
     invokeUi: async () => { throw new Error("SSR does not invoke actions"); },
   }));
   assert.match(html, /旧設定は履歴として表示/u);
   assert.match(html, /Research/u);
+  assert.match(html, /Research index tasks/u);
   assert.doesNotMatch(html, /proprium\.paired-writing/u);
 });
 
