@@ -16,7 +16,7 @@ export interface DiagnosticsMarginMarker {
 }
 
 export interface DiagnosticsMarginCallbacks {
-  onSelect(findingFingerprint: string): void;
+  onSelect(event: Event, findingFingerprint: string): void;
   onDecision(event: Event, finding: DiagnosticsMarginMarker, decision: DiagnosticDecision): void;
 }
 
@@ -87,7 +87,7 @@ class FindingMarker extends GutterMarker {
         effects: EditorView.scrollIntoView(this.marker.start, { y: "center" }),
       });
       view.focus();
-      this.onSelect(this.marker.findingFingerprint);
+      this.onSelect(event, this.marker.findingFingerprint);
     });
 
     const intentional = this.decisionButton(view, "intentional", "意図した警告としてレビューする");

@@ -2,6 +2,8 @@ import type { AssetCapacityInput, AssetCapacityMeasurement } from './assets.js';
 
 const GIB = 1024 ** 3;
 export const E5_WORKING_MEMORY_BYTES = 3 * GIB;
+export const BGE_RERANKER_WORKING_MEMORY_BYTES = 4 * GIB;
+export const BGE_RERANKER_GROUP_BYTES = 2_288_661_281;
 
 export interface AssetDeviceFacts {
   readonly wasm: boolean;
@@ -27,19 +29,28 @@ export function assetCapacityForDevice(input: AssetCapacityInput, facts: AssetDe
   // and asset broker still verify the complete identity and every digest.
   const e5 = input.plugin_id === 'proprium.semantic' && input.group_id === 'proprium.semantic.embedding.e5-small'
     && input.role === 'embedding' && input.group_bytes === 492_423_173;
+  const bgeReranker = input.plugin_id === 'proprium.semantic' && input.group_id === 'proprium.semantic.reranker.bge-v2-m3'
+    && input.role === 'reranker' && input.group_bytes === BGE_RERANKER_GROUP_BYTES;
   const desktopChromium = /(?:Chrome|Chromium)\/\d+/u.test(facts.userAgent) && !facts.mobile;
   const memoryHint = facts.deviceMemoryGiB !== null && Number.isFinite(facts.deviceMemoryGiB) && facts.deviceMemoryGiB >= 8;
-  const supported = e5 && prerequisites && desktopChromium && memoryHint && facts.hardwareConcurrency >= 4;
-  return { ...base, memory_required_bytes: e5 ? E5_WORKING_MEMORY_BYTES : null,
+  const desktopModelPrerequisites = prerequisites && desktopChromium && memoryHint && facts.hardwareConcurrency >= 4;
+  const supported = (e5 || bgeReranker) && desktopModelPrerequisites;
+  return { ...base, memory_required_bytes: e5 ? E5_WORKING_MEMORY_BYTES : bgeReranker ? BGE_RERANKER_WORKING_MEMORY_BYTES : null,
     device_supported: supported,
-    device_requirements: [
+    device_requirements: bgeReranker ? [
+      `BGE reranker v2-m3: 署名済みファイル合計 ${BGE_RERANKER_GROUP_BYTES.toLocaleString('en-US')} bytes の完全一致したアセット群だけを対象にします。`,
+      'デスクトップChromium、端末メモリー情報8 GiB以上、論理CPU 4以上、WASM、IndexedDBが必要です。モバイルとWebKitでは準備しません。',
+      'WASM実測高水位は約3.3 GiBです。必要メモリーは余裕を含め4 GiBとして表示します。E5も同時に保持すると合計は6.3 GiBを超える場合があります。',
+      '保存容量と転送量は署名済みAsset Previewで別々に確認します。原稿は端末内で処理します。',
+    ] : [
       'E5 fp32: デスクトップChromium、端末メモリー情報8 GiB以上、論理CPU 4以上が必要です。',
       'モデル実行の作業メモリー目安は3 GiBです。ブラウザーから空きRAMは測定できず、実行成功やメモリーの上限は保証しません。',
       'モバイル・WebKit・未検証モデルでは語句検索を利用できます。原稿は端末内で処理します。',
     ],
-    ...(!supported ? { reason: !e5 ? 'このモデルのブラウザー実行環境は未検証です。'
+    ...(!supported ? { reason: !(e5 || bgeReranker) ? 'このモデルのブラウザー実行環境は未検証です。'
       : !prerequisites ? 'WASM・ローカル保存機能または保存容量を確認できません。'
-        : 'E5の対応端末条件を確認できません。語句検索を引き続き利用できます。' } : {}) };
+        : bgeReranker ? 'BGEの対応端末条件を確認できません。E5のembeddingと語句検索を引き続き利用できます。'
+          : 'E5の対応端末条件を確認できません。語句検索を引き続き利用できます。' } : {}) };
 }
 
 /** Read browser-reported capacity; no model allocation, download or provider call. */

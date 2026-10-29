@@ -28,6 +28,8 @@ import { NarrativeReadingMarkCapture, findMarkForSelectedRange, savedSelectionRa
 import { NarrativeQuickAppend, recentManuscriptParagraphs } from "./authoring/NarrativeQuickAppend.js";
 import { SemanticTaskControls } from "./authoring/SemanticTaskControls.js";
 import { ResearchSemanticSearch } from "./authoring/ResearchSemanticSearch.js";
+import { ResearchReview } from "./authoring/ResearchReview.js";
+import { ResearchTaskControls } from "./authoring/ResearchTaskControls.js";
 import { ResearchTermClusters } from "../authoring/ResearchTermClusters.js";
 import { SemanticPreferences, type SemanticSettingsValue } from "./authoring/SemanticPreferences.js";
 import { PublishingHostTokenRecovery, inspectLegacyShareMap } from "./authoring/PublishingHostTokenRecovery.js";
@@ -1200,6 +1202,46 @@ export function HostApp(): ReactElement {
           if(!result.action_result.ok)throw Object.assign(new Error(result.action_result.error.message),{code:result.action_result.error.code});
           return result.action_result;
         }} onProposalCreated={refreshAuthoring} /></details>}
+    {authoringRegistrations.some(row=>row.pluginId==="proprium.research"&&row.status==="ready") && <ResearchReview
+      key={`research-review:${workspaceGeneration}`} scopeKey={researchScopeKey}
+      knowledgeAvailable={authoringRegistrations.some(row=>row.pluginId==="proprium.knowledge"&&row.status==="ready")}
+      taskControls={<ResearchTaskControls key={`research-index:${workspaceGeneration}`} scopeKey={researchScopeKey}
+        invokeRead={async(pluginId,actionId,input,signal)=>{
+          const expectedScope=researchScopeRef.current;
+          if(expectedScope!==researchScopeKey)throw Object.assign(new Error("snapshot_stale"),{code:"snapshot_stale"});
+          const result=await authoring.invokeRead(pluginId,actionId,input,signal);
+          if(expectedScope!==researchScopeRef.current)throw Object.assign(new Error("snapshot_stale"),{code:"snapshot_stale"});
+          return result;
+        }} invokeUi={async(event,pluginId,actionId,input)=>{
+          const expectedScope=researchScopeRef.current;
+          if(expectedScope!==researchScopeKey)throw Object.assign(new Error("snapshot_stale"),{code:"snapshot_stale"});
+        const result=await invokeAuthoring(event,pluginId,actionId,input as Readonly<Record<string,import("./authoring/types.js").AuthoringJson>>);
+          if(expectedScope!==researchScopeRef.current)throw Object.assign(new Error("snapshot_stale"),{code:"snapshot_stale"});
+          if(!result.action_result.ok)throw Object.assign(new Error(result.action_result.error.message),{code:result.action_result.error.code});
+          return result.action_result;
+        }} subscribe={listener=>authoring.subscribeTaskUpdates(update=>{
+          if(update.pluginId!=="proprium.research")return;
+          const selected=workspaceRef.current;
+          let repositoryId:number|null=null;
+          if(selected&&isGitHubWorkspaceIdentity(selected.identity))repositoryId=selected.identity.repositoryId;
+          if(selected&&update.scope.workspace_id===selected.identity.localWorkspaceId&&
+            update.scope.repository_id===repositoryId&&update.scope.branch===selected.identity.branch&&
+            update.scope.generation===workspaceGenerationRef.current)listener(update.task,update.snapshot.id);
+        })} />}
+      invokeRead={async(expectedScope,pluginId,actionId,input,signal)=>{
+        if(expectedScope!==researchScopeRef.current)throw Object.assign(new Error("snapshot_stale"),{code:"snapshot_stale"});
+        const result=await authoring.invokeRead(pluginId,actionId,input as Readonly<Record<string,import("./authoring/types.js").AuthoringJson>>,signal);
+        if(expectedScope!==researchScopeRef.current)throw Object.assign(new Error("snapshot_stale"),{code:"snapshot_stale"});
+        return result;
+      }} invokeUi={async(event,pluginId,actionId,input)=>{
+        const expectedScope=researchScopeRef.current;
+        if(expectedScope!==researchScopeKey)throw Object.assign(new Error("snapshot_stale"),{code:"snapshot_stale"});
+        const result=await invokeAuthoring(event,pluginId,actionId,input as Readonly<Record<string,import("./authoring/types.js").AuthoringJson>>);
+        if(expectedScope!==researchScopeRef.current)throw Object.assign(new Error("snapshot_stale"),{code:"snapshot_stale"});
+        if(!result.action_result.ok)throw Object.assign(new Error(result.action_result.error.message),{code:result.action_result.error.code});
+        return result.action_result;
+      }} onProposalCreated={refreshAuthoring}
+      onOpenPluginManager={(event)=>{if(event.isTrusted)revealPanel("review");}} />}
     {authoringRegistrations.some(row=>row.pluginId==="proprium.research"&&row.status==="ready") && <ResearchSemanticSearch
       key={`research-search:${workspaceGeneration}`} scopeKey={researchScopeKey}
       semanticAvailable={authoringRegistrations.some(row=>row.pluginId==="proprium.semantic"&&row.status==="ready")}
@@ -1217,6 +1259,7 @@ export function HostApp(): ReactElement {
     {authoringRegistrations.some(row=>row.pluginId==="proprium.semantic"&&row.status==="ready") && <SemanticTaskControls key={`semantic:${workspaceGeneration}`} scopeKey={JSON.stringify([workspaceGeneration,workspace?.identity.localWorkspaceId,semanticRepositoryId,workspace?.identity.branch,status.head,status.entries.map(entry=>[entry.path,entry.worktree,entry.stage]),authoringRegistrations.filter(row=>row.pluginId==="proprium.semantic").map(row=>[row.manifestDigest,row.status])])}
       invokeRead={(pluginId,actionId,input,signal)=>authoring.invokeRead(pluginId,actionId,input,signal)} invokeUi={(event,pluginId,actionId,input)=>authoring.invokeUi(event,pluginId,actionId,input)}
       subscribe={listener=>authoring.subscribeTaskUpdates(update=>{
+        if(update.pluginId!=="proprium.semantic")return;
         const selected=workspaceRef.current;
         let repositoryId:number|null=null;
         if(selected&&isGitHubWorkspaceIdentity(selected.identity))repositoryId=selected.identity.repositoryId;
