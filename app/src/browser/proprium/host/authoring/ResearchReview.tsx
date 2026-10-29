@@ -270,8 +270,12 @@ export function ResearchReview({ scopeKey, knowledgeAvailable, taskControls, inv
       const ignoredResult = await readAction(expectedScope, RESEARCH, "research.candidates.ignore.list", {}, controller.signal);
       if (generation.current !== serial || controller.signal.aborted) return;
       if (!ignoredResult.ok) throw Object.assign(new Error(ignoredResult.error.message), { code: ignoredResult.error.code });
-      const latestIgnored = parseIgnoredTerms(ignoredResult.value);
-      if (latestIgnored.fileRevision !== ignored.fileRevision) throw Object.assign(new Error("候補の無視リストが変わりました。もう一度解析してください。"), { code: "snapshot_stale" });
+      const ignoreObservation = observeIgnoredTerms(ignored, parseIgnoredTerms(ignoredResult.value));
+      const latestIgnored = ignoreObservation.terms;
+      setIgnored(latestIgnored);
+      // A reviewed ignore/unignore proposal may have changed the file since this panel mounted.
+      // This explicit discovery action adopts the newly read revision; the candidate response
+      // must still match it and the same Host snapshot as the selected Knowledge corpus.
       const request = {
         corpus: { kind: "knowledge-entities", items: nextCorpus.items },
         knownTerms: nextCorpus.knownTerms,
@@ -292,9 +296,8 @@ export function ResearchReview({ scopeKey, knowledgeAvailable, taskControls, inv
       if (!isRecord(result.value) || !Object.hasOwn(result.value, "ignoreListRevision") || resultRevision !== latestIgnored.fileRevision) {
         throw Object.assign(new Error("Research は異なる無視リスト改訂を解析しました。もう一度解析してください。"), { code: "snapshot_stale" });
       }
-      setIgnored(latestIgnored);
       setCandidatePage({ ...page, ignoreListRevision: resultRevision });
-      setMessage("解析結果は選択した Knowledge の改訂と Research の無視リスト改訂に結び付いています。");
+      setMessage(`${ignoreObservation.changed ? "Host Review 後の無視リストを再読込しました。" : ""}解析結果は選択した Knowledge の改訂と Research の無視リスト改訂に結び付いています。`);
     } catch (cause) {
       if (generation.current !== serial || controller.signal.aborted) return;
       setError(messageOf(cause)); setMessage("");
@@ -479,6 +482,11 @@ export function parseIgnoredTerms(value: unknown): IgnoredTerms {
   const terms = value.terms as string[];
   if (new Set(terms).size !== terms.length) throw new Error("Research の無視リストに重複した候補があります。");
   return { fileRevision: value.fileRevision, terms };
+}
+
+/** A fresh Host read is authoritative after a reviewed ignore/unignore proposal. */
+export function observeIgnoredTerms(previous: IgnoredTerms, observed: IgnoredTerms): { terms: IgnoredTerms; changed: boolean } {
+  return { terms: observed, changed: previous.fileRevision !== observed.fileRevision };
 }
 
 export function parseLegacyConsent(value: unknown): LegacyConsent {

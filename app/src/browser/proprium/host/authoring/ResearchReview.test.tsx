@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ActionResult } from "../../authoring/types.js";
 import {
   buildKnowledgeCorpus,
+  observeIgnoredTerms,
   parseIgnoredTerms,
   parseKnowledgeEntityPage,
   parseLegacyConsent,
@@ -47,6 +48,13 @@ test("ignore list validates a pinned revision and unique author terms", () => {
   assert.deepEqual(parseIgnoredTerms({ fileRevision: REVISION, terms: ["星", "灯"] }), { fileRevision: REVISION, terms: ["星", "灯"] });
   assert.throws(() => parseIgnoredTerms({ fileRevision: "bad", terms: [] }), /無視リスト/u);
   assert.throws(() => parseIgnoredTerms({ fileRevision: null, terms: ["灯", ""] }), /無視リスト/u);
+});
+
+test("a fresh ignore-list read replaces stale UI state after Host review", () => {
+  const previous = { fileRevision: REVISION, terms: ["黒猫"] };
+  const observed = { fileRevision: "b".repeat(64), terms: ["白猫"] };
+  assert.deepEqual(observeIgnoredTerms(previous, observed), { terms: observed, changed: true });
+  assert.deepEqual(observeIgnoredTerms(observed, observed), { terms: observed, changed: false });
 });
 
 test("legacy external choices remain visible but never map or grant a Host capability", () => {
