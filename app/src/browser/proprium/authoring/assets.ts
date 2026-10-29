@@ -3,6 +3,8 @@ import type { Caller, Scope } from "./types.js";
 
 const ASSET_SCHEMA = "proprium.assets/v1";
 const MAX_ASSET_MANIFEST_BYTES = 512 * 1024;
+const MAX_CACHED_ASSET_MANIFESTS = 32;
+const MAX_CACHED_ASSET_MANIFEST_BYTES = 8 * 1024 * 1024;
 const MAX_ASSET_CHUNK_BYTES = 16 * 1024 * 1024;
 const MAX_VERIFIED_CHUNK_CACHE_BYTES = 32 * 1024 * 1024;
 const DEFAULT_READ_BYTES = 64 * 1024;
@@ -85,13 +87,25 @@ export interface AssetChunkRecord {
   readonly bytes: Uint8Array;
 }
 
+export interface AssetManifestCacheRecord {
+  readonly key: string;
+  /** Stable plugin/group owner key; unlike chunk group keys this excludes the manifest digest. */
+  readonly group_key: string;
+  readonly sha256: string;
+  readonly bytes: Uint8Array;
+  readonly cached_at: number;
+}
+
 /** Immutable verified chunks live in their own store, separate from plugin derived data. */
 export interface AssetGroupStore {
   hasChunk(group_key: string, path: string): Promise<boolean>;
   getChunk(group_key: string, path: string): Promise<AssetChunkRecord | undefined>;
   putChunk(record: AssetChunkRecord): Promise<void>;
   deleteChunk(group_key: string, path: string): Promise<void>;
-  deleteGroup(group_key: string): Promise<number>;
+  getManifest(key: string): Promise<AssetManifestCacheRecord | undefined>;
+  putManifest(record: AssetManifestCacheRecord): Promise<void>;
+  deleteManifest(key: string): Promise<void>;
+  deleteGroup(group_identity: string): Promise<number>;
 }
 
 export interface AssetCapacityInput {
@@ -272,7 +286,7 @@ export class FetchAssetArtifactSource implements AssetArtifactSource {
   }
 }
 
-/** IndexedDB store for immutable model/dictionary chunks only. */
+/** IndexedDB store for immutable verified manifests and model/dictionary chunks. */
 export class IndexedDbAssetGroupStore implements AssetGroupStore {
   private db?: Promise<IDBDatabase>;
 
@@ -280,11 +294,15 @@ export class IndexedDbAssetGroupStore implements AssetGroupStore {
     if (this.db) return this.db;
     this.db = new Promise((resolve, reject) => {
       if (typeof indexedDB === "undefined") { reject(storageError("IndexedDB is unavailable")); return; }
-      const request = indexedDB.open(ASSET_DB_NAME, 1);
+      const request = indexedDB.open(ASSET_DB_NAME, 2);
       request.onupgradeneeded = () => {
         const database = request.result;
         if (!database.objectStoreNames.contains("chunks")) {
           const store = database.createObjectStore("chunks", { keyPath: "key" });
+          store.createIndex("group_key", "group_key", { unique: false });
+        }
+        if (!database.objectStoreNames.contains("manifests")) {
+          const store = database.createObjectStore("manifests", { keyPath: "key" });
           store.createIndex("group_key", "group_key", { unique: false });
         }
       };
@@ -320,21 +338,62 @@ export class IndexedDbAssetGroupStore implements AssetGroupStore {
     await this.complete(transaction);
   }
 
-  async deleteGroup(groupKey: string): Promise<number> {
+  async getManifest(key: string): Promise<AssetManifestCacheRecord | undefined> {
     const db = await this.open();
-    const transaction = db.transaction("chunks", "readwrite");
-    const index = transaction.objectStore("chunks").index("group_key");
-    const request = index.openCursor(IDBKeyRange.only(groupKey));
-    let deletedBytes = 0;
+    return this.request(db.transaction("manifests", "readonly").objectStore("manifests").get(key));
+  }
+
+  async putManifest(record: AssetManifestCacheRecord): Promise<void> {
+    if (!(record.bytes instanceof Uint8Array) || record.bytes.byteLength > MAX_ASSET_MANIFEST_BYTES) {
+      throw storageError("Verified asset manifest exceeds the bounded Host cache");
+    }
+    const db = await this.open();
+    const transaction = db.transaction("manifests", "readwrite");
+    const store = transaction.objectStore("manifests");
+    const completion = this.complete(transaction);
+    const request = store.getAll();
     request.onsuccess = () => {
-      const cursor = request.result;
+      const existing = request.result as AssetManifestCacheRecord[];
+      const retained = retainedManifestCacheKeys(existing, record);
+      for (const item of existing) if (isRecord(item) && typeof item.key === "string" && !retained.has(item.key)) store.delete(item.key);
+      store.put(cloneManifestCacheRecord(record));
+    };
+    request.onerror = () => { try { transaction.abort(); } catch { /* The transaction may already be inactive. */ } };
+    await completion;
+  }
+
+  async deleteManifest(key: string): Promise<void> {
+    const db = await this.open();
+    const transaction = db.transaction("manifests", "readwrite");
+    transaction.objectStore("manifests").delete(key);
+    await this.complete(transaction);
+  }
+
+  async deleteGroup(groupIdentity: string): Promise<number> {
+    const db = await this.open();
+    const transaction = db.transaction(["chunks", "manifests"], "readwrite");
+    const completion = this.complete(transaction);
+    let deletedBytes = 0;
+    const chunkGroupRange = IDBKeyRange.bound(`${groupIdentity}/`, `${groupIdentity}/\uffff`);
+    const chunks = transaction.objectStore("chunks").index("group_key").openCursor(chunkGroupRange);
+    chunks.onsuccess = () => {
+      const cursor = chunks.result;
       if (!cursor) return;
       const record = cursor.value as AssetChunkRecord;
       deletedBytes += record.bytes?.byteLength ?? 0;
       cursor.delete();
       cursor.continue();
     };
-    await this.complete(transaction);
+    const manifests = transaction.objectStore("manifests").index("group_key").openCursor(IDBKeyRange.only(groupIdentity));
+    manifests.onsuccess = () => {
+      const cursor = manifests.result;
+      if (!cursor) return;
+      const record = cursor.value as AssetManifestCacheRecord;
+      deletedBytes += record.bytes?.byteLength ?? 0;
+      cursor.delete();
+      cursor.continue();
+    };
+    await completion;
     return deletedBytes;
   }
 
@@ -357,6 +416,7 @@ export class IndexedDbAssetGroupStore implements AssetGroupStore {
 /** Deterministic storage adapter for broker unit tests; not a browser-storage proof. */
 export class MemoryAssetGroupStore implements AssetGroupStore {
   private readonly records = new Map<string, AssetChunkRecord>();
+  private readonly manifestRecords = new Map<string, AssetManifestCacheRecord>();
   async hasChunk(groupKey: string, path: string): Promise<boolean> { return this.records.has(chunkRecordKey(groupKey, path)); }
   async getChunk(groupKey: string, path: string): Promise<AssetChunkRecord | undefined> {
     const item = this.records.get(chunkRecordKey(groupKey, path));
@@ -364,10 +424,26 @@ export class MemoryAssetGroupStore implements AssetGroupStore {
   }
   async putChunk(record: AssetChunkRecord): Promise<void> { this.records.set(record.key, cloneChunkRecord(record)); }
   async deleteChunk(groupKey: string, path: string): Promise<void> { this.records.delete(chunkRecordKey(groupKey, path)); }
-  async deleteGroup(groupKey: string): Promise<number> {
+  async getManifest(key: string): Promise<AssetManifestCacheRecord | undefined> {
+    const item = this.manifestRecords.get(key);
+    return item ? cloneManifestCacheRecord(item) : undefined;
+  }
+  async putManifest(record: AssetManifestCacheRecord): Promise<void> {
+    if (!(record.bytes instanceof Uint8Array) || record.bytes.byteLength > MAX_ASSET_MANIFEST_BYTES) {
+      throw storageError("Verified asset manifest exceeds the bounded Host cache");
+    }
+    const retained = retainedManifestCacheKeys([...this.manifestRecords.values()], record);
+    for (const key of this.manifestRecords.keys()) if (!retained.has(key)) this.manifestRecords.delete(key);
+    this.manifestRecords.set(record.key, cloneManifestCacheRecord(record));
+  }
+  async deleteManifest(key: string): Promise<void> { this.manifestRecords.delete(key); }
+  async deleteGroup(groupIdentity: string): Promise<number> {
     let bytes = 0;
     for (const [key, item] of this.records) {
-      if (item.group_key === groupKey) { bytes += item.bytes.byteLength; this.records.delete(key); }
+      if (item.group_key.startsWith(`${groupIdentity}/`)) { bytes += item.bytes.byteLength; this.records.delete(key); }
+    }
+    for (const [key, item] of this.manifestRecords) {
+      if (item.group_key === groupIdentity) { bytes += item.bytes.byteLength; this.manifestRecords.delete(key); }
     }
     return bytes;
   }
@@ -381,6 +457,7 @@ export class AssetGroupBroker {
   private verifiedChunkCacheBytes = 0;
   private readonly transfers = new Map<string, AbortController>();
   private readonly clearingGroups = new Set<string>();
+  private readonly groupCacheEpochs = new Map<string, number>();
   private readonly pluginEpochs = new Map<string, number>();
   private readonly maxReadBytes: number;
   private readonly now: () => number;
@@ -607,12 +684,11 @@ export class AssetGroupBroker {
     const transferKey = groupIdentity(plugin_id, group_id);
     if (this.transfers.has(transferKey)) throw new AssetBrokerError("capacity", "Asset cache cannot be cleared during a transfer", { reason: "transfer_active" }, true);
     if (this.clearingGroups.has(transferKey)) throw new AssetBrokerError("capacity", "Asset cache is already being cleared", { reason: "cache_clear_active" }, true);
+    this.groupCacheEpochs.set(transferKey, (this.groupCacheEpochs.get(transferKey) ?? 0) + 1);
     this.clearingGroups.add(transferKey);
     this.revokeGroup(plugin_id, group_id);
     try {
-      const ref = await this.resolveRef(plugin_id, group_id);
-      const groupKey = makeGroupKey(plugin_id, ref);
-      try { return { deleted_bytes: await this.options.store.deleteGroup(groupKey) }; }
+      try { return { deleted_bytes: await this.options.store.deleteGroup(transferKey) }; }
       catch { throw storageError("Asset cache could not be cleared"); }
     } finally {
       this.clearingGroups.delete(transferKey);
@@ -677,15 +753,61 @@ export class AssetGroupBroker {
 
   private async loadCurrentManifest(plugin_id: string, group_id: string, signal?: AbortSignal): Promise<ParsedManifest> {
     checkCancelled(signal);
+    const groupKey = groupIdentity(plugin_id, group_id);
+    const cacheEpoch = this.groupCacheEpochs.get(groupKey) ?? 0;
+    this.assertManifestCacheEpoch(groupKey, cacheEpoch);
     const ref = await this.resolveRef(plugin_id, group_id);
-    const bytes = await this.readObject(ref.manifest_path, ref.bytes, signal);
-    if (bytes.byteLength !== ref.bytes || await sha256(bytes) !== ref.sha256) {
-      throw unavailable("Signed asset manifest bytes do not match the admitted plugin reference", { reason: "manifest_digest_mismatch" });
+    this.assertManifestCacheEpoch(groupKey, cacheEpoch);
+    const manifestKey = manifestCacheKey(plugin_id, group_id, ref.sha256);
+    let cached: AssetManifestCacheRecord | undefined;
+    try { cached = await this.options.store.getManifest(manifestKey); }
+    catch { throw storageError("Cached signed asset manifest could not be read from Host storage"); }
+    this.assertManifestCacheEpoch(groupKey, cacheEpoch);
+
+    let bytes: Uint8Array;
+    if (cached) {
+      const matchesRef = cached.key === manifestKey && cached.group_key === groupKey && cached.sha256 === ref.sha256 &&
+        cached.bytes instanceof Uint8Array && cached.bytes.byteLength === ref.bytes && cached.bytes.byteLength <= MAX_ASSET_MANIFEST_BYTES;
+      bytes = cached.bytes instanceof Uint8Array ? Uint8Array.from(cached.bytes) : new Uint8Array();
+      const digestMatches = matchesRef && await sha256(bytes) === ref.sha256;
+      this.assertManifestCacheEpoch(groupKey, cacheEpoch);
+      if (!digestMatches) {
+        try { await this.options.store.deleteManifest(manifestKey); }
+        catch { throw storageError("Corrupt cached signed asset manifest could not be removed"); }
+        this.assertManifestCacheEpoch(groupKey, cacheEpoch);
+        throw unavailable("Cached signed asset manifest bytes do not match the current signed reference", { reason: "asset_manifest_cache_corrupt" });
+      }
+    } else {
+      bytes = await this.readObject(ref.manifest_path, ref.bytes, signal);
+      this.assertManifestCacheEpoch(groupKey, cacheEpoch);
+      if (bytes.byteLength !== ref.bytes || await sha256(bytes) !== ref.sha256) {
+        throw unavailable("Signed asset manifest bytes do not match the admitted plugin reference", { reason: "manifest_digest_mismatch" });
+      }
     }
     const manifest = parseAssetManifest(bytes, ref, plugin_id);
     const parsed = summarizeManifest(plugin_id, ref, manifest);
     await this.assertStillCurrent(parsed, signal);
+    this.assertManifestCacheEpoch(groupKey, cacheEpoch);
+    if (!cached) {
+      try {
+        await this.options.store.putManifest({
+          key: manifestKey, group_key: groupKey, sha256: ref.sha256,
+          bytes: Uint8Array.from(bytes), cached_at: this.now(),
+        });
+      } catch { throw storageError("Verified signed asset manifest could not be cached by the Host"); }
+      try { this.assertManifestCacheEpoch(groupKey, cacheEpoch); }
+      catch (error) {
+        await this.options.store.deleteManifest(manifestKey).catch(() => undefined);
+        throw error;
+      }
+    }
     return parsed;
+  }
+
+  private assertManifestCacheEpoch(groupKey: string, epoch: number): void {
+    if (this.clearingGroups.has(groupKey) || (this.groupCacheEpochs.get(groupKey) ?? 0) !== epoch) {
+      throw unavailable("Host cache clearing invalidated this signed asset manifest operation", { reason: "asset_cache_cleared" });
+    }
   }
 
   private async resolveRef(plugin_id: string, group_id: string): Promise<AssetGroupRef> {
@@ -970,6 +1092,9 @@ function sameScope(left: Scope, right: Scope): boolean {
 function scopeKey(scope: Scope): string { return JSON.stringify([scope.workspace_id, scope.repository_id, scope.branch, scope.generation]); }
 function groupIdentity(pluginId: string, groupId: string): string { return `${encodeURIComponent(pluginId)}/${encodeURIComponent(groupId)}`; }
 function makeGroupKey(pluginId: string, ref: AssetGroupRef): string { return `${groupIdentity(pluginId, ref.id)}/${ref.sha256}`; }
+function manifestCacheKey(pluginId: string, groupId: string, manifestSha256: string): string {
+  return `${groupIdentity(pluginId, groupId)}/${manifestSha256}`;
+}
 function grantIdentity(pluginId: string, groupId: string, scope: Scope): string { return `${groupIdentity(pluginId, groupId)}/${encodeURIComponent(scopeKey(scope))}`; }
 function verifiedChunkIdentity(grant: AssetGrant, path: string): string {
   return `${grantIdentity(grant.plugin_id, grant.group_id, grant.scope)}/${encodeURIComponent(path)}`;
@@ -997,6 +1122,34 @@ function sumChunkBytes(chunks: readonly AssetManifestChunk[]): number {
 
 function cloneChunkRecord(record: AssetChunkRecord): AssetChunkRecord {
   return { key: record.key, group_key: record.group_key, path: record.path, sha256: record.sha256, bytes: Uint8Array.from(record.bytes) };
+}
+
+function cloneManifestCacheRecord(record: AssetManifestCacheRecord): AssetManifestCacheRecord {
+  return {
+    key: record.key, group_key: record.group_key, sha256: record.sha256,
+    bytes: Uint8Array.from(record.bytes), cached_at: record.cached_at,
+  };
+}
+
+function retainedManifestCacheKeys(
+  existing: readonly AssetManifestCacheRecord[], incoming: AssetManifestCacheRecord,
+): Set<string> {
+  const retained = existing.filter((item): item is AssetManifestCacheRecord => isRecord(item) &&
+    typeof item.key === "string" && typeof item.group_key === "string" && item.bytes instanceof Uint8Array &&
+    item.key !== incoming.key && item.group_key !== incoming.group_key)
+    .slice()
+    .sort((left, right) => {
+      const leftTime = Number.isFinite(left.cached_at) ? left.cached_at : 0;
+      const rightTime = Number.isFinite(right.cached_at) ? right.cached_at : 0;
+      return leftTime - rightTime || left.key.localeCompare(right.key);
+    });
+  let totalBytes = incoming.bytes.byteLength + retained.reduce((sum, item) => sum + item.bytes.byteLength, 0);
+  while (retained.length + 1 > MAX_CACHED_ASSET_MANIFESTS || totalBytes > MAX_CACHED_ASSET_MANIFEST_BYTES) {
+    const evicted = retained.shift();
+    if (!evicted) throw storageError("Verified asset manifest exceeds the bounded Host cache");
+    totalBytes -= evicted.bytes.byteLength;
+  }
+  return new Set(retained.map(item => item.key));
 }
 
 function linkAbortSignals(controller: AbortController, external?: AbortSignal): { signal: AbortSignal; detach: () => void } {

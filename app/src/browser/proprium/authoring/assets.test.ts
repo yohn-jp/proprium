@@ -17,6 +17,7 @@ interface Fixture {
   scope: Scope;
   source: MemoryAssetSource;
   store: MemoryAssetGroupStore;
+  createBroker(): AssetGroupBroker;
   mintGesture(): object;
   setCapacity(patch: Partial<AssetCapacityMeasurement>): void;
   setRef(ref: AssetGroupRef): void;
@@ -25,8 +26,10 @@ interface Fixture {
 class MemoryAssetSource implements AssetArtifactSource {
   readonly objects = new Map<string, Uint8Array>();
   readonly reads: string[] = [];
+  failReads = false;
   async readObject(path: string, max_bytes: number): Promise<Uint8Array> {
     this.reads.push(path);
+    if (this.failReads) throw new Error("source is offline");
     const bytes = this.objects.get(path);
     if (!bytes || bytes.byteLength > max_bytes) throw new Error("missing source object");
     return Uint8Array.from(bytes);
@@ -45,6 +48,25 @@ class CountingAssetGroupStore extends MemoryAssetGroupStore {
     const bytes = Uint8Array.from(record.bytes);
     bytes[0] = bytes[0]! ^ 0xff;
     return { ...record, bytes };
+  }
+}
+
+class CorruptibleManifestStore extends MemoryAssetGroupStore {
+  corruptManifestReads = false;
+  override async getManifest(key: string) {
+    const record = await super.getManifest(key);
+    if (!record || !this.corruptManifestReads) return record;
+    const bytes = Uint8Array.from(record.bytes);
+    bytes[0] = bytes[0]! ^ 0xff;
+    return { ...record, bytes };
+  }
+}
+
+class DelayedManifestStore extends MemoryAssetGroupStore {
+  beforePutManifest?: () => Promise<void>;
+  override async putManifest(record: Parameters<MemoryAssetGroupStore["putManifest"]>[0]) {
+    await this.beforePutManifest?.();
+    return super.putManifest(record);
   }
 }
 
@@ -94,7 +116,7 @@ function fixture(options: { bytes?: Uint8Array; chunkBytes?: number; declaredFil
   };
   const minted = new WeakSet<object>();
   const store = options.store ?? new MemoryAssetGroupStore();
-  const broker = new AssetGroupBroker({
+  const createBroker = () => new AssetGroupBroker({
     resolver: { resolve: async (requestedPlugin, requestedGroup) => requestedPlugin === plugin_id && requestedGroup === idFor(currentRef) ? currentRef : undefined },
     source,
     store,
@@ -102,7 +124,7 @@ function fixture(options: { bytes?: Uint8Array; chunkBytes?: number; declaredFil
     gestures: { consume: token => { if (!minted.has(token)) return false; minted.delete(token); return true; } },
   });
   return {
-    broker, ref: bundle.ref, scope, source, store,
+    broker: createBroker(), createBroker, ref: bundle.ref, scope, source, store,
     mintGesture() { const token = {}; minted.add(token); return token; },
     setCapacity(patch) { capacity = { ...capacity, ...patch }; },
     setRef(ref) { currentRef = ref; },
@@ -401,6 +423,99 @@ test("explicit cache clearing invalidates a pending chunk read before storage co
   release();
   await assert.rejects(() => pending,
     (error: unknown) => error instanceof AssetBrokerError && error.code === "capability_denied");
+});
+
+test("verified manifest cache supports offline reload, zero-transfer admission and explicit removal", async () => {
+  const store = new MemoryAssetGroupStore();
+  const instance = fixture({ store });
+  const { preview } = await inspectAndAdmit(instance);
+  const sourceReadsAfterAdmission = [...instance.source.reads];
+  instance.source.failReads = true;
+
+  const reloaded = instance.createBroker();
+  const offlinePreview = await reloaded.inspect(plugin_id, group_id, scope);
+  assert.equal(offlinePreview.transfer_required_bytes, 0);
+  assert.deepEqual(instance.source.reads, sourceReadsAfterAdmission, "cached signed manifest inspection must not contact the artifact source");
+  const admitted = await reloaded.admit(plugin_id, group_id, {
+    scope, manifest_sha256: offlinePreview.manifest_sha256,
+    capacity_consent: { accepted: true, manifest_sha256: offlinePreview.manifest_sha256, storage_bytes: offlinePreview.storage_required_bytes, transfer_bytes: 0 },
+    gesture: instance.mintGesture(),
+  });
+  assert.equal(admitted.transferred_bytes, 0);
+  const read = await reloaded.read(plugin_id, "plugin", scope, { group_id, file_path: "onnx/tokenizer.json" });
+  assert.deepEqual(Uint8Array.from(read.bytes), new TextEncoder().encode("A😀B/漢字/café"));
+  assert.deepEqual(instance.source.reads, sourceReadsAfterAdmission, "offline activation and reads must not download model data");
+
+  const cleared = await reloaded.clearGroupCache(plugin_id, group_id, instance.mintGesture());
+  assert.ok(cleared.deleted_bytes > preview.storage_required_bytes, "clear removes both chunk data and the cached signed manifest");
+  await assert.rejects(() => reloaded.inspect(plugin_id, group_id, scope),
+    (error: unknown) => error instanceof AssetBrokerError && error.code === "provider_unavailable" && error.details?.reason === "fetch_failed");
+});
+
+test("corrupt cached manifests fail closed without a network fallback", async () => {
+  const store = new CorruptibleManifestStore();
+  const instance = fixture({ store });
+  await instance.broker.inspect(plugin_id, group_id, scope);
+  const sourceReads = instance.source.reads.length;
+  store.corruptManifestReads = true;
+  instance.source.failReads = true;
+
+  await assert.rejects(() => instance.createBroker().inspect(plugin_id, group_id, scope),
+    (error: unknown) => error instanceof AssetBrokerError && error.code === "provider_unavailable" && error.details?.reason === "asset_manifest_cache_corrupt");
+  assert.equal(instance.source.reads.length, sourceReads, "a corrupt digest-keyed record must not fall back to fetching another manifest");
+});
+
+test("changed signed reference cannot fall back to a cached manifest for the prior digest", async () => {
+  const instance = fixture();
+  await instance.broker.inspect(plugin_id, group_id, scope);
+  const priorReads = instance.source.reads.length;
+  const changed = assetBundle({ bytes: new TextEncoder().encode("new signed manifest"), id: group_id });
+  instance.setRef(changed.ref);
+  instance.source.failReads = true;
+
+  await assert.rejects(() => instance.createBroker().inspect(plugin_id, group_id, scope),
+    (error: unknown) => error instanceof AssetBrokerError && error.code === "provider_unavailable" && error.details?.reason === "fetch_failed");
+  assert.equal(instance.source.reads.length, priorReads + 1);
+  assert.equal(instance.source.reads.at(-1), changed.ref.manifest_path, "only the current digest path may be requested");
+});
+
+test("a late verified-manifest write cannot repopulate storage after explicit cache clear", async () => {
+  const store = new DelayedManifestStore();
+  const instance = fixture({ store });
+  let release!: () => void;
+  let entered!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  store.beforePutManifest = async () => { store.beforePutManifest = undefined; entered(); await gate; };
+  const pendingInspect = instance.broker.inspect(plugin_id, group_id, scope);
+  await started;
+  await instance.broker.clearGroupCache(plugin_id, group_id, instance.mintGesture());
+  release();
+  await assert.rejects(() => pendingInspect,
+    (error: unknown) => error instanceof AssetBrokerError && error.code === "provider_unavailable" && error.details?.reason === "asset_cache_cleared");
+  const manifestKey = `${encodeURIComponent(plugin_id)}/${encodeURIComponent(group_id)}/${instance.ref.sha256}`;
+  assert.equal(await store.getManifest(manifestKey), undefined);
+});
+
+test("persistent verified manifest cache enforces entry and byte bounds", async () => {
+  const store = new MemoryAssetGroupStore();
+  for (let index = 0; index < 40; index += 1) {
+    const key = `proprium.semantic/group-${index}/${index.toString().padStart(64, "0")}`;
+    await store.putManifest({ key, group_key: `proprium.semantic/group-${index}`, sha256: "0".repeat(64), bytes: new Uint8Array([index]), cached_at: index });
+  }
+  assert.equal(await store.getManifest("proprium.semantic/group-0/" + "0".repeat(64)), undefined);
+  assert.ok(await store.getManifest("proprium.semantic/group-39/" + "0".repeat(62) + "39"));
+
+  const largeStore = new MemoryAssetGroupStore();
+  for (let index = 0; index < 17; index += 1) {
+    const key = `proprium.semantic/large-${index}/${index.toString().padStart(64, "0")}`;
+    await largeStore.putManifest({
+      key, group_key: `proprium.semantic/large-${index}`, sha256: "0".repeat(64),
+      bytes: new Uint8Array(512 * 1024), cached_at: index,
+    });
+  }
+  assert.equal(await largeStore.getManifest(`proprium.semantic/large-0/${"0".repeat(64)}`), undefined);
+  assert.ok(await largeStore.getManifest(`proprium.semantic/large-16/${"0".repeat(62)}16`));
 });
 
 test("a missing signed model group stays unavailable and never reports a synthetic ready result", async () => {
