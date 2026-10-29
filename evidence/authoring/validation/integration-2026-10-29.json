@@ -63,7 +63,9 @@
       "status": "FAIL",
       "operation": "Desktop official local-authoring outline",
       "result": "604 persisted files were listed, but the Narrative Structure panel was empty before the editor reload assertion.",
-      "repair": "IN_PROGRESS"
+      "repair": "aa0752a",
+      "browser_reverification": "PASS",
+      "reverification_scope": "Focused local-authoring edit/review/apply/commit/reload: Desktop Chromium 43.4s and Mobile WebKit 51.2s. Test patch ce3fa1b, Host leaf base 9090258, signed Components from 72a1781. Full official suite and the separately patched reviewed-volume case are not certified."
     }
   ],
   "acceptance": {
