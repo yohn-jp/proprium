@@ -118,6 +118,28 @@ test("settings updates route to the Host preference form and task actions do not
   guest.dispose();
 });
 
+test("BGE preparation and inference require the Host reranker preference, independently of E5 state", () => {
+  let prepare = JSON.parse(startInvoke("proprium.semantic.reranker.prepare", { taskId: "bge-task" })) as Record<string, any>;
+  assert.equal(prepare.operation, "plugin.preferences.read");
+  assert.deepEqual(prepare.payload, { plugin_id: "proprium.semantic", key: "reranker.enabled", schema_version: 1 });
+  prepare = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: prepare.call_id, ok: true, value: { found: false } }))) as Record<string, any>;
+  assert.equal(prepare.ok, false);
+  assert.equal(prepare.error.code, "capability_denied");
+  assert.equal(prepare.snapshot.id, snapshot.id);
+  guest.dispose();
+
+  let rerank = JSON.parse(startInvoke("proprium.semantic.rerank", { query: "旅", limit: 1, candidates: [{
+    candidateId: "candidate-1", entityId: "scene-1", sourcePath: "bible/scenes/one.yaml", sourceRevision: "a".repeat(64),
+    sentenceIndex: 0, text: "旅人は町へ入った。", evidence: [{ path: "bible/scenes/one.yaml", revision: "a".repeat(64),
+      start: 0, end: 10, quote: "旅人は町へ入った。" }],
+  }] })) as Record<string, any>;
+  assert.equal(rerank.operation, "plugin.preferences.read");
+  rerank = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: rerank.call_id, ok: true, value: { found: true, value: { rerankerEnabled: false } } }))) as Record<string, any>;
+  assert.equal(rerank.ok, false);
+  assert.equal(rerank.error.code, "capability_denied");
+  guest.dispose();
+});
+
 test("guest rejects unknown fields and reports missing admitted model capability explicitly", () => {
   const invalid = invoke({ candidates: [], useEmbedding: false, write: true });
   assert.equal(invalid.ok, false);

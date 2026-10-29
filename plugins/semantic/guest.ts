@@ -5,6 +5,7 @@ import { clusterTerms, EMBEDDING_MODEL, RERANKER_MODEL, type CandidateTerm } fro
 import { E5_MODEL, embedPassages, embeddingLoaded, ensureEmbedding, ensureEmbeddingStep, releaseEmbedding } from "./inference.ts";
 import { loadIndex, releaseSemanticIndex, startIndexBuild, stepIndexBuild, queryIndex, contradictionPage } from "./index-operations.ts";
 import { cancelSemanticTask, endSemanticTask, semanticTasks } from "./tasks.ts";
+import { BGE_MODEL, bgeRerankerLoaded, rerankBge, startBgePreparation, stepBgePreparation } from "./reranker-inference.ts";
 
 function fail(code: string, message: string): Error {
   return Object.assign(new Error(message), { code, retryable: false });
@@ -37,10 +38,10 @@ function unavailableModel(role: "embedding" | "reranker") {
     revision: identity.revision,
     role,
     ...(role === "embedding" ? { dimensions: EMBEDDING_MODEL.dimensions } : {}),
-    digest: role === "embedding" ? E5_MODEL.model_sha256 : null,
-    byte_length: role === "embedding" ? E5_MODEL.model_bytes : null,
+    digest: role === "embedding" ? E5_MODEL.model_sha256 : BGE_MODEL.group_sha256,
+    byte_length: role === "embedding" ? E5_MODEL.model_bytes : BGE_MODEL.group_bytes,
     license: role === "embedding" ? E5_MODEL.license : "Apache-2.0",
-    status: role === "embedding" && embeddingLoaded() ? "ready" : "unavailable",
+    status: role === "embedding" ? embeddingLoaded() ? "ready" : "unavailable" : bgeRerankerLoaded() ? "ready" : "unavailable",
   };
 }
 
@@ -85,7 +86,7 @@ const passageQuery: Handler = function* (raw, context, host) {
   return yield* queryIndex(queryInput(raw), context as ActionRequest, host, semanticEngine);
 };
 
-const rerank: Handler = (raw) => {
+const rerank: Handler = function* (raw, context, host) {
   const input = exactObject(raw, ["query", "candidates", "limit"], "input");
   if (typeof input.query !== "string" || input.query.length > 8192 || !Array.isArray(input.candidates) || input.candidates.length > 30 ||
       !Number.isInteger(input.limit) || (input.limit as number) < 1 || (input.limit as number) > 30) {
@@ -95,11 +96,51 @@ const rerank: Handler = (raw) => {
   for (const [index, item] of input.candidates.entries()) {
     const candidate = exactObject(item, ["candidateId", "entityId", "sourcePath", "sourceRevision", "sentenceIndex", "text", "evidence"], `candidates[${index}]`);
     if (typeof candidate.candidateId !== "string" || !candidate.candidateId || candidate.candidateId.length > 128 || ids.has(candidate.candidateId) ||
-        typeof candidate.entityId !== "string" || typeof candidate.sourcePath !== "string" || typeof candidate.sourceRevision !== "string" ||
-        typeof candidate.text !== "string" || !Array.isArray(candidate.evidence)) throw fail("invalid_input", `Candidate ${index} is invalid`);
+        typeof candidate.entityId !== "string" || !candidate.entityId || candidate.entityId.length > 256 ||
+        typeof candidate.sourcePath !== "string" || !candidate.sourcePath || candidate.sourcePath.length > 4096 ||
+        candidate.sourcePath.startsWith("/") || candidate.sourcePath.includes("\\") || candidate.sourcePath.split("/").some(part => !part || part === "." || part === "..") ||
+        typeof candidate.sourceRevision !== "string" || !/^[a-f0-9]{64}$/u.test(candidate.sourceRevision) ||
+        (candidate.sentenceIndex !== undefined && (!Number.isSafeInteger(candidate.sentenceIndex) || (candidate.sentenceIndex as number) < 0)) ||
+        typeof candidate.text !== "string" || new TextEncoder().encode(candidate.text).length > 32_768 ||
+        !Array.isArray(candidate.evidence) || candidate.evidence.length < 1 || candidate.evidence.length > 32) throw fail("invalid_input", `Candidate ${index} is invalid`);
+    for (const [spanIndex, rawSpan] of candidate.evidence.entries()) {
+      const span = exactObject(rawSpan, ["path", "revision", "start", "end", "quote"], `candidates[${index}].evidence[${spanIndex}]`);
+      if (typeof span.path !== "string" || span.path !== candidate.sourcePath || typeof span.revision !== "string" ||
+          span.revision !== candidate.sourceRevision || !Number.isSafeInteger(span.start) || !Number.isSafeInteger(span.end) ||
+          (span.start as number) < 0 || (span.end as number) < (span.start as number) || (span.end as number) - (span.start as number) > 32_768 ||
+          typeof span.quote !== "string" || !span.quote || new TextEncoder().encode(span.quote).length > 32_768) {
+        throw fail("invalid_input", `Candidate ${index} evidence is invalid`);
+      }
+    }
     ids.add(candidate.candidateId);
   }
-  throw fail("model_unavailable", "The signed BGE reranker asset is not admitted for this plugin version");
+  const preference = yield* host.request<{ found: boolean; value?: unknown }>(HOST_OPERATIONS.preferencesRead, {
+    plugin_id: "proprium.semantic", key: "reranker.enabled", schema_version: 1,
+  });
+  if (!parsePreference(preference.found ? preference.value : undefined).rerankerEnabled) {
+    throw fail("capability_denied", "Enable the Host reranker preference before requesting BGE scores");
+  }
+  const candidates = input.candidates as Parameters<typeof rerankBge>[1];
+  const scored = rerankBge(input.query, candidates, input.limit as number);
+  return { snapshot: context.snapshot, model: scored.model, results: scored.results };
+};
+
+const rerankerPrepare: Handler = function* (raw, context, host) {
+  const input = exactObject(raw, ["taskId"], "input");
+  const preference = yield* host.request<{ found: boolean; value?: unknown }>(HOST_OPERATIONS.preferencesRead, {
+    plugin_id: "proprium.semantic", key: "reranker.enabled", schema_version: 1,
+  });
+  if (!parsePreference(preference.found ? preference.value : undefined).rerankerEnabled) {
+    throw fail("capability_denied", "Enable the Host reranker preference before preparing the BGE model");
+  }
+  return { snapshot: context.snapshot, ...startBgePreparation(safeTaskId(input.taskId)) };
+};
+const rerankerPrepareStep: Handler = function* (raw, context, host) {
+  const input = exactObject(raw, ["taskId", "sequence"], "input");
+  if (!Number.isSafeInteger(input.sequence) || (input.sequence as number) < 0 || (input.sequence as number) > 1_000_000) {
+    throw fail("invalid_input", "BGE preparation sequence is invalid");
+  }
+  return { snapshot: context.snapshot, ...yield* stepBgePreparation(safeTaskId(input.taskId), input.sequence as number, host) };
 };
 
 function parseTerms(raw: unknown): { candidates: CandidateTerm[]; useEmbedding: boolean } {
@@ -220,6 +261,8 @@ const implementation = createGuest("proprium.semantic", {
   "proprium.semantic.index.step": indexStep,
   "proprium.semantic.passages.query": passageQuery,
   "proprium.semantic.rerank": rerank,
+  "proprium.semantic.reranker.prepare": rerankerPrepare,
+  "proprium.semantic.reranker.prepare.step": rerankerPrepareStep,
   "proprium.semantic.terms.cluster": clusterTermsAction,
   "proprium.semantic.contradictions.candidates": contradictionCandidates,
   "proprium.semantic.settings.read": settingsRead,

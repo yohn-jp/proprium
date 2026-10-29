@@ -1251,7 +1251,8 @@
         }
       },
       "required_capabilities": [
-        "workspace.asset.read"
+        "workspace.asset.read",
+        "plugin.preferences"
       ],
       "callers": [
         "ui",
@@ -2320,6 +2321,488 @@
         "ui"
       ],
       "requires_user_gesture": true
+    },
+    {
+      "plugin_id": "proprium.semantic",
+      "action_id": "proprium.semantic.reranker.prepare",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "taskId"
+        ],
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "taskId",
+          "state",
+          "phase",
+          "completed",
+          "total"
+        ],
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              }
+            }
+          },
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
+          },
+          "state": {
+            "enum": [
+              "running",
+              "complete"
+            ]
+          },
+          "phase": {
+            "enum": [
+              "inspect_graph",
+              "load_tensors",
+              "load_tokenizer",
+              "compile",
+              "complete"
+            ]
+          },
+          "completed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8733
+          },
+          "total": {
+            "const": 8733
+          },
+          "modelId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "modelRevision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "groupId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.asset.read",
+        "plugin.preferences"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": true
+    },
+    {
+      "plugin_id": "proprium.semantic",
+      "action_id": "proprium.semantic.reranker.prepare.step",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "taskId",
+          "sequence"
+        ],
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "taskId",
+          "state",
+          "phase",
+          "completed",
+          "total"
+        ],
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              }
+            }
+          },
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
+          },
+          "state": {
+            "enum": [
+              "running",
+              "complete"
+            ]
+          },
+          "phase": {
+            "enum": [
+              "inspect_graph",
+              "load_tensors",
+              "load_tokenizer",
+              "compile",
+              "complete"
+            ]
+          },
+          "completed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8733
+          },
+          "total": {
+            "const": 8733
+          },
+          "modelId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "modelRevision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "groupId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.asset.read"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.semantic",
+      "action_id": "proprium.semantic.reranker.task.status",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "activeTasks"
+        ],
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              }
+            }
+          },
+          "activeTasks": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "taskId",
+                "state",
+                "phase",
+                "completed",
+                "total",
+                "resumable"
+              ],
+              "properties": {
+                "taskId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$",
+                  "maxLength": 128
+                },
+                "phase": {
+                  "enum": [
+                    "source_scan",
+                    "embedding",
+                    "cache_validation",
+                    "cache_publish",
+                    "query_embedding",
+                    "vector_scan",
+                    "reranking",
+                    "term_embedding",
+                    "mention_scan",
+                    "candidate_scoring",
+                    "complete",
+                    "model_loading"
+                  ]
+                },
+                "completed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647
+                },
+                "total": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647
+                },
+                "state": {
+                  "enum": [
+                    "queued",
+                    "running",
+                    "paused",
+                    "cancelled",
+                    "failed",
+                    "complete"
+                  ]
+                },
+                "resumable": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      "required_capabilities": [],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.semantic",
+      "action_id": "proprium.semantic.reranker.task.cancel",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "taskId"
+        ],
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshot",
+          "taskId",
+          "cancelled"
+        ],
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256
+              },
+              "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              }
+            }
+          },
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
+          },
+          "cancelled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "required_capabilities": [],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": true
     }
   ],
   "ui": [
@@ -2390,6 +2873,13 @@
       "sha256": "f2b7669761e09dacdff1fa165b43e8654fa30d908e7011be45fb9b5c4d4ff400",
       "bytes": 9683,
       "role": "embedding"
+    },
+    {
+      "id": "proprium.semantic.reranker.bge-v2-m3",
+      "manifest_path": "proprium/semantic/assets/manifests/ad3cb54cb73a8afb7bce52012d027d3d0ca30927df69a41070026b81cde29ca0/manifest.json",
+      "sha256": "ad3cb54cb73a8afb7bce52012d027d3d0ca30927df69a41070026b81cde29ca0",
+      "bytes": 41577,
+      "role": "reranker"
     }
   ],
   "dependencies": [

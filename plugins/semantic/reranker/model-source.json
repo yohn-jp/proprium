@@ -25,6 +25,6 @@
       "role": "tokenizer"
     }
   ],
-  "status": "source-pinned-not-signed",
-  "note": "This source manifest is not a Host admission signature. The eventual plugin registry build must bind these exact files in its signed optional model asset group. No model bytes are stored in this repository."
+  "status": "source-pinned-plugin-group-declared",
+  "note": "This file is provenance metadata, not an admission signature. plugin.json declares a separate consent-gated reranker asset group whose content-addressed manifest and chunks are verified during registry build before the registry signs them. No model weights are stored in this repository."
 }
