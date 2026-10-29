@@ -259,6 +259,9 @@ test("signed Narrative proposes and applies a reviewed volume", async ({ page })
   const tab = page.getByRole("tab", { name: "Work outline", exact: true });
   if (await tab.isVisible() && await tab.getAttribute("aria-selected") !== "true") await tab.click();
   await page.getByRole("button", { name: "読み込む", exact: true }).click();
+  const narrativeOutline = page.getByRole("tabpanel", { name: "Work outline", exact: true }).first();
+  await expect(narrativeOutline.locator(".authoring-surface-body")).toHaveAttribute("aria-busy", "false", { timeout: 120_000 });
+  await expect(narrativeOutline.getByRole("status")).toContainText("このリポジトリの作品構成を認識しました。");
   await showNarrativeOutline(page);
   await expect(page.getByText("Volume One", { exact: true })).toBeVisible({ timeout: 120_000 });
   await page.getByText("Volume One", { exact: true }).click();
@@ -503,6 +506,9 @@ test("local authoring edits, reviews, commits and recovers a large work", async 
   const tab = page.getByRole("tab", { name: "Work outline", exact: true });
   if (await tab.isVisible() && await tab.getAttribute("aria-selected") !== "true") await tab.click();
   await page.getByRole("button", { name: "読み込む", exact: true }).click();
+  const narrativeOutline = page.getByRole("tabpanel", { name: "Work outline", exact: true }).first();
+  await expect(narrativeOutline.locator(".authoring-surface-body")).toHaveAttribute("aria-busy", "false", { timeout: 120_000 });
+  await expect(narrativeOutline.getByRole("status")).toContainText("このリポジトリの作品構成を認識しました。");
   await showNarrativeOutline(page);
   await expect(page.getByText("Volume One", { exact: true })).toBeVisible({ timeout: 120_000 });
   await page.getByText("Volume One", { exact: true }).click();
