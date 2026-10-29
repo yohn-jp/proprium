@@ -3,8 +3,57 @@ import type { Scope, Snapshot } from "./types.js";
 export const SEMANTIC_PROGRESS_KEY = "semantic-task-progress-v1";
 const DB_NAME = "proprium-authoring-tasks-v1";
 const STALE_OWNER_MS = 30_000;
-const phases = new Set(["source_scan", "model_loading", "embedding", "cache_validation", "cache_publish", "query_embedding",
-  "vector_scan", "reranking", "term_embedding", "mention_scan", "candidate_scoring", "complete"]);
+export interface AuthoringTaskProfile {
+  readonly profile_id: string;
+  readonly plugin_id: string;
+  readonly start_action_id: string;
+  readonly step_action_id: string;
+  readonly status_action_id: string;
+  readonly cancel_action_id: string;
+  readonly initial_phase: string;
+  readonly phases: ReadonlySet<string>;
+  /** The source count is unknown until Research finishes paging through the Git tree. */
+  readonly allow_indeterminate_progress?: boolean;
+  /** Guest cursors may live only in a Worker. Restart the bounded job after a Host reload. */
+  readonly restart_on_new_session?: boolean;
+}
+const semanticProfile: AuthoringTaskProfile = Object.freeze({
+  profile_id: "semantic-index-v1", plugin_id: "proprium.semantic", start_action_id: "proprium.semantic.index.rebuild", step_action_id: "proprium.semantic.index.step",
+  status_action_id: "proprium.semantic.task.status", cancel_action_id: "proprium.semantic.task.cancel", initial_phase: "cache_validation",
+  phases: new Set(["source_scan", "model_loading", "embedding", "cache_validation", "cache_publish", "query_embedding",
+    "vector_scan", "reranking", "term_embedding", "mention_scan", "candidate_scoring", "complete"]),
+});
+const researchProfile: AuthoringTaskProfile = Object.freeze({
+  profile_id: "research-index-v1", plugin_id: "proprium.research", start_action_id: "research.index.rebuild", step_action_id: "research.index.step",
+  status_action_id: "research.task.status", cancel_action_id: "research.task.cancel", initial_phase: "source_scan",
+  restart_on_new_session: true,
+  allow_indeterminate_progress: true,
+  phases: new Set(["source_scan", "index_build", "cache_publish", "complete"]),
+});
+const semanticRerankerProfile: AuthoringTaskProfile = Object.freeze({
+  profile_id: "semantic-reranker-v1", plugin_id: "proprium.semantic", start_action_id: "proprium.semantic.reranker.prepare",
+  step_action_id: "proprium.semantic.reranker.prepare.step", status_action_id: "proprium.semantic.reranker.task.status",
+  cancel_action_id: "proprium.semantic.reranker.task.cancel", initial_phase: "inspect_graph",
+  restart_on_new_session: true,
+  phases: new Set(["inspect_graph", "load_tensors", "load_tokenizer", "compile", "complete"]),
+});
+const taskProfiles = new Map([
+  [semanticProfile.plugin_id, semanticProfile], [researchProfile.plugin_id, researchProfile],
+  ...[semanticRerankerProfile.start_action_id, semanticRerankerProfile.step_action_id,
+    semanticRerankerProfile.status_action_id, semanticRerankerProfile.cancel_action_id]
+    .map(actionId => [semanticRerankerProfile.plugin_id + ":" + actionId, semanticRerankerProfile] as const),
+]);
+const defaultTaskProfiles = new Map([[semanticProfile.plugin_id, semanticProfile], [researchProfile.plugin_id, researchProfile]]);
+const profilesById = new Map([semanticProfile, researchProfile, semanticRerankerProfile].map(profile => [profile.profile_id, profile]));
+export function getAuthoringTaskProfile(pluginId: string): AuthoringTaskProfile | undefined { return defaultTaskProfiles.get(pluginId); }
+export function getAuthoringTaskProfileById(profileId: string): AuthoringTaskProfile | undefined { return profilesById.get(profileId); }
+export function getAuthoringTaskProfileForAction(pluginId: string, actionId: string): AuthoringTaskProfile | undefined {
+  const profile = getAuthoringTaskProfile(pluginId);
+  if (profile && [profile.start_action_id, profile.step_action_id, profile.status_action_id, profile.cancel_action_id].includes(actionId)) return profile;
+  const qualified = taskProfiles.get(pluginId + ":" + actionId);
+  return qualified && [qualified.start_action_id, qualified.step_action_id, qualified.status_action_id, qualified.cancel_action_id].includes(actionId)
+    ? qualified : undefined;
+}
 
 export type AuthoringTaskState = "queued" | "running" | "paused" | "cancelled" | "failed" | "complete";
 export interface HostTaskProgress {
@@ -16,12 +65,15 @@ export interface HostTaskProgress {
   resumable: boolean;
 }
 export interface AuthoringTaskUpdate {
+  readonly pluginId: string;
   readonly scope: Scope;
   readonly snapshot: Snapshot;
   readonly task: HostTaskProgress;
 }
 export interface AuthoringTaskIdentity {
   readonly plugin_id: string;
+  /** Missing only on schema-v1 durable records, which belong to the default profile for that plugin. */
+  readonly profile_id?: string;
   readonly plugin_version: string;
   readonly manifest_digest: string;
   readonly config_digest: string;
@@ -70,6 +122,14 @@ const sameSnapshot = (left: Snapshot, right: Snapshot) => left.local_commit === 
 const keyFor = (pluginId: string, scope: Scope, taskId: string) => "task:" + encodeURIComponent(pluginId) + ":" +
   encodeURIComponent(canonicalJson({ workspace_id: scope.workspace_id, repository_id: scope.repository_id, branch: scope.branch })) + ":" +
   encodeURIComponent(taskId);
+function profileForIdentity(identity: AuthoringTaskIdentity): AuthoringTaskProfile | undefined {
+  if (identity.profile_id) {
+    const profile = getAuthoringTaskProfileById(identity.profile_id);
+    return profile?.plugin_id === identity.plugin_id ? profile : undefined;
+  }
+  return getAuthoringTaskProfile(identity.plugin_id);
+}
+const phaseFor = (profile: AuthoringTaskProfile | undefined, phase: unknown): phase is string => profile?.phases.has(String(phase)) === true;
 const invalid = () => Object.assign(new Error("Task progress does not belong to an authorized Host task invocation"), { code: "invalid_input" });
 const failure = (code: string, message: string) => Object.assign(new Error(message), { code });
 function safeFailureCode(code: string): string {
@@ -191,21 +251,23 @@ export class AuthoringTaskRegistry {
     const releaseBegin = await this.acquireBegin();
     try {
     if (!/^[A-Za-z0-9_-]{1,128}$/u.test(taskId) || !identity.idempotency_key ||
-        identity.plugin_id !== "proprium.semantic" || !identity.plugin_version || !/^[a-f0-9]{64}$/u.test(identity.manifest_digest) ||
-        !identity.config_digest || identity.config_digest.length > 256 || !Number.isSafeInteger(epoch) || epoch < 1) {
+        !profileForIdentity(identity) || !identity.plugin_version || !/^[a-f0-9]{64}$/u.test(identity.manifest_digest) ||
+        !/^[a-f0-9]{64}$/u.test(identity.config_digest) || !Number.isSafeInteger(epoch) || epoch < 1) {
       throw failure("invalid_input", "Task identity is invalid");
     }
     const key = keyFor(identity.plugin_id, scope, taskId);
     const conflicting = (await this.store.list()).find(record => record.key !== key && record.identity.plugin_id === identity.plugin_id &&
+      record.identity.config_digest === identity.config_digest &&
       sameStableScope(record.scope, scope) && (record.progress.state === "running" ||
         (record.progress.state !== "complete" && record.progress.resumable)));
-    if (conflicting) throw failure("capacity", "A resumable Semantic task already exists for this repository and branch");
+    if (conflicting) throw failure("capacity", "A resumable authoring task already exists for this repository and branch");
     const outcome = await this.store.transact<TaskBeginResult>(key, current => {
       if (current) {
         if (!sameStableScope(current.scope, scope) || !sameSnapshot(current.snapshot, snapshot)) {
           throw failure("snapshot_stale", "Task ID belongs to a different Host snapshot");
         }
-        if (current.identity.plugin_version !== identity.plugin_version || current.identity.manifest_digest !== identity.manifest_digest ||
+        if (profileForIdentity(current.identity)?.profile_id !== profileForIdentity(identity)?.profile_id ||
+            current.identity.plugin_version !== identity.plugin_version || current.identity.manifest_digest !== identity.manifest_digest ||
             current.identity.config_digest !== identity.config_digest) {
           throw failure("idempotency_conflict", "Task ID belongs to a different plugin, model or configuration");
         }
@@ -215,17 +277,22 @@ export class AuthoringTaskRegistry {
           return { next: current, value: { disposition: "already_active" as const, task: current } };
         }
         if (current.progress.state === "complete") return { next: current, value: { disposition: "complete" as const, task: current } };
+        const restartFromSource = current.owner_id !== this.sessionId && profileForIdentity(identity)?.restart_on_new_session === true;
         const resumed: StoredAuthoringTask = {
           ...current, failure_code: undefined, scope: structuredClone(scope), snapshot: structuredClone(snapshot), activation_epoch: epoch, owner_id: this.sessionId,
-          progress: { ...current.progress, state: "running", resumable: true,
-            ...(current.progress.phase === "model_loading" ? { completed: 0 } : {}) }, updated_at: this.now(),
+          ...(restartFromSource ? { step_sequence: 0 } : {}),
+          progress: restartFromSource
+            ? { ...current.progress, state: "running", phase: profileForIdentity(identity)!.initial_phase, completed: 0, total: 1, resumable: true }
+            : { ...current.progress, state: "running", resumable: true,
+              ...(current.progress.phase === "model_loading" ? { completed: 0 } : {}) },
+          updated_at: this.now(),
         };
         return { next: resumed, value: { disposition: "resumed" as const, task: resumed } };
       }
       const created: StoredAuthoringTask = {
         key, identity: structuredClone(identity), scope: structuredClone(scope), snapshot: structuredClone(snapshot),
         activation_epoch: epoch, owner_id: this.sessionId, step_sequence: 0,
-        progress: { taskId, state: "running", phase: "cache_validation", completed: 0, total: 1, resumable: true },
+        progress: { taskId, state: "running", phase: profileForIdentity(identity)!.initial_phase, completed: 0, total: 1, resumable: true },
         updated_at: this.now(),
       };
       return { next: created, value: { disposition: "started" as const, task: created } };
@@ -238,10 +305,14 @@ export class AuthoringTaskRegistry {
     } finally { releaseBegin(); }
   }
 
-  async status(scope: Scope, snapshot: Snapshot, pluginVersion?: string, manifestDigest?: string): Promise<HostTaskProgress[]> {
-    const records = (await this.store.list()).filter(row => row.identity.plugin_id === "proprium.semantic" && sameStableScope(row.scope, scope))
+  async status(pluginId: string, scope: Scope, snapshot: Snapshot, pluginVersion?: string, manifestDigest?: string,
+    profileId = defaultTaskProfiles.get(pluginId)?.profile_id, taskId?: string): Promise<HostTaskProgress[]> {
+    const profile = profileId ? getAuthoringTaskProfileById(profileId) : undefined;
+    if (profile?.plugin_id !== pluginId) return [];
+    const records = (await this.store.list()).filter(row => row.identity.plugin_id === pluginId && sameStableScope(row.scope, scope))
       .sort((left, right) => right.updated_at - left.updated_at);
-    const selected=records.find(item=>item.progress.state!=="complete")??records[0];
+    const scopedRecords = records.filter(item => profileForIdentity(item.identity)?.profile_id === profileId && (!taskId || item.progress.taskId === taskId));
+    const selected=scopedRecords.find(item=>item.progress.state!=="complete")??scopedRecords[0];
     for (const record of selected?[selected]:[]) {
       const active = this.active.get(record.key);
       const exactSnapshot = sameSnapshot(record.snapshot, snapshot);
@@ -275,17 +346,20 @@ export class AuthoringTaskRegistry {
     return [];
   }
 
-  async cancel(scope: Scope, epoch: number, taskId: string): Promise<boolean> {
-    const key = keyFor("proprium.semantic", scope, taskId);
+  async cancel(pluginId: string, scope: Scope, epoch: number, taskId: string, profileId?: string): Promise<boolean> {
+    const profile = profileId ? getAuthoringTaskProfileById(profileId) : getAuthoringTaskProfile(pluginId);
+    if (profile?.plugin_id !== pluginId) return false;
+    const key = keyFor(pluginId, scope, taskId);
     const active = this.active.get(key);
     const outcome = await this.store.transact<{ cancelled: boolean; task?: StoredAuthoringTask }>(key, current => {
-      if (!current || !sameStableScope(current.scope, scope) || current.progress.taskId !== taskId ||
+      if (!current || profileForIdentity(current.identity)?.profile_id !== profile.profile_id || !sameStableScope(current.scope, scope) || current.progress.taskId !== taskId ||
           current.activation_epoch !== epoch || current.progress.state === "complete" ||
           (current.owner_id && current.owner_id !== this.sessionId)) {
         return { next: current, value: { cancelled: false, ...(current ? { task: current } : {}) } };
       }
       const progress = { ...current.progress, state: "cancelled" as const, resumable: current.progress.resumable };
-      const task = { ...current, owner_id: "", progress, updated_at: this.now() };
+      // Keep the last runner session on resumable tasks so same-session restarts can retain a Worker cursor.
+      const task = { ...current, owner_id: current.owner_id || this.sessionId, progress, updated_at: this.now() };
       return { next: task, value: { cancelled: true, task } };
     });
     if (outcome.cancelled) {
@@ -298,8 +372,8 @@ export class AuthoringTaskRegistry {
   }
 
   async update(requestId: string, epoch: number, scope: Scope, value: unknown): Promise<{ stored: true }> {
-    const row = this.progressValue(value);
     const found = await this.findForRequest(requestId, epoch, scope);
+    const row = this.progressValue(value, found?.task.identity);
     if (!found || found.task.progress.taskId !== row.taskId) throw invalid();
     const progress = { ...found.task.progress, phase: row.phase, completed: row.completed, total: row.total, resumable: true };
     await this.updateRecord(found.task, progress);
@@ -307,8 +381,8 @@ export class AuthoringTaskRegistry {
   }
 
   async setStartResult(requestId: string, epoch: number, scope: Scope, value: unknown): Promise<StoredAuthoringTask> {
-    const row = this.resultValue(value);
     const found = await this.findForRequest(requestId, epoch, scope, true);
+    const row = this.resultValue(value, found?.task.identity);
     if (!found || found.task.progress.taskId !== row.taskId) throw invalid();
     const complete = row.state === "complete";
     const progress: HostTaskProgress = { ...found.task.progress, state: row.state, phase: row.phase,
@@ -322,11 +396,14 @@ export class AuthoringTaskRegistry {
     return updated;
   }
 
-  async authorizeStep(scope: Scope, epoch: number, taskId: string, sequence: number, requestId: string,
-    idempotencyKey: string, controller: AbortController): Promise<TaskStepPermit> {
-    const key = keyFor("proprium.semantic", scope, taskId);
+  async authorizeStep(pluginId: string, scope: Scope, epoch: number, taskId: string, sequence: number, requestId: string,
+    idempotencyKey: string, controller: AbortController, profileId = defaultTaskProfiles.get(pluginId)?.profile_id): Promise<TaskStepPermit> {
+    if (!profileId) throw failure("capability_denied", "No Host task profile permits this step");
+    const profile = getAuthoringTaskProfileById(profileId);
+    if (profile?.plugin_id !== pluginId) throw failure("capability_denied", "No Host task profile permits this step");
+    const key = keyFor(pluginId, scope, taskId);
     const record = await this.store.get(key);
-    if (!record || record.owner_id !== this.sessionId || record.activation_epoch !== epoch || record.progress.state !== "running" ||
+    if (!record || profileForIdentity(record.identity)?.profile_id !== profileId || record.owner_id !== this.sessionId || record.activation_epoch !== epoch || record.progress.state !== "running" ||
         !sameScope(record.scope, scope)) throw failure("capability_denied", "No Host task owns this step");
     const active = this.active.get(record.key);
     if (!active || active.step || sequence !== record.step_sequence + 1 || !requestId || !idempotencyKey) {
@@ -337,19 +414,19 @@ export class AuthoringTaskRegistry {
     return permit;
   }
 
-  async consumeStepPermit(requestId: string, epoch: number, scope: Scope, taskId: string,
-    sequence: number, idempotencyKey?: string): Promise<boolean> {
+  async consumeStepPermit(pluginId: string, requestId: string, epoch: number, scope: Scope, taskId: string,
+    sequence: number, idempotencyKey?: string, profileId = defaultTaskProfiles.get(pluginId)?.profile_id): Promise<boolean> {
     const found = await this.findForRequest(requestId, epoch, scope);
     const permit = found && this.active.get(found.task.key)?.step;
-    if (!found || !permit || permit.consumed || permit.request_id !== requestId || permit.task_id !== taskId ||
+    if (!found || found.task.identity.plugin_id !== pluginId || profileForIdentity(found.task.identity)?.profile_id !== profileId || !permit || permit.consumed || permit.request_id !== requestId || permit.task_id !== taskId ||
         permit.sequence !== sequence || permit.idempotency_key !== idempotencyKey || found.task.progress.state !== "running") return false;
     permit.consumed = true;
     return true;
   }
 
   async setStepResult(requestId: string, epoch: number, scope: Scope, value: unknown): Promise<StoredAuthoringTask> {
-    const row = this.resultValue(value);
     const found = await this.findForRequest(requestId, epoch, scope);
+    const row = this.resultValue(value, found?.task.identity);
     const permit = found && this.active.get(found.task.key)?.step;
     if (!found || !permit?.consumed || permit.task_id !== row.taskId || permit.sequence !== found.task.step_sequence + 1) throw invalid();
     const complete = row.state === "complete";
@@ -371,7 +448,7 @@ export class AuthoringTaskRegistry {
         const progress = { ...current.progress,
           state: code === "cancelled" ? "cancelled" as const : "failed" as const,
           resumable: current.progress.resumable && !["snapshot_stale", "storage_unknown", "capability_denied", "incompatible_abi"].includes(code) };
-        const next = { ...current, owner_id: "", progress, failure_code: safeFailureCode(code), updated_at: this.now() };
+        const next = { ...current, owner_id: this.sessionId, progress, failure_code: safeFailureCode(code), updated_at: this.now() };
         return { next, value: next };
       });
       if (updated) this.emit(updated);
@@ -390,7 +467,7 @@ export class AuthoringTaskRegistry {
       if (!current || current.progress.state === "complete" || current.progress.state === "cancelled") return { next: current, value: undefined };
       const resumable = current.progress.resumable && !["snapshot_stale", "storage_unknown", "capability_denied", "incompatible_abi"].includes(code ?? "");
       const progress = { ...current.progress, state, resumable };
-      const next = { ...current, owner_id: "", progress, failure_code: code ? safeFailureCode(code) : undefined, updated_at: this.now() };
+      const next = { ...current, owner_id: this.sessionId, progress, failure_code: code ? safeFailureCode(code) : undefined, updated_at: this.now() };
       return { next, value: next };
     });
     if (updated) this.emit(updated);
@@ -434,24 +511,30 @@ export class AuthoringTaskRegistry {
     return { task: row };
   }
 
-  private progressValue(value: unknown): { taskId: string; phase: string; completed: number; total: number } {
+  private progressValue(value: unknown, identity?: AuthoringTaskIdentity): { taskId: string; phase: string; completed: number; total: number } {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw invalid();
     const row = value as Record<string, unknown>;
+    const profile = identity ? profileForIdentity(identity) : undefined;
+    const validCounts = Number.isSafeInteger(row.completed) && Number.isSafeInteger(row.total) &&
+      (row.total as number) >= 0 && ((row.completed as number) <= (row.total as number) ||
+        (profile?.allow_indeterminate_progress === true && row.total === 0 && row.phase === "source_scan"));
     if (Object.keys(row).some(key => !["taskId", "phase", "completed", "total"].includes(key)) ||
         typeof row.taskId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/u.test(row.taskId) ||
-        typeof row.phase !== "string" || !phases.has(row.phase) ||
-        !Number.isSafeInteger(row.completed) || !Number.isSafeInteger(row.total) ||
-        (row.completed as number) < 0 || (row.total as number) < (row.completed as number)) throw invalid();
+        typeof row.phase !== "string" || !phaseFor(profile, row.phase) || !validCounts ||
+        (row.completed as number) < 0) throw invalid();
     return row as { taskId: string; phase: string; completed: number; total: number };
   }
 
-  private resultValue(value: unknown): { taskId: string; state: "running" | "complete"; phase: string; completed: number; total: number } {
+  private resultValue(value: unknown, identity?: AuthoringTaskIdentity): { taskId: string; state: "running" | "complete"; phase: string; completed: number; total: number } {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw invalid();
     const row = value as Record<string, unknown>;
+    const profile = identity ? profileForIdentity(identity) : undefined;
+    const validCounts = Number.isSafeInteger(row.completed) && Number.isSafeInteger(row.total) &&
+      (row.total as number) >= 0 && ((row.completed as number) <= (row.total as number) ||
+        (profile?.allow_indeterminate_progress === true && row.total === 0 && row.phase === "source_scan"));
     if (typeof row.taskId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/u.test(row.taskId) ||
-        !(row.state === "running" || row.state === "complete") || typeof row.phase !== "string" || !phases.has(row.phase) ||
-        !Number.isSafeInteger(row.completed) || !Number.isSafeInteger(row.total) ||
-        (row.completed as number) < 0 || (row.total as number) < (row.completed as number)) throw invalid();
+        !(row.state === "running" || row.state === "complete") || typeof row.phase !== "string" || !phaseFor(profile, row.phase) || !validCounts ||
+        (row.completed as number) < 0) throw invalid();
     return row as { taskId: string; state: "running" | "complete"; phase: string; completed: number; total: number };
   }
 
@@ -469,7 +552,7 @@ export class AuthoringTaskRegistry {
 
   private emit(record: StoredAuthoringTask): void {
     if (!this.listeners.size) return;
-    this.pendingUpdates.set(record.key, { scope: structuredClone(record.scope), snapshot: structuredClone(record.snapshot),
+    this.pendingUpdates.set(record.key, { pluginId: record.identity.plugin_id, scope: structuredClone(record.scope), snapshot: structuredClone(record.snapshot),
       task: structuredClone(record.progress) });
     if (this.notificationTimer !== undefined) return;
     this.notificationTimer = setTimeout(() => {

@@ -23,7 +23,7 @@ import { BrowserGitWriterWorkspace } from "./writer-browser.js";
 import { ChangeStageStore, type ChangeStageContext, type ChangeStageRead } from "./stages.js";
 import { ProviderRequestBroker, type ProviderBrokerOptions, type ProviderConsentRequest, type ProviderRequestInput } from "./providers.js";
 import { ProviderUsageHistory } from "./provider-usage.js";
-import { AuthoringTaskRegistry, IndexedDbAuthoringTaskStore, SEMANTIC_PROGRESS_KEY,
+import { AuthoringTaskRegistry, IndexedDbAuthoringTaskStore, SEMANTIC_PROGRESS_KEY, getAuthoringTaskProfile, getAuthoringTaskProfileById, getAuthoringTaskProfileForAction,
   type AuthoringTaskIdentity, type AuthoringTaskUpdate } from "./tasks.js";
 import { assertValue } from "./schema.js";
 import { sourceTextDecoder } from "./source-text.js";
@@ -256,31 +256,40 @@ export class BrowserAuthoringService {
           const editor=options.editorState();
           if(editor.dirty||editor.composing)throw Object.assign(new Error("Save locally and finish composition before changing reading marks"),{code:"dirty_draft"});
         }
-        if (invoke.request.plugin_id === "proprium.semantic") {
+        const taskProfile = getAuthoringTaskProfileForAction(invoke.request.plugin_id, invoke.request.action_id);
+        if (taskProfile) {
           const request=invoke.request, epoch=invoke.activation_epoch;
-          if(request.action_id==="proprium.semantic.task.status")return options.manager.verifiedActionSet(request.plugin_id).then(async set => ({
+          if(request.action_id===taskProfile.status_action_id)return options.manager.verifiedActionSet(request.plugin_id).then(async set => ({
             request_id:request.request_id,scope:request.scope,snapshot:request.snapshot,ok:true as const,
-            value:{snapshot:request.snapshot,activeTasks:await this.tasks.status(request.scope,request.snapshot,set?.version,set?.manifest_digest)},warnings:[]}));
-          if(request.action_id==="proprium.semantic.task.cancel")return this.tasks.cancel(request.scope,epoch,String(request.input.taskId)).then(cancelled => ({
+            value:{snapshot:request.snapshot,activeTasks:await this.tasks.status(request.plugin_id,request.scope,request.snapshot,set?.version,set?.manifest_digest,
+              taskProfile.profile_id,typeof request.input.taskId==="string"?request.input.taskId:undefined)},warnings:[]}));
+          if(request.action_id===taskProfile.cancel_action_id)return this.tasks.cancel(request.plugin_id,request.scope,epoch,String(request.input.taskId),taskProfile.profile_id).then(cancelled => ({
             request_id:request.request_id,scope:request.scope,snapshot:request.snapshot,ok:true as const,
             value:{snapshot:request.snapshot,taskId:request.input.taskId,cancelled},warnings:[]}));
-          if(request.action_id==="proprium.semantic.index.step"){
-            const allowed=await this.tasks.consumeStepPermit(request.request_id,epoch,request.scope,String(request.input.taskId),
-              Number(request.input.sequence),request.idempotency_key);
-            if(!allowed)throw Object.assign(new Error("Semantic step has no current Host task permit"),{code:"capability_denied"});
+          if(request.action_id===taskProfile.step_action_id){
+            const allowed=await this.tasks.consumeStepPermit(request.plugin_id,request.request_id,epoch,request.scope,String(request.input.taskId),
+              Number(request.input.sequence),request.idempotency_key,taskProfile.profile_id);
+            if(!allowed)throw Object.assign(new Error("Task step has no current Host task permit"),{code:"capability_denied"});
             return options.manager.authoringRuntime(request.plugin_id).invoke(invoke);
           }
-          if(request.action_id==="proprium.semantic.index.rebuild"){
+          if(request.action_id===taskProfile.start_action_id){
             const idempotencyKey=invoke.request.idempotency_key;
             if(invoke.caller!=="ui"||!idempotencyKey)throw Object.assign(new Error("Index jobs require an explicitly approved Host request"),{code:"capability_denied"});
+            const taskId=typeof request.input.taskId==="string"?request.input.taskId:
+              await sha256Bytes(new TextEncoder().encode(canonicalJson({plugin_id:request.plugin_id,action_id:request.action_id,
+                idempotency_key:idempotencyKey,workspace_id:request.scope.workspace_id,repository_id:request.scope.repository_id,branch:request.scope.branch})));
+            const guestInvoke=taskId===request.input.taskId?invoke:{...invoke,request:{...request,input:{...request.input,taskId}}};
             const set=await options.manager.verifiedActionSet(request.plugin_id);
-            if(!set?.enabled||!set.activation_epoch)throw Object.assign(new Error("Semantic is not active in this workspace"),{code:"plugin_unavailable"});
+            if(!set?.enabled||!set.activation_epoch)throw Object.assign(new Error("The indexing plugin is not active in this workspace"),{code:"plugin_unavailable"});
             const controller=this.controllers.get(request.request_id)??new AbortController();
             const identity:AuthoringTaskIdentity={plugin_id:request.plugin_id,plugin_version:set.version,manifest_digest:set.manifest_digest,
+              profile_id:taskProfile.profile_id,
               config_digest:await sha256Bytes(new TextEncoder().encode(canonicalJson({plugin_id:request.plugin_id,version:set.version,
-                manifest_digest:set.manifest_digest,workspace_id:request.scope.workspace_id,repository_id:request.scope.repository_id,branch:request.scope.branch}))),
+                manifest_digest:set.manifest_digest,profile:[taskProfile.start_action_id,taskProfile.step_action_id],
+                configuration:Object.fromEntries(Object.entries(request.input).filter(([key])=>key!=="taskId")),
+                workspace_id:request.scope.workspace_id,repository_id:request.scope.repository_id,branch:request.scope.branch}))),
               idempotency_key:idempotencyKey};
-            const begun=await this.tasks.begin(request.request_id,epoch,request.scope,request.snapshot,String(request.input.taskId),identity,controller);
+            const begun=await this.tasks.begin(request.request_id,epoch,request.scope,request.snapshot,taskId,identity,controller);
             if(begun.disposition==="already_active"||begun.disposition==="complete"){
               const progress=begun.task.progress;
               return {request_id:request.request_id,scope:request.scope,snapshot:request.snapshot,ok:true as const,
@@ -288,14 +297,14 @@ export class BrowserAuthoringService {
                   phase:progress.phase,completed:progress.completed,total:progress.total},warnings:[]};
             }
             try{
-              const result=await options.manager.authoringRuntime(request.plugin_id).invoke(invoke);
+              const result=await options.manager.authoringRuntime(request.plugin_id).invoke(guestInvoke);
               if(!result.ok){await this.tasks.finishTask(begun.task.key,"failed",result.error.code);return result;}
               const task=await this.tasks.setStartResult(request.request_id,epoch,request.scope,result.value);
               if(task.progress.state==="running")void this.runTask(task.key);
               return result;
             }catch(error){await this.tasks.finishTask(begun.task.key,"failed",(error as {code?:string})?.code);throw error;}
           }
-          if(request.action_id==="proprium.semantic.index.step")throw Object.assign(new Error("Semantic step permission was already consumed"),{code:"capability_denied"});
+          if(request.action_id===taskProfile.step_action_id)throw Object.assign(new Error("Task step permission was already consumed"),{code:"capability_denied"});
         }
         if (invoke.request.plugin_id === "proprium.narrative" && invoke.request.action_id === "proprium.narrative.resume.mark.propose") {
           const editor = options.editorState(), position = editor.resume_position, input = invoke.request.input;
@@ -308,7 +317,10 @@ export class BrowserAuthoringService {
       } },
       capabilities: this.capabilityPorts(),
       idempotency: options.idempotency,
-      hostControlAction: (pluginId,actionId) => pluginId==="proprium.semantic" && ["proprium.semantic.task.status","proprium.semantic.task.cancel"].includes(actionId),
+      hostControlAction: (pluginId,actionId) => {
+        const profile=getAuthoringTaskProfileForAction(pluginId,actionId);
+        return Boolean(profile&&(actionId===profile.status_action_id||actionId===profile.cancel_action_id));
+      },
     });
   }
 
@@ -863,6 +875,8 @@ export class BrowserAuthoringService {
     for(;;){
       const job=await this.tasks.taskByKey(taskKey);
       if(!job||job.progress.state!=="running"||job.owner_id!==this.tasks.sessionId)return;
+      const profile=job.identity.profile_id ? getAuthoringTaskProfileById(job.identity.profile_id) : getAuthoringTaskProfile(job.identity.plugin_id);
+      if(!profile){await this.tasks.finishTask(taskKey,"failed","capability_denied");return;}
       const selected=this.requireSelection(),scope=this.scope(selected);
       if(!sameScope(scope,job.scope)){
         await this.tasks.finishTask(taskKey,"failed","snapshot_stale");
@@ -872,15 +886,15 @@ export class BrowserAuthoringService {
       const requestId=this.nextRequestId();
       const stepKey=await sha256Bytes(new TextEncoder().encode(job.identity.idempotency_key+":step:"+sequence));
       const controller=new AbortController();
-      await this.tasks.authorizeStep(scope,job.activation_epoch,job.progress.taskId,sequence,requestId,stepKey,controller);
+      await this.tasks.authorizeStep(job.identity.plugin_id,scope,job.activation_epoch,job.progress.taskId,sequence,requestId,stepKey,controller,profile.profile_id);
       this.controllers.set(requestId,controller);
       const principal:TrustedActionPrincipal={caller:"ui",actor_id:"proprium-host-task-runner",selected_scope:scope,request_id:requestId};
       let stepError:unknown;
       try{
-        const result=await this.dispatcher.invoke({plugin_id:"proprium.semantic",action_id:"proprium.semantic.index.step",
+        const result=await this.dispatcher.invoke({plugin_id:job.identity.plugin_id,action_id:profile.step_action_id,
           input:{taskId:job.progress.taskId,sequence},idempotency_key:stepKey},principal);
         if(!result.ok){stepError=Object.assign(new Error(result.error.message),{code:result.error.code});}
-        else if(!sameSnapshotSource(result.snapshot,job.snapshot))stepError=Object.assign(new Error("Semantic task source snapshot changed"),{code:"snapshot_stale"});
+        else if(!sameSnapshotSource(result.snapshot,job.snapshot))stepError=Object.assign(new Error("Authoring task source snapshot changed"),{code:"snapshot_stale"});
         else{
           const task=await this.tasks.setStepResult(requestId,job.activation_epoch,scope,result.value);
           await this.tasks.finishStep(requestId);

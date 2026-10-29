@@ -13,6 +13,7 @@ import { bracketPairsExtension } from "./cm/bracketPairs";
 import { editorCompositionExtension, isViewComposing } from "./cm/compositionGuard";
 import { ellipsisNormalizeExtension } from "./cm/ellipsisNormalize";
 import { refreshTermAdornments, termAdornmentsExtension } from "./cm/termAdornments";
+import { diagnosticsMarginExtension, type DiagnosticDecision, type DiagnosticsMarginCallbacks, type DiagnosticsMarginMarker } from "./cm/diagnosticMargin";
 import { planWritingSymbol, type WritingSymbolId } from "./writingSymbols";
 import { isValidEditorRange, type ResolveEditorTerms } from "./terms";
 import { createUiSentencePositionIndexCache, type UiSentencePositionIndexCache } from "../resume/continueCandidates";
@@ -56,6 +57,9 @@ export interface ManuscriptInputProps {
   onTermNavigate?: (targetPath: string, termId: string, event: Event) => void;
   onCompositionChange?: (composing: boolean) => void;
   termResolutionKey?: string;
+  diagnosticMarkers?: readonly DiagnosticsMarginMarker[];
+  onDiagnosticMarkerSelect?: (event: Event, findingFingerprint: string) => void;
+  onDiagnosticMarkerDecision?: (event: Event, finding: DiagnosticsMarginMarker, decision: DiagnosticDecision) => void;
 }
 
 /** CodeMirror adapter retaining IME-safe editing, source bracket/ellipsis rules and history keymaps. */
@@ -73,6 +77,9 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
   onTermNavigate,
   onCompositionChange,
   termResolutionKey,
+  diagnosticMarkers = EMPTY_DIAGNOSTIC_MARKERS,
+  onDiagnosticMarkerSelect,
+  onDiagnosticMarkerDecision,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -84,9 +91,16 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
   const navigatorRef = useRef<((targetPath: string, termId: string, event: Event) => void) | undefined>(onTermNavigate);
   resolverRef.current = resolveTerms;
   navigatorRef.current = onTermNavigate;
-  const latestRef = useRef({ onChange, onSelectionLengthChange, onCursorPositionChange, onCompositionChange });
-  latestRef.current = { onChange, onSelectionLengthChange, onCursorPositionChange, onCompositionChange };
+  const latestRef = useRef({ onChange, onSelectionLengthChange, onCursorPositionChange, onCompositionChange,
+    onDiagnosticMarkerSelect, onDiagnosticMarkerDecision });
+  latestRef.current = { onChange, onSelectionLengthChange, onCursorPositionChange, onCompositionChange,
+    onDiagnosticMarkerSelect, onDiagnosticMarkerDecision };
   const reportedComposition = useRef<boolean | null>(null);
+  const diagnosticCompartment = useRef(new Compartment()).current;
+  const diagnosticCallbacks = useRef<DiagnosticsMarginCallbacks>({
+    onSelect: (event, fingerprint) => latestRef.current.onDiagnosticMarkerSelect?.(event, fingerprint),
+    onDecision: (event, finding, decision) => latestRef.current.onDiagnosticMarkerDecision?.(event, finding, decision),
+  }).current;
 
   function reportComposition(view: EditorView): void {
     const composing = isViewComposing(view);
@@ -207,6 +221,7 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
         ellipsisNormalizeExtension(),
         editorCompositionExtension(),
         termAdornmentsExtension(resolverRef, navigatorRef),
+        diagnosticCompartment.of(diagnosticsMarginExtension(diagnosticMarkers, diagnosticCallbacks)),
         styleNonceExtension(),
         EditorView.lineWrapping,
         EditorView.contentAttributes.of({
@@ -277,6 +292,11 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
 
   useEffect(() => {
     const view = viewRef.current;
+    if (view) view.dispatch({ effects: diagnosticCompartment.reconfigure(diagnosticsMarginExtension(diagnosticMarkers, diagnosticCallbacks)) });
+  }, [diagnosticCompartment, diagnosticMarkers, diagnosticCallbacks]);
+
+  useEffect(() => {
+    const view = viewRef.current;
     if (!view || view.state.doc.toString() === value) return;
     externalSyncRef.current = true;
     view.dispatch({
@@ -287,6 +307,8 @@ export const ManuscriptInput = forwardRef<ManuscriptInputHandle, ManuscriptInput
 
   return <div ref={containerRef} className="manuscript-input" style={style} data-testid="manuscript-input" />;
 });
+
+const EMPTY_DIAGNOSTIC_MARKERS: readonly DiagnosticsMarginMarker[] = Object.freeze([]);
 
 function styleNonceExtension() {
   const nonce = document.querySelector<HTMLMetaElement>('meta[name="scriptorium-style-nonce"]')?.content;

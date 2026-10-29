@@ -31,7 +31,7 @@ const decisions: Array<{ fingerprint: string; decision: DiagnosticDecision; trus
 const markers = new Compartment();
 const view = new EditorView({
   state: EditorState.create({ doc: "前🌸です後", extensions: [markers.of(diagnosticsMarginExtension([marker], {
-    onSelect: value => select.push(value),
+    onSelect: (_event, value) => select.push(value),
     onDecision: (event, finding, decision) => decisions.push({ fingerprint: finding.findingFingerprint, decision, trusted: event.isTrusted }),
   }))] }),
   parent: document.querySelector("#editor")!,

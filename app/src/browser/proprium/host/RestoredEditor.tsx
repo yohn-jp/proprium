@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { SceneEditor, type ScratchDraftBinding, type ScratchDraftPayload } from "../../../editor/SceneEditor.js";
+import type { DiagnosticDecision, DiagnosticsMarginMarker } from "../../../editor/cm/diagnosticMargin.js";
 import type { ResolveEditorTerms } from "../../../editor/terms.js";
 import { BrowserJournal, documentKey, repositoryKey, type JournalEntry } from "../../../storage/journal.js";
 import type { RepositoryIdentity, SnapshotId } from "@scriptorium/contracts";
@@ -40,6 +41,9 @@ interface Props {
   onWritingPosition?(path: string, sentenceIndex: number | null, scrollTop: number, selection: WritingResumeSelection | null): void;
   hostResume?: HostWritingResume & { readonly requestId: number };
   onHostResumeApplied?(requestId: number, restored: boolean): void;
+  diagnosticMarkers?: readonly DiagnosticsMarginMarker[];
+  onDiagnosticMarkerSelect?(event: Event, findingFingerprint: string): void;
+  onDiagnosticMarkerDecision?(event: Event, finding: DiagnosticsMarginMarker, decision: DiagnosticDecision): void;
 }
 
 /** The recovered Scriptorium editor, with Browser Host-owned storage and Git ports. */
@@ -208,6 +212,9 @@ export function RestoredEditor(props: Props): ReactElement {
       scratchEntries={entries.filter(entry => entry.documentPath.startsWith("meta/scratch/"))} onDraftScratch={draftScratch} onCheckpointScratch={checkpointScratch}
       registerScratchFlush={registerScratchFlush} registerNavigationFlush={registerInputFlush} scratchBusy={busy} pendingCount={file.dirty ? 1 : 0}
       registerQuickAppend={registerInputAppend}
+      diagnosticMarkers={props.diagnosticMarkers}
+      onDiagnosticMarkerSelect={props.onDiagnosticMarkerSelect}
+      onDiagnosticMarkerDecision={props.onDiagnosticMarkerDecision}
       onCompositionChange={props.onCompositionChange} />
   </>;
 }
