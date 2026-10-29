@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   buildResearchIndex,
   fuseSearchCandidates,
+  filterIgnoredCandidates,
   createResearchDocument,
   isSearchableDocumentPath,
   lexicalTokens,
@@ -15,6 +16,12 @@ import {
 } from "./core.js";
 
 const revision = (char: string) => char.repeat(64);
+
+test("ignored candidate terms are removed by exact author choice before pagination", () => {
+  const candidates = [{ term: "雨雲", occurrenceCount: 8 }, { term: "雨", occurrenceCount: 4 }, { term: "雨雲 (仮)", occurrenceCount: 2 }];
+  assert.deepEqual(filterIgnoredCandidates(candidates, new Set(["雨雲"])), [candidates[1], candidates[2]]);
+  assert.deepEqual(filterIgnoredCandidates(candidates, new Set()), candidates);
+});
 
 test("search filters roots and hidden paths, indexes Japanese pairs, and returns source ranges", () => {
   assert.equal(isSearchableDocumentPath("manuscript/vol/ch/scene.md"), true);

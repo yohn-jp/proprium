@@ -6,6 +6,7 @@ import type { GuestHost, Handler, HostCall } from "../shared/guest.js";
 import {
   buildResearchIndex,
   fuseSearchCandidates,
+  filterIgnoredCandidates,
   isSearchableDocumentPath,
   isSafeRelativePath,
   parseTermRegistry,
@@ -300,6 +301,17 @@ function* readOptionalText(host: GuestHost, context: ActionRequest, path: string
   if (!entry) return null;
   if (entry.byte_length > maxBytes) throw fail("capacity", `${path} exceeds its declared byte limit`, false, { path });
   return { text: yield* readEntryText(host, context, entry, maxBytes), revision: entry.revision };
+}
+
+function* readIgnoredCandidateTerms(host: GuestHost, context: ActionRequest): Generator<HostCall, { terms: Set<string>; revision: string | null }, unknown> {
+  const file = yield* readOptionalText(host, context, IGNORED_PATH, 1024 * 1024);
+  if (!file) return { terms: new Set(), revision: null };
+  const parsed = parseYamlObject(file.text, IGNORED_PATH);
+  const ignored = parsed.value.ignored ?? [];
+  if (!Array.isArray(ignored) || ignored.some((term) => typeof term !== "string" || term.length > 256)) {
+    throw fail("unsupported_schema", "Ignored candidates must be strings up to 256 characters", false, { path: IGNORED_PATH });
+  }
+  return { terms: new Set(ignored as string[]), revision: file.revision };
 }
 
 function* loadRegistry(host: GuestHost, context: ActionRequest): Generator<HostCall, LoadedRegistry, unknown> {
@@ -1080,10 +1092,11 @@ export function createResearchHandlers(): Record<string, Handler> {
       }
       const includeReadings = input.includeReadings !== false;
       const knownTerms = [...new Set(known as string[])];
+      const ignored = yield* readIgnoredCandidateTerms(host, context);
       const requestDigest = sha256Text(JSON.stringify([
         corpus.kind,
         candidateSources.map(({ id, path, revision, texts }) => [id, path ?? null, revision, texts.map(({ id: textId, text }) => [textId, text])]),
-        knownTerms.slice().sort(), includeReadings,
+        knownTerms.slice().sort(), includeReadings, ignored.revision, [...ignored.terms].sort(),
       ]));
       const scopeDigest = cacheScopeDigest(context);
       let offset = 0;
@@ -1117,7 +1130,7 @@ export function createResearchHandlers(): Record<string, Handler> {
         });
         sourcesWithTokens.push({ id: source.id, ...(source.path ? { path: source.path } : {}), revision: source.revision, texts });
       }
-      const candidates = aggregateCandidateEvidence(sourcesWithTokens, new Set(knownTerms));
+      const candidates = filterIgnoredCandidates(aggregateCandidateEvidence(sourcesWithTokens, new Set(knownTerms)), ignored.terms);
       const page = candidates.slice(offset, offset + (limit as number));
       const output = page.map(({ reading, ...candidate }) => ({ ...candidate, ...(includeReadings && reading ? { reading } : {}) }));
       const nextOffset = offset + output.length;

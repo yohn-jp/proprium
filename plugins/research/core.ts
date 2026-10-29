@@ -63,6 +63,11 @@ export interface ResearchIndex {
   bytes: number;
 }
 
+/** Apply the author's exact, case-sensitive ignored-candidate choices before paging. */
+export function filterIgnoredCandidates<T extends { term: string }>(candidates: readonly T[], ignoredTerms: ReadonlySet<string>): T[] {
+  return candidates.filter(({ term }) => !ignoredTerms.has(term));
+}
+
 export interface FusedSearchCandidate {
   rank: number;
   path: string;
