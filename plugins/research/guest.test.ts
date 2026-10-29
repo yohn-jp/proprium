@@ -125,6 +125,15 @@ async function invoke(
   return state.value;
 }
 
+async function rebuildResearchIndex(host: ResearchHostFixture, handlers = createResearchHandlers(), taskId = "research-test-task") {
+  let result = await invoke(handlers["research.index.rebuild"]!, host, "research.index.rebuild", { taskId }) as Record<string, unknown>;
+  let sequence = 0;
+  while (result.state === "running") {
+    result = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence: ++sequence }) as Record<string, unknown>;
+  }
+  return result;
+}
+
 test("search values match the signed schema with and without envelope warnings", async () => {
   const schemaPath = process.env.PROPRIUM_AUTHORING_SCHEMA ?? fileURLToPath(new URL("../../app/src/browser/proprium/authoring/schema.ts", import.meta.url));
   const { assertValue } = await import(pathToFileURL(schemaPath).href);
@@ -206,8 +215,8 @@ test("index status reads Host metadata and a new guest verifies cached source re
   const source = file("manuscript/volume/chapter.md", "The lantern in the rain.");
   host.files.set(source.path, source);
   const firstHandlers = createResearchHandlers();
-  const rebuilt = await invoke(firstHandlers["research.index.rebuild"]!, host, "research.index.rebuild", {}) as { state: string; indexSnapshot: string };
-  assert.equal(rebuilt.state, "current");
+  const rebuilt = await rebuildResearchIndex(host, firstHandlers) as { state: string; indexSnapshot: string };
+  assert.equal(rebuilt.state, "complete");
   assert.equal(rebuilt.indexSnapshot, snapshot.id);
   assert.ok([...host.cache.values()].some((value) => value && typeof value === "object" && (value as Record<string, unknown>).schemaVersion === 1));
 
@@ -222,6 +231,32 @@ test("index status reads Host metadata and a new guest verifies cached source re
   assert.deepEqual(page.hits[0]?.navigationSpan, { path: source.path, revision: source.revision, start: 4, end: 11, quote: "lantern" });
   assert.ok(host.calls.slice(queryCallsStart).some(({ operation }) => operation === "workspace.derived.cache.get"));
   assert.equal(host.calls.slice(queryCallsStart).some(({ operation }) => operation === "workspace.file.read"), false);
+});
+
+test("Research index rebuild yields one source file per Host step and reports publishing separately", async () => {
+  const host = new ResearchHostFixture();
+  for (let index = 0; index < 3; index++) host.files.set(`manuscript/a-${index}.md`, file(`manuscript/a-${index}.md`, `lighthouse passage ${index}`));
+  const handlers = createResearchHandlers();
+  const taskId = "research-stepped-task";
+  const started = await invoke(handlers["research.index.rebuild"]!, host, "research.index.rebuild", { taskId }) as Record<string, unknown>;
+  assert.deepEqual({ state: started.state, phase: started.phase, completed: started.completed, total: started.total },
+    { state: "running", phase: "index_build", completed: 0, total: 3 });
+  const inProgress = await invoke(handlers["research.index.status"]!, host, "research.index.status", {}) as Record<string, unknown>;
+  assert.equal(inProgress.state, "indexing");
+  assert.deepEqual(inProgress.progress, { completed: 0, total: 3 });
+  const first = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence: 1 }) as Record<string, unknown>;
+  assert.deepEqual({ state: first.state, phase: first.phase, completed: first.completed, total: first.total },
+    { state: "running", phase: "index_build", completed: 1, total: 3 });
+  const second = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence: 2 }) as Record<string, unknown>;
+  assert.equal(second.completed, 2);
+  const lastSource = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence: 3 }) as Record<string, unknown>;
+  assert.deepEqual({ state: lastSource.state, phase: lastSource.phase, completed: lastSource.completed, total: lastSource.total },
+    { state: "running", phase: "cache_publish", completed: 0, total: 1 });
+  const published = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence: 4 }) as Record<string, unknown>;
+  assert.deepEqual({ state: published.state, phase: published.phase, completed: published.completed, total: published.total },
+    { state: "complete", phase: "complete", completed: 1, total: 1 });
+  const query = await invoke(handlers["research.query"]!, host, "research.query", { query: "lighthouse", includeTerms: false }) as { hits: unknown[] };
+  assert.equal(query.hits.length, 3);
 });
 
 test("changed snapshots reread only changed and added files while removing deleted entries", async () => {

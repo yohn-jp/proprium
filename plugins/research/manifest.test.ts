@@ -60,6 +60,30 @@ test("Research official manifest declares every implemented action and only acti
   for (const actionId of bindings) assert.ok(actionIds.includes(actionId), `surface binding references undeclared action ${actionId}`);
 });
 
+test("Research index jobs use Host task IDs, bounded steps and distinct Host-owned status/cancel contracts", async () => {
+  const metadata = JSON.parse(await readFile(new URL("./plugin.json", import.meta.url), "utf8"));
+  const action = (id: string) => metadata.actions.find((item: any) => item.action_id === id);
+  const rebuild = action("research.index.rebuild");
+  const step = action("research.index.step");
+  const status = action("research.task.status");
+  const cancel = action("research.task.cancel");
+  const hostSnapshot = { id: "snapshot-1", local_commit: "a".repeat(40), worktree_generation: "worktree-1", draft_generation: null };
+  assert.equal(rebuild.requires_user_gesture, true);
+  assert.deepEqual(rebuild.callers, ["ui"]);
+  assertValue(rebuild.input_schema, {}, "Host task ID injection remains optional to declarative rebuild callers");
+  assertValue(rebuild.input_schema, { taskId: "task-1" }, "Host-created rebuild task ID");
+  assertValue(rebuild.output_schema, { snapshot: hostSnapshot, taskId: "task-1", jobId: "task-1", state: "running", phase: "index_build",
+    completed: 0, total: 2, progress: { completed: 0, total: 2 } }, "start result");
+  assert.equal(step.requires_user_gesture, false);
+  assert.deepEqual(step.callers, ["ui"]);
+  assertValue(step.input_schema, { taskId: "task-1", sequence: 1 }, "Host-issued Research task step");
+  assertValue(step.output_schema, { snapshot: hostSnapshot, taskId: "task-1", state: "running", phase: "index_build", completed: 1, total: 2 }, "step result");
+  assert.deepEqual(status.required_capabilities, []);
+  assertValue(status.output_schema, { snapshot: hostSnapshot, activeTasks: [] }, "Host task status");
+  assert.equal(cancel.requires_user_gesture, true);
+  assertValue(cancel.output_schema, { snapshot: hostSnapshot, taskId: "task-1", cancelled: true }, "Host task cancellation");
+});
+
 test("search fusion accepts typed Host action results only from the user interface", async () => {
   const metadata = JSON.parse(await readFile(new URL("./plugin.json", import.meta.url), "utf8"));
   const action = metadata.actions.find((item: any) => item.action_id === "research.search.fuse");
