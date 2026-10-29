@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
-import { chooseFile, expectEditorText, reviewChangedFiles, showPanel } from "./restored-ui.helpers.js";
+import { expectEditorText, reviewChangedFiles, showPanel } from "./restored-ui.helpers.js";
 
 async function showNarrativeOutline(page: import("@playwright/test").Page): Promise<void> {
   await page.getByRole("tabpanel", { name: "Work outline", exact: true }).first().getByRole("tab", { name: "構成", exact: true }).click();
@@ -544,11 +544,8 @@ test("local authoring edits, reviews, commits and recovers a large work", async 
   await expect(page.locator(".host-message[role='status']")).toContainText("Committed locally as");
   await page.reload();
   await page.getByRole("button", { name: /P0 synthetic work/ }).click();
-  // Mobile restores the last-open manuscript directly; do not demand a second
-  // file-tree selection when the correct document is already active.
-  if (!(await page.getByRole("textbox", { name: "原稿 Markdown" }).isVisible())) {
-    await chooseFile(page, "manuscript/custom/scene-301.md");
-  }
+  // Reopening restores the saved manuscript asynchronously. Wait for its
+  // real editor bytes rather than racing that navigation with a Files click.
   await expectEditorText(page, edited);
 
 });

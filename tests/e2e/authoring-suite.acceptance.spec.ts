@@ -17,7 +17,7 @@ async function openMobileLibrary(page: import("@playwright/test").Page): Promise
     await libraryEmptyStateButton.first().click();
     return;
   }
-  const mobileNavigation = page.getByRole("navigation", { name: "モバイル画面", exact: true });
+  const mobileNavigation = page.getByRole("navigation", { name: "モバイルの主要画面", exact: true });
   if (await mobileNavigation.isVisible()) await mobileNavigation.getByRole("button", { name: "作品", exact: true }).click();
 }
 
@@ -27,7 +27,7 @@ async function openRecentWorkspace(page: import("@playwright/test").Page, worksp
   const recent = page.getByRole("button", { name: new RegExp(escapedName) }).first();
   await expect(recent).toBeVisible();
   await recent.click();
-  await expect(page.locator(".host-message[role='status']")).toContainText("ローカル作品を開きました");
+  await expect(page.locator(".host-message[role='status']")).toContainText("この端末の作品を開きました");
 }
 
 test.beforeAll(async () => {
@@ -44,7 +44,7 @@ test("normal Host installs and enables all independently signed authoring Compon
   if (testInfo.project.name === "webkit-mobile") await openMobileLibrary(page);
   await page.getByLabel("作品名", { exact: true }).fill(workspaceName);
   await page.getByRole("button", { name: "ローカル作品を作成", exact: true }).click();
-  await expect(page.locator(".host-message[role='status']")).toContainText("ローカル作品を開きました");
+  await expect(page.locator(".host-message[role='status']")).toContainText("この端末の作品を開きました");
 
   const fixture = await seedSyntheticAuthoringWork(page, workspaceName);
   expect(fixture.scene_count).toBe(301);
@@ -56,7 +56,7 @@ test("normal Host installs and enables all independently signed authoring Compon
   const panel = page.locator("details.plugin-manager-panel");
   await expect(panel).toBeVisible();
   if (await panel.getAttribute("open") === null) await panel.locator("summary").click();
-  await page.getByRole("button", { name: "信頼済みカタログを表示", exact: true }).click();
+  await page.getByRole("button", { name: "カタログを表示", exact: true }).click();
   const catalog = panel.locator(".registry-plugin-list");
   await expect(catalog).toBeVisible();
   const installInputs: Array<{ plugin_id: string; version: string; manifest_sha256: string; plugin_sha256: string;
@@ -65,7 +65,7 @@ test("normal Host installs and enables all independently signed authoring Compon
   for (const plugin of release.plugins) {
     expect(plugin.actionIds.length, `${plugin.id} has signed typed actions`).toBeGreaterThan(0);
     await expect(catalog).toContainText(plugin.id);
-    await page.getByRole("button", { name: `${plugin.id} ${plugin.version} の署名済みプレビューを確認`, exact: true }).click();
+    await page.getByRole("button", { name: `${plugin.id} v${plugin.version} の導入内容と署名を確認`, exact: true }).click();
     const preview = page.getByRole("region", { name: "インストールプレビュー", exact: true });
     await expect(preview).toContainText(`${plugin.id}@${plugin.version}`);
     const packageSummary = preview.locator("li article").filter({ hasText: `${plugin.id}@${plugin.version}` });
@@ -76,7 +76,7 @@ test("normal Host installs and enables all independently signed authoring Compon
     await expect(panel.getByRole("status")).toContainText("署名とダイジェストを検証し、無効状態でインストールしました");
     const card = panel.getByRole("listitem").filter({ has: page.locator(".plugin-card-head strong", { hasText: new RegExp(`^${plugin.id.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}$`) }) }).filter({ hasText: `v${plugin.version}` });
     await expect(card).toBeVisible();
-    await expect(card).toContainText("installed, disabled");
+    await expect(card.locator(".plugin-card-head small")).toHaveText(`v${plugin.version} · 無効`);
     installInputs.push({ plugin_id: plugin.id, version: plugin.version,
       manifest_sha256: plugin.manifestDigest, plugin_sha256: plugin.pluginDigest,
       action_ids: [...plugin.actionIds],
@@ -102,14 +102,14 @@ test("normal Host installs and enables all independently signed authoring Compon
   for (const plugin of release.plugins) {
     const card = reloadedPanel.getByRole("listitem").filter({ has: page.locator(".plugin-card-head strong", { hasText: new RegExp(`^${plugin.id.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}$`) }) }).filter({ hasText: `v${plugin.version}` });
     await expect(card).toBeVisible();
-    await expect(card).toContainText("installed, disabled");
+    await expect(card.locator(".plugin-card-head small")).toHaveText(`v${plugin.version} · 無効`);
     for (const capability of plugin.capabilities) {
       const checkbox = card.getByRole("checkbox", { name: capability, exact: true });
       await expect(checkbox).toBeVisible();
       await checkbox.check();
     }
-    await card.getByRole("button", { name: "Enable", exact: true }).click();
-    await expect(card).toContainText("enabled, idle");
+    await card.getByRole("button", { name: "有効化", exact: true }).click();
+    await expect(card.locator(".plugin-card-head small")).toHaveText(`v${plugin.version} · 有効（待機中）`);
     reloadStates.push({ plugin_id: plugin.id, state: "enabled-idle", granted_capabilities: [...plugin.capabilities] });
   }
 
@@ -137,21 +137,21 @@ test("normal Host installs and enables all independently signed authoring Compon
   for (const plugin of release.plugins) {
     const card = enabledPanel.getByRole("listitem").filter({ has: page.locator(".plugin-card-head strong", { hasText: new RegExp(`^${plugin.id.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}$`) }) }).filter({ hasText: `v${plugin.version}` });
     await expect(card).toBeVisible();
-    await expect(card).toContainText("enabled, idle");
+    await expect(card.locator(".plugin-card-head small")).toHaveText(`v${plugin.version} · 有効（待機中）`);
   }
 
   // Exercise a real leaf package through disable, uninstall and verified reinstall.
   const leaf = release.plugins.find(plugin => plugin.id === "proprium.publishing")!;
   const leafCard = enabledPanel.getByRole("listitem").filter({ has: page.locator(".plugin-card-head strong", { hasText: /^proprium\.publishing$/ }) }).filter({ hasText: `v${leaf.version} ·` });
-  await leafCard.getByRole("button", { name: "Disable", exact: true }).click();
-  await expect(leafCard).toContainText("installed, disabled");
+  await leafCard.getByRole("button", { name: "無効化", exact: true }).click();
+  await expect(leafCard.locator(".plugin-card-head small")).toHaveText(`v${leaf.version} · 無効`);
   page.once("dialog", dialog => void dialog.accept());
-  await leafCard.getByRole("button", { name: "Uninstall", exact: true }).click();
+  await leafCard.getByRole("button", { name: "アンインストール", exact: true }).click();
   await expect(leafCard).toHaveCount(0);
-  await enabledPanel.getByRole("button", { name: "信頼済みカタログを表示", exact: true }).click();
-  await page.getByRole("button", { name: `${leaf.id} ${leaf.version} の署名済みプレビューを確認`, exact: true }).click();
+  await enabledPanel.getByRole("button", { name: "更新", exact: true }).click();
+  await page.getByRole("button", { name: `${leaf.id} v${leaf.version} の導入内容と署名を確認`, exact: true }).click();
   await page.getByRole("button", { name: "ダウンロードして無効状態でインストール", exact: true }).click();
-  await expect(leafCard).toContainText("installed, disabled");
+  await expect(leafCard.locator(".plugin-card-head small")).toHaveText(`v${leaf.version} · 無効`);
 
   // Metadata-only patch versions reuse the exact previously verified source components.
   // A newer root-signed snapshot retains the old entries and delegates new manifests.
@@ -179,11 +179,11 @@ test("normal Host installs and enables all independently signed authoring Compon
     const leafVersion = leaf.version.split("."); leafVersion[2] = String(Number(leafVersion[2]) + 1);
     const patchVersion = leafVersion.join(".");
     page.once("dialog", dialog => void dialog.accept(patchVersion));
-    await leafCard.getByRole("button", {name:"Update version",exact:true}).click();
+    await leafCard.getByRole("button", {name:"バージョンを更新",exact:true}).click();
     await page.getByRole("button", {name:"ダウンロードして更新版を固定",exact:true}).click();
     const patchCard = enabledPanel.getByRole("listitem").filter({has:page.locator(".plugin-card-head strong",{hasText:/^proprium\.publishing$/})}).filter({hasText:`v${patchVersion}`});
     await expect(patchCard).toContainText(`pinned ${patchVersion}`);
-    await patchCard.getByRole("button",{name:"Rollback",exact:true}).click();
+    await patchCard.getByRole("button",{name:"以前の版に戻す",exact:true}).click();
     await expect(leafCard).toContainText(`pinned ${leaf.version}`);
   }
 
