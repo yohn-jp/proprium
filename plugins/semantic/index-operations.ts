@@ -410,6 +410,7 @@ function* prepareBuild(input: { taskId: string; sequence: number }, request: Act
  } else {
   if (checkpoint) yield* evictCheckpoint();
   checkpointSnapshot = request.snapshot;
+  active.nextSequence = input.sequence;
   checkpoint = { version: 1, mode: 'build', taskId: input.taskId, scope: request.scope, snapshot: request.snapshot, modelDigest: E5_MODEL.model_sha256,
    scanned: corpus.scanned, total: corpus.passages.length, stagedBytes: 0, chunkSequences: [], nextSequence: input.sequence, phase: 'source_scan' };
  }

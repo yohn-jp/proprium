@@ -62,6 +62,19 @@ test('rebuild starts quickly; bounded steps store only hashed metadata and query
  assertValue(manifest.actions.find((action: any) => action.action_id === 'proprium.semantic.passages.query').output_schema, query);
  assert.equal(build('t2').reused, 1);
 });
+test('fresh builds accept the Host first step sequence and still reject skipped checkpoints', () => {
+ reset();
+ run(startIndexBuild({ taskId:'host-sequence' }, context, host, engine));
+ const first = run(stepIndexBuild({ taskId:'host-sequence', sequence:1 }, context, host, engine));
+ assert.equal(first.state, 'running');
+ assert.throws(() => run(stepIndexBuild({ taskId:'host-sequence', sequence:3 }, context, host, engine)),
+  (error: any) => error.code === 'snapshot_stale' && /skipped a checkpoint/u.test(error.message));
+ let sequence = 2; let result: any;
+ do { result = run(stepIndexBuild({ taskId:'host-sequence', sequence:sequence++ }, context, host, engine)); } while (result.state === 'running');
+ assert.equal(result.state, 'complete');
+ assert.equal(result.result.embedded, 1);
+ assert.equal(run(queryIndex({ query:'星', granularity:'sentence', limit:10 }, context, host, engine)).results[0].evidence[0].quote, '星が見える。');
+});
 test('a cached index can warm the signed model through bounded scheduler steps after reload', () => {
  reset();
  build('indexed-before-reload');
