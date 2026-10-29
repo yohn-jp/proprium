@@ -16,7 +16,7 @@ tract-onnx = { path = "vendor/tract-onnx" }
 wit-bindgen-rt = { version = "=0.44.0", features = ["bitflags"] }
 
 [patch.crates-io]
-ahash = { path = "vendor/ahash" }
+ahash = { path = "../model/vendor/ahash" }
 
 [package.metadata.component]
 package = "proprium:semantic-reranker"
