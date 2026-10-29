@@ -50,8 +50,12 @@ export interface HostCapabilityPorts {
   timestamp?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   assetRead?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   cacheGet?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
+  cacheGetPrevious?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   cachePut?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   cacheEvict?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
+  cacheEvictPrevious?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
+  cacheEvictPrefix?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
+  cacheEvictPreviousPrefix?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   preferencesRead?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   artifactCreate?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
   artifactAppend?(payload: Record<string, unknown>, context: HostOperationContext): Promise<unknown>;
@@ -350,8 +354,12 @@ export class AuthoringActionDispatcher {
         return this.port("timestamp", payload, hostContext);
       case "workspace.asset.read": return this.port("assetRead", payload, hostContext);
       case "workspace.derived.cache.get": return this.port("cacheGet", payload, hostContext);
+      case "workspace.derived.cache.get_previous": return this.port("cacheGetPrevious", payload, hostContext);
       case "workspace.derived.cache.put": return this.port("cachePut", payload, hostContext);
       case "workspace.derived.cache.evict": return this.port("cacheEvict", payload, hostContext);
+      case "workspace.derived.cache.evict_previous": return this.port("cacheEvictPrevious", payload, hostContext);
+      case "workspace.derived.cache.evict_prefix": return this.port("cacheEvictPrefix", payload, hostContext);
+      case "workspace.derived.cache.evict_previous_prefix": return this.port("cacheEvictPreviousPrefix", payload, hostContext);
       case "plugin.preferences.read": return this.port("preferencesRead", payload, hostContext);
       case "artifact.create": return this.port("artifactCreate", payload, hostContext);
       case "artifact.append": return this.port("artifactAppend", payload, hostContext);
@@ -515,6 +523,8 @@ export class AuthoringActionDispatcher {
       "workspace.change.propose": ["changeset"], "workspace.change.stage": ["base_snapshot", "previous_stage", "units"],
       "workspace.change.timestamp": [], "workspace.asset.read": ["group_id", "file_path", "offset", "length"],
       "workspace.derived.cache.get": ["key"], "workspace.derived.cache.put": ["key", "value"],
+      "workspace.derived.cache.get_previous": ["selector"], "workspace.derived.cache.evict_previous": ["selector"],
+      "workspace.derived.cache.evict_prefix": ["selector"], "workspace.derived.cache.evict_previous_prefix": ["selector"],
       "workspace.derived.cache.evict": ["key"], "plugin.preferences.read": ["key", "schema_version"],
       "artifact.create": ["media_type", "filename", "scope", "snapshot"], "artifact.append": ["artifact_id", "sequence", "bytes"],
       "artifact.seal": ["artifact_id", "sha256", "total_bytes"], "artifact.discard": ["artifact_id"],
@@ -554,7 +564,12 @@ export class AuthoringActionDispatcher {
       if (typeof payload.file_path !== "string" || !this.safePath(payload.file_path)) throw new ActionDispatchError("invalid_path", "Asset path is invalid");
       num("offset", 0, Number.MAX_SAFE_INTEGER); num("length", 1, 256 * 1024);
     }
-    if (operation.startsWith("workspace.derived.cache.") && !isRecord(payload.key)) throw new ActionDispatchError("invalid_input", "Cache key required");
+    if (operation.startsWith("workspace.derived.cache.")) {
+      if (["workspace.derived.cache.get_previous", "workspace.derived.cache.evict_previous", "workspace.derived.cache.evict_prefix", "workspace.derived.cache.evict_previous_prefix"].includes(operation)) {
+        if (!isRecord(payload.selector)) throw new ActionDispatchError("invalid_input", "Cache selector required");
+        exactKeys(payload.selector, ["plugin_id", "schema_version", "config_digest", "model_digest", "key"], "Cache selector");
+      } else if (!isRecord(payload.key)) throw new ActionDispatchError("invalid_input", "Cache key required");
+    }
     if (operation === "artifact.create") { str("media_type", 256); str("filename", 256); }
     if (operation === "artifact.append") { str("artifact_id", 256); num("sequence", 0, Number.MAX_SAFE_INTEGER); if (!Array.isArray(payload.bytes) || payload.bytes.length > 256 * 1024 || payload.bytes.some(value => !Number.isInteger(value) || (value as number) < 0 || (value as number) > 255)) throw new ActionDispatchError("invalid_input", "Artifact chunk exceeds RPC budget"); }
     if (operation === "artifact.seal") { str("artifact_id", 256); num("total_bytes", 0, 128 * 1024 * 1024); if (typeof payload.sha256 !== "string" || !/^[a-f0-9]{64}$/u.test(payload.sha256)) throw new ActionDispatchError("invalid_input", "Artifact digest is invalid"); }
@@ -573,7 +588,13 @@ export class AuthoringActionDispatcher {
       bound.snapshot = payload.snapshot;
     }
     if (operation.startsWith("artifact.")) { bound.scope = request.scope; bound.snapshot = request.snapshot; }
-    if (operation.startsWith("workspace.derived.cache.")) { if (isRecord(payload.key)) bound.key = { ...payload.key, plugin_id: request.plugin_id, snapshot: request.snapshot }; else bound.plugin_id = request.plugin_id; }
+    if (operation.startsWith("workspace.derived.cache.")) {
+      if (isRecord(payload.key)) bound.key = { ...payload.key, plugin_id: request.plugin_id, snapshot: request.snapshot };
+      else if (isRecord(payload.selector)) {
+        if (payload.selector.plugin_id !== request.plugin_id) throw new ActionDispatchError("capability_denied", "Cache selector belongs to another plugin");
+        bound.selector = { ...payload.selector, plugin_id: request.plugin_id };
+      } else bound.plugin_id = request.plugin_id;
+    }
     if (operation.startsWith("plugin.preferences.")) { bound.plugin_id = request.plugin_id; bound.user_partition = context.actor_id; }
     return bound;
   }
