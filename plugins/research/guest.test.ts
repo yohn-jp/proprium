@@ -482,6 +482,20 @@ test("synonym and candidate preference proposals preserve YAML comments and exte
   assert.doesNotMatch(ignoreText, /雨雲/u);
 });
 
+test("candidate ignore list reads the current revision and reports terms in deterministic order", async () => {
+  const host = new ResearchHostFixture();
+  const ignored = file(IGNORED, "owner: author\nignored:\n  - zebra\n  - 雨雲\n  - alpha\n");
+  host.files.set(ignored.path, ignored);
+  const result = await invoke(createResearchHandlers()["research.candidates.ignore.list"]!, host, "research.candidates.ignore.list", {}) as {
+    snapshot: Snapshot; fileRevision: string; terms: string[];
+  };
+  assert.deepEqual(result, { snapshot, fileRevision: ignored.revision, terms: ["alpha", "zebra", "雨雲"] });
+  const missing = await invoke(createResearchHandlers()["research.candidates.ignore.list"]!, new ResearchHostFixture(), "research.candidates.ignore.list", {}) as {
+    fileRevision: string | null; terms: string[];
+  };
+  assert.deepEqual(missing, { snapshot, fileRevision: null, terms: [] });
+});
+
 test("new synonym proposals work when no dictionary or merge target exists", async () => {
   const host = new ResearchHostFixture();
   const handlers = createResearchHandlers();

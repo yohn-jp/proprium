@@ -1646,6 +1646,118 @@
     },
     {
       "plugin_id": "proprium.research",
+      "action_id": "research.candidates.ignore.list",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "local_commit": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{40}$",
+                    "maxLength": 40
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "remote_commit": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{40}$",
+                    "maxLength": 40
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "worktree_generation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "draft_generation": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "additionalProperties": false
+          },
+          "fileRevision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "terms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 0,
+            "maxItems": 128
+          }
+        },
+        "required": [
+          "snapshot",
+          "fileRevision",
+          "terms"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui",
+        "mcp",
+        "plugin"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.research",
       "action_id": "research.index.status",
       "schema_version": 1,
       "effect": "read",
