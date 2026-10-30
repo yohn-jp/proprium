@@ -641,6 +641,7 @@ function* executeAction(host: NarrativeHost, request: ActionRequest): Generator<
       const scene = work.byId.get(sceneId);
       if (!scene || scene.kind !== "scene") return { status: "stale_position", candidate: null, diagnostics: [{ code: "stale_position", message: "The saved scene no longer exists", severity: "warning" }] };
       if (scene.manuscript_path !== path) return { status: "stale_position", candidate: null, diagnostics: [{ code: "stale_position", path: scene.metadata_path, message: "The saved scene now links to a different manuscript", severity: "warning" }] };
+      if (scene.metadata_revision !== resume.metadata_revision) return { status: "stale_position", candidate: null, diagnostics: [{ code: "stale_position", path: scene.metadata_path, message: "The saved scene metadata revision changed", severity: "warning" }] };
       let currentRevision: string;
       try {
         currentRevision = yield* readFileRevision(host, request, path);
