@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { filterDiagnosticsFindings, type DiagnosticsFindingState } from "./diagnosticsFindingsModel.js";
 import "./DiagnosticsFindings.css";
 
@@ -24,6 +24,8 @@ export interface HostValidatedDiagnosticSourceIdentity {
   readonly generation: string;
   readonly snapshot: string;
   readonly findingFingerprint: string;
+  readonly sceneId?: string;
+  readonly draftGeneration?: string;
   readonly analyzer: { readonly id: string; readonly version: string };
   readonly sources: readonly {
     readonly path: string;
@@ -85,6 +87,7 @@ export interface DiagnosticsLegacyMigrationReport {
   readonly rows: readonly DiagnosticsLegacyMigrationRow[];
   readonly complete: boolean;
   readonly error?: string;
+  readonly snapshot?: { readonly id: string };
 }
 
 export interface DiagnosticsFindingsReport {
@@ -108,6 +111,8 @@ export interface DiagnosticsFindingsReport {
     readonly nextCursor: string | null;
     readonly complete: boolean;
   };
+  readonly sections?: Readonly<Record<string, unknown>>;
+  readonly summary?: Readonly<Record<string, unknown>>;
   readonly complete: boolean;
 }
 
@@ -139,9 +144,22 @@ export interface DiagnosticsFindingsProps {
   readonly migration?: DiagnosticsLegacyMigrationReport | null;
   readonly onInspectLegacy?: (event: Event) => Promise<void>;
   readonly onMigrateLegacy?: (event: Event, selectedRowIds: readonly string[]) => Promise<void>;
+  readonly onRun?: (event: Event) => Promise<void>;
+  readonly running?: boolean;
+  readonly runDisabledReason?: string;
+  readonly sourceStatus?: string;
+  readonly stale?: boolean;
+  readonly staleReason?: string;
+  readonly migrationStale?: boolean;
+  readonly feedbackState?: "ready" | "unavailable";
+  readonly feedbackError?: string;
+  readonly selectedFingerprint?: string | null;
+  readonly focusRequest?: number;
 }
 
-export function DiagnosticsFindings({ report, onFeedback, onSelect, onLoadMore, migration, onInspectLegacy, onMigrateLegacy }: DiagnosticsFindingsProps) {
+export function DiagnosticsFindings({ report, onFeedback, onSelect, onLoadMore, migration, onInspectLegacy, onMigrateLegacy,
+  onRun, running = false, runDisabledReason, sourceStatus, stale = false, staleReason, migrationStale = false,
+  feedbackState = "ready", feedbackError, selectedFingerprint, focusRequest }: DiagnosticsFindingsProps) {
   const [kind, setKind] = useState("all");
   const [severity, setSeverity] = useState("all");
   const [state, setState] = useState<DiagnosticsFindingState>("all");
@@ -149,6 +167,7 @@ export function DiagnosticsFindings({ report, onFeedback, onSelect, onLoadMore, 
   const [busyFinding, setBusyFinding] = useState<string | null>(null);
   const [busyMigration, setBusyMigration] = useState(false);
   const [notice, setNotice] = useState("");
+  const findingNodes = useRef(new Map<string, HTMLLIElement>());
 
   const findings = report?.findings ?? [];
   const decisions = report?.feedback?.decisions ?? [];
@@ -157,6 +176,14 @@ export function DiagnosticsFindings({ report, onFeedback, onSelect, onLoadMore, 
   const visible = useMemo(() => filterDiagnosticsFindings(findings, decisions, { kind, severity, state }), [findings, decisions, kind, severity, state]);
   const decisionsByFingerprint = useMemo(() => new Map(decisions.map((item) => [item.findingFingerprint, item])), [decisions]);
   const importableRows = migration?.rows.filter((row) => row.disposition === "importable") ?? [];
+
+  useEffect(() => {
+    if (!selectedFingerprint) return;
+    const item = findingNodes.current.get(selectedFingerprint);
+    if (!item) return;
+    item.scrollIntoView({ block: "nearest" });
+    item.focus({ preventScroll: true });
+  }, [selectedFingerprint, focusRequest, report?.identity.snapshot.id]);
 
   async function submitFeedback(event: Event, findingFingerprint: string, decision: Exclude<DiagnosticsFeedbackDecision, "legacy_dismissed">) {
     setBusyFinding(findingFingerprint);
@@ -185,6 +212,20 @@ export function DiagnosticsFindings({ report, onFeedback, onSelect, onLoadMore, 
     }
   }
 
+  async function runDiagnostics(event: Event) {
+    if (!onRun) return;
+    setNotice("");
+    try { await onRun(event); }
+    catch (error) { setNotice(error instanceof Error ? error.message : "診断を実行できませんでした。"); }
+  }
+
+  async function loadMore(event: Event, cursor: string) {
+    if (!onLoadMore) return;
+    setNotice("");
+    try { await onLoadMore(event, cursor); }
+    catch (error) { setNotice(error instanceof Error ? error.message : "意味候補を読み込めませんでした。"); }
+  }
+
   async function proposeLegacy(event: Event) {
     if (!onMigrateLegacy) return;
     setBusyMigration(true);
@@ -192,6 +233,7 @@ export function DiagnosticsFindings({ report, onFeedback, onSelect, onLoadMore, 
     try {
       await onMigrateLegacy(event, [...selectedLegacyRows]);
       setNotice("Host Review に移行提案を送りました。元のJSONLは変更されません。");
+      setSelectedLegacyRows(new Set());
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "過去の却下記録を提案できませんでした。");
     } finally {
@@ -202,13 +244,19 @@ export function DiagnosticsFindings({ report, onFeedback, onSelect, onLoadMore, 
   return <section className="diagnostics-findings" aria-label="診断所見と過去の判断">
     <header className="diagnostics-findings__header">
       <div><h2>診断所見</h2><p>根拠を確認し、判断はHost Reviewで提案します。</p></div>
+      {onRun && <button type="button" className="diagnostics-findings__run" disabled={running || !!runDisabledReason} onClick={(event) => void runDiagnostics(event.nativeEvent)}>{running ? "診断中…" : "選択中のSceneを分析"}</button>}
       {report && <span className="diagnostics-findings__report-state" role="status">{report.complete ? "このレポートの分析は完了" : "このレポートは一部未完了"}</span>}
     </header>
+    {sourceStatus && <p className="diagnostics-findings__source" role="status">{sourceStatus}</p>}
+    {runDisabledReason && <p className="diagnostics-findings__run-hint" role="status">{runDisabledReason}</p>}
+    {stale && <p className="diagnostics-findings__stale" role="status">{staleReason || "このレポートの出典が現在のWorkspaceと一致しません。分析をやり直してください。"}</p>}
+    {feedbackState === "unavailable" && <p className="diagnostics-findings__stale" role="status">判断履歴を確認できませんでした。未判断として表示せず、履歴の読み込みエラーを示しています。{feedbackError ? ` ${feedbackError}` : ""}</p>}
     {!report ? <p className="diagnostics-findings__empty">診断結果はありません。</p> : <>
+      <p className="diagnostics-findings__source">対象: <code>{report.identity.documentPath}</code> · revision {report.identity.documentRevision.slice(0, 12)} · Scene {report.identity.sceneId}</p>
       <div className="diagnostics-findings__filters" role="group" aria-label="所見フィルター">
         <label>種類<select aria-label="所見の種類" value={kind} onChange={(event) => setKind(event.target.value)}><option value="all">すべて</option>{kinds.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
         <label>重大度<select aria-label="所見の重大度" value={severity} onChange={(event) => setSeverity(event.target.value)}><option value="all">すべて</option>{severities.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
-        <label>判断<select aria-label="判断状態" value={state} onChange={(event) => setState(event.target.value as DiagnosticsFindingState)}><option value="all">すべて</option><option value="open">未判断</option><option value="decided">判断済み</option></select></label>
+        <label>判断<select aria-label="判断状態" value={feedbackState === "ready" ? state : "all"} disabled={feedbackState !== "ready"} onChange={(event) => setState(event.target.value as DiagnosticsFindingState)}><option value="all">すべて</option><option value="open">未判断</option><option value="decided">判断済み</option></select></label>
       </div>
       <p className="diagnostics-findings__count" role="status" aria-live="polite">{visible.length} / {findings.length} 件を表示</p>
       {report.feedback?.staleDecisions?.length ? <aside className="diagnostics-findings__stale" role="status">
@@ -220,39 +268,42 @@ export function DiagnosticsFindings({ report, onFeedback, onSelect, onLoadMore, 
       {visible.length ? <ol className="diagnostics-findings__list">{visible.map((finding) => {
         const decision = decisionsByFingerprint.get(finding.fingerprint);
         const evidence = evidenceFor(finding);
-        const canDecide = Boolean(finding.sourceIdentity?.sources.length && finding.sourceIdentity.findingFingerprint === finding.fingerprint);
-        return <li key={finding.fingerprint} data-fingerprint={finding.fingerprint}>
+        const canDecide = Boolean(feedbackState === "ready" && finding.sourceIdentity?.sources.length && finding.sourceIdentity.findingFingerprint === finding.fingerprint);
+        return <li key={finding.fingerprint} ref={node => { if (node) findingNodes.current.set(finding.fingerprint, node); else findingNodes.current.delete(finding.fingerprint); }} tabIndex={-1} data-fingerprint={finding.fingerprint} data-selected={selectedFingerprint === finding.fingerprint || undefined}>
           <article className="diagnostics-finding">
             <header><span className={`diagnostics-finding__severity diagnostics-finding__severity--${finding.severity}`}>{finding.severity}</span><span>{finding.kind}</span>{finding.basis === "hypothesis" && <span>候補</span>}</header>
             <h3>{finding.message}</h3>
+            {!finding.sourceIdentity?.sources.length && <p className="diagnostics-finding__untrusted">Host検証済みの出典identityがないため、この所見への判断は提案できません。</p>}
             {finding.quote && <blockquote>{finding.quote}</blockquote>}
             {evidence.length > 0 && <ul className="diagnostics-finding__evidence" aria-label="根拠">
               {evidence.map((source, index) => <li key={`${source.path}:${source.revision}:${source.start ?? "file"}:${index}`}>
                 <div><code>{source.path}</code><small> revision {source.revision.slice(0, 12)}</small></div>
                 {source.quote && <blockquote>{source.quote}</blockquote>}
-                <button type="button" disabled={busyFinding === finding.fingerprint} onClick={(event) => onSelect(event.nativeEvent, finding.fingerprint, index)}>
+                <button type="button" disabled={stale || busyFinding === finding.fingerprint} onClick={(event) => onSelect(event.nativeEvent, finding.fingerprint, index)}>
                   {source.start !== undefined && source.end !== undefined ? `根拠 ${index + 1} を開く` : `出典 ${index + 1} を開く`}
                 </button>
               </li>)}
             </ul>}
             {decision ? <p className="diagnostics-finding__decision" role="status">{decisionLabel(decision.decision)} · {decision.updatedAt}{decision.annotation ? ` · ${decision.annotation}` : ""}</p>
-              : <p className="diagnostics-finding__decision diagnostics-finding__decision--open">未判断</p>}
+              : feedbackState === "ready" ? <p className="diagnostics-finding__decision diagnostics-finding__decision--open">未判断</p>
+                : <p className="diagnostics-finding__decision">判断履歴を確認できません</p>}
             {canDecide && <div className="diagnostics-finding__actions" aria-label="所見の判断">
-              <button type="button" disabled={busyFinding === finding.fingerprint} onClick={(event) => void submitFeedback(event.nativeEvent, finding.fingerprint, "intentional")}>意図した所見</button>
-              <button type="button" disabled={busyFinding === finding.fingerprint} onClick={(event) => void submitFeedback(event.nativeEvent, finding.fingerprint, "false_positive")}>誤検出</button>
-              <button type="button" disabled={busyFinding === finding.fingerprint} onClick={(event) => void submitFeedback(event.nativeEvent, finding.fingerprint, "deferred")}>後で確認</button>
+              <button type="button" disabled={stale || busyFinding === finding.fingerprint} onClick={(event) => void submitFeedback(event.nativeEvent, finding.fingerprint, "intentional")}>意図した所見</button>
+              <button type="button" disabled={stale || busyFinding === finding.fingerprint} onClick={(event) => void submitFeedback(event.nativeEvent, finding.fingerprint, "false_positive")}>誤検出</button>
+              <button type="button" disabled={stale || busyFinding === finding.fingerprint} onClick={(event) => void submitFeedback(event.nativeEvent, finding.fingerprint, "deferred")}>後で確認</button>
             </div>}
           </article>
         </li>;
       })}</ol> : <p className="diagnostics-findings__empty">このフィルターに一致する所見はありません。</p>}
       {report.semanticHypotheses && !report.semanticHypotheses.complete && report.semanticHypotheses.nextCursor && onLoadMore &&
-        <button type="button" onClick={(event) => void onLoadMore(event.nativeEvent, report.semanticHypotheses!.nextCursor!)}>意味候補をさらに表示</button>}
+        <button type="button" disabled={stale} onClick={(event) => void loadMore(event.nativeEvent, report.semanticHypotheses!.nextCursor!)}>意味候補をさらに表示</button>}
     </>}
 
     <details className="diagnostics-findings__migration">
       <summary>過去のSemantic却下を確認・移行</summary>
       <p>移行は明示的なHost Reviewで提案します。元のJSONLは削除も書き換えもしません。理由がない記録は「過去の却下」として保持します。</p>
       {onInspectLegacy && <button type="button" disabled={busyMigration} onClick={(event) => void inspectLegacy(event.nativeEvent)}>過去の記録を確認</button>}
+      {migrationStale && <p role="status">移行元の確認結果は現在のWorkspaceより古くなっています。再確認してください。</p>}
       {migration?.error && <p role="alert">{migration.error}</p>}
       {migration && <p role="status">{migration.complete ? "移行元をすべて確認しました。" : "一部の移行元を確認できませんでした。未解決の行はそのまま残してください。"}</p>}
       {migration?.sources.map((source) => <p key={`${source.path}:${source.revision}`}>
@@ -263,7 +314,7 @@ export function DiagnosticsFindings({ report, onFeedback, onSelect, onLoadMore, 
         const selected = selectedLegacyRows.has(row.rowId);
         const canSelect = row.disposition === "importable";
         return <li key={row.rowId}>
-          {canSelect && <label><input type="checkbox" checked={selected} onChange={(event) => setSelectedLegacyRows((current) => {
+          {canSelect && <label><input type="checkbox" disabled={migrationStale || busyMigration} checked={selected} onChange={(event) => setSelectedLegacyRows((current) => {
             const next = new Set(current);
             if (event.target.checked) next.add(row.rowId); else next.delete(row.rowId);
             return next;
@@ -274,7 +325,7 @@ export function DiagnosticsFindings({ report, onFeedback, onSelect, onLoadMore, 
           <pre>{row.rawLine}</pre>
         </li>;
       })}</ul> : migration && <p className="diagnostics-findings__empty">移行候補はありません。</p>}
-      {onMigrateLegacy && importableRows.length > 0 && <button type="button" disabled={busyMigration || selectedLegacyRows.size === 0} onClick={(event) => void proposeLegacy(event.nativeEvent)}>
+      {onMigrateLegacy && importableRows.length > 0 && <button type="button" disabled={migrationStale || busyMigration || !migration?.complete || selectedLegacyRows.size === 0} onClick={(event) => void proposeLegacy(event.nativeEvent)}>
         選択した {selectedLegacyRows.size} 件をHost Reviewへ提案
       </button>}
     </details>

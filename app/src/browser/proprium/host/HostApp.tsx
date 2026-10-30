@@ -20,6 +20,10 @@ import "./authoring/authoring-surface.css";
 import { createBrowserAuthoringService, type BrowserAuthoringService } from "../authoring/service.js";
 import { createAuthoringWorkspacePanels, validateAuthoringSurfaceRegistrations, type AuthoringSurfaceRegistration } from "./authoring/WorkspaceAuthoringPanels.js";
 import { AuthoringReview } from "./authoring/AuthoringReview.js";
+import { DiagnosticsFindings } from "./authoring/DiagnosticsFindings.js";
+import type { DiagnosticsEvidence, DiagnosticsFeedbackDecision, DiagnosticsFindingsReport, DiagnosticsLegacyMigrationReport } from "./authoring/DiagnosticsFindings.js";
+import { diagnosticsMarginMarkers, mergeDiagnosticsSceneReports, normalizeDiagnosticsSceneReport } from "./authoring/diagnosticsHostModel.js";
+import type { DiagnosticsMarginMarker, DiagnosticDecision } from "../../../editor/cm/diagnosticMargin.js";
 import { AuthoringAssets } from "./authoring/AuthoringAssets.js";
 import { AuthoringCommandMenu } from "./authoring/AuthoringCommandMenu.js";
 import { NarrativeNavigation } from "./authoring/NarrativeNavigation.js";
@@ -151,6 +155,13 @@ function errorMessage(error: unknown): string {
 function asText(data: Uint8Array): string | null {
   try { return sourceTextDecoder().decode(data); }
   catch { return null; }
+}
+function safeDiagnosticsEvidence(value: DiagnosticsEvidence): boolean {
+  return typeof value.path === "string" && value.path.length > 0 && value.path.length <= 1024 && !value.path.startsWith("/") &&
+    !value.path.includes("\\") && !value.path.includes("\0") && value.path.split("/").every(part => part && part !== "." && part !== ".." && part !== ".git") &&
+    /^[a-f0-9]{64}$/u.test(value.revision) && typeof value.quote === "string" && value.quote.length <= 4000 &&
+    (value.start === undefined || Number.isSafeInteger(value.start) && value.start >= 0) &&
+    (value.end === undefined || Number.isSafeInteger(value.end) && value.end >= (value.start ?? 0));
 }
 
 export function HostApp(): ReactElement {
@@ -297,6 +308,20 @@ export function HostApp(): ReactElement {
   const [providerSettingsEpoch,setProviderSettingsEpoch] = useState(0);
   const [authoringRegistrations, setAuthoringRegistrations] = useState<AuthoringSurfaceRegistration[]>([]);
   const [authoringEpoch, setAuthoringEpoch] = useState(0);
+  const [diagnosticsReportState, setDiagnosticsReportState] = useState<{
+    readonly report: DiagnosticsFindingsReport;
+    readonly scopeKey: string;
+    readonly feedbackState: "ready" | "unavailable";
+    readonly feedbackError?: string;
+  } | null>(null);
+  const [diagnosticsMigrationState, setDiagnosticsMigrationState] = useState<{
+    readonly report: DiagnosticsLegacyMigrationReport;
+    readonly scopeKey: string;
+  } | null>(null);
+  const [diagnosticsRunning, setDiagnosticsRunning] = useState(false);
+  const [selectedDiagnosticFingerprint, setSelectedDiagnosticFingerprint] = useState<string | null>(null);
+  const [diagnosticFocusRequest, setDiagnosticFocusRequest] = useState(0);
+  const diagnosticsScopeRef = useRef("");
   const refreshAuthoring = useCallback(() => setAuthoringEpoch(value => value + 1), []);
   useEffect(() => {
     if (!git || !workspace) { setAuthoring(null); setAuthoringRegistrations([]); return; }
@@ -321,6 +346,11 @@ export function HostApp(): ReactElement {
           const text = asText(read.data);
           const opened: OpenFile = { path: target.path, data: read.data, revision: read.revision, text, binary: text === null, dirty: false };
           currentFileRef.current = opened; setCurrentFile(opened);
+          const selected = selectedNarrativeScene.current;
+          if (selected?.path === opened.path && selected.generation === workspaceGenerationRef.current) {
+            if (initial && !initial.dirty && initial.path === opened.path && initial.revision.oid === opened.revision.oid) selected.savedBytes = opened.data;
+            else selectedNarrativeScene.current = null;
+          }
           setNavigationSelection(target.span ? { requestId: crypto.randomUUID(), start: target.span.start, end: target.span.end } : undefined);
           setRequestedPanel(value => ({ id: "editor", sequence: value.sequence + 1 }));
         }
@@ -1084,12 +1114,215 @@ export function HostApp(): ReactElement {
   const sceneContext:Record<string,string>=selectedScene&&selectedScene.path===currentFile?.path&&selectedScene.generation===workspaceGeneration ? {
     scene_id:selectedScene.id,manuscript_path:selectedScene.path,metadata_revision:selectedScene.metadataRevision,manuscript_revision:selectedScene.manuscriptRevision,
   } : {};
+  const diagnosticsReady = Boolean(authoring && authoringRegistrations.some(row => row.pluginId === "proprium.diagnostics" && row.status === "ready"));
+  const diagnosticsRepositoryId = workspace && isGitHubWorkspaceIdentity(workspace.identity) ? workspace.identity.repositoryId : null;
+  const diagnosticsWorkspaceScopeKey = JSON.stringify([
+    workspace?.identity.localWorkspaceId ?? null, workspace?.identity.branch ?? null, diagnosticsRepositoryId, workspaceGeneration,
+    status.head, status.entries.map(entry => [entry.path, entry.head, entry.worktree, entry.stage]),
+    authoringRegistrations.filter(row => row.pluginId === "proprium.diagnostics").map(row => [row.manifestDigest, row.status]),
+  ]);
+  const diagnosticsSceneBound = Boolean(selectedScene && currentFile && workspace && !currentFile.binary && currentFile.text !== null && currentFile.data &&
+    selectedScene.id && selectedScene.path === currentFile.path && selectedScene.generation === workspaceGeneration &&
+    selectedScene.savedBytes === currentFile.data && /^manuscript\/.+\.md$/u.test(selectedScene.path) && /^[a-f0-9]{64}$/u.test(selectedScene.manuscriptRevision));
+  const diagnosticsScopeKey = JSON.stringify([diagnosticsWorkspaceScopeKey, currentFile?.path ?? null, currentFile?.revision.oid ?? null,
+    currentFile?.dirty ?? false, selectedScene ? [selectedScene.id, selectedScene.path, selectedScene.manuscriptRevision, selectedScene.metadataRevision,
+      selectedScene.generation, selectedScene.savedBytes === currentFile?.data] : null]);
+  diagnosticsScopeRef.current = diagnosticsScopeKey;
+  const diagnosticsReport = diagnosticsReportState?.report ?? null;
+  const diagnosticsReportStale = Boolean(diagnosticsReportState && (diagnosticsReportState.scopeKey !== diagnosticsScopeKey ||
+    !diagnosticsSceneBound || currentFile?.dirty || composingRef.current));
+  const diagnosticsMigration = diagnosticsMigrationState?.report ?? null;
+  const diagnosticsMigrationStale = Boolean(diagnosticsMigrationState && diagnosticsMigrationState.scopeKey !== diagnosticsWorkspaceScopeKey);
+  const diagnosticsSourceStatus = !selectedScene ? "Sceneが未選択です。Narrativeの作品構成からSceneを開いてください。"
+    : !currentFile ? "診断対象の文書を開いてください。"
+      : selectedScene.path !== currentFile.path || selectedScene.generation !== workspaceGeneration || selectedScene.savedBytes !== currentFile.data
+        ? `選択中のScene (${selectedScene.id}) と現在の文書が一致しません。Sceneの原稿を開き直してください。`
+        : currentFile.dirty ? `保存済み原稿 ${selectedScene.path} の選択は有効ですが、Draftに未保存の変更があります。保存後に再分析してください。`
+          : `分析対象: Scene ${selectedScene.id} · ${selectedScene.path} · revision ${selectedScene.manuscriptRevision.slice(0, 12)}`;
+  const diagnosticsRunDisabledReason = !diagnosticsReady ? "Diagnosticsプラグインを署名検証して有効化してください。"
+    : !selectedScene ? "NarrativeでSceneを選択してから分析してください。"
+      : !diagnosticsSceneBound ? "選択中Sceneの保存済み原稿を開いてから分析してください。"
+        : currentFile?.dirty ? "未保存DraftはこのHost経路の診断対象に含めません。保存してから明示的に分析してください。"
+          : composingRef.current ? "日本語入力を確定してから分析してください。" : undefined;
+  const diagnosticsMargin = useMemo(() => diagnosticsReportState?.feedbackState === "ready" && !diagnosticsReportStale && currentFile && selectedScene && diagnosticsSceneBound && !currentFile.dirty && currentFile.text !== null
+    ? diagnosticsMarginMarkers(diagnosticsReport, { path: currentFile.path, revision: selectedScene.manuscriptRevision, text: currentFile.text,
+      sceneId: selectedScene.id, isCurrentSavedScene: true }) : [], [diagnosticsReport, diagnosticsReportState?.feedbackState, diagnosticsReportStale,
+      currentFile?.path, currentFile?.text, currentFile?.dirty, currentFile?.binary, currentFile?.data, selectedScene?.id,
+      selectedScene?.path, selectedScene?.manuscriptRevision, selectedScene?.generation, selectedScene?.savedBytes, diagnosticsSceneBound]);
   // Nonsecret identifiers only; never copy the editor or Draft into a plugin form.
   const contextualAuthoringRegistrations=authoringRegistrations.map(row=>["proprium.narrative","proprium.speaker","proprium.knowledge"].includes(row.pluginId) ? {
     ...row,data:{...(row.data&&typeof row.data==="object"&&!Array.isArray(row.data)?row.data:{}),host_context:sceneContext},
   } : row);
 
   const revealPanel = (id: string): void => setRequestedPanel(value => ({ id, sequence: value.sequence + 1 }));
+  function assertCurrentDiagnosticsSource(expectedScopeKey: string, scene: NonNullable<typeof selectedNarrativeScene.current>, file: OpenFile): void {
+    if (expectedScopeKey !== diagnosticsScopeRef.current || selectedNarrativeScene.current !== scene || currentFileRef.current !== file ||
+        workspaceGenerationRef.current !== scene.generation || scene.path !== file.path || scene.savedBytes !== file.data ||
+        file.dirty || file.binary || file.text === null || composingRef.current) {
+      throw Object.assign(new Error("Scene、保存済み原稿、Workspaceまたは入力状態が変わりました。分析結果を読み直してください。"), { code: "snapshot_stale" });
+    }
+  }
+  const onRunDiagnostics = async (event: Event): Promise<void> => {
+    if (!event.isTrusted) throw Object.assign(new Error("診断の実行には新しいユーザー操作が必要です。"), { code: "capability_denied" });
+    if (!authoring) throw Object.assign(new Error("authoring_unavailable"), { code: "repository_unavailable" });
+    const scene = selectedNarrativeScene.current;
+    const file = currentFileRef.current;
+    if (!scene || !file || !workspace) throw Object.assign(new Error("Sceneを選択して原稿を開いてください。"), { code: "scene_not_found" });
+    const expectedScopeKey = diagnosticsScopeKey;
+    assertCurrentDiagnosticsSource(expectedScopeKey, scene, file);
+    setDiagnosticsRunning(true);
+    try {
+      const run = await authoring.invokeRead("proprium.diagnostics", "proprium.diagnostics.scene.run.v1", {
+        sceneId: scene.id, documentPath: scene.path, documentRevision: scene.manuscriptRevision,
+      }, new AbortController().signal);
+      if (!run.ok) throw Object.assign(new Error(`${run.error.code}: ${run.error.message}`), { code: run.error.code });
+      assertCurrentDiagnosticsSource(expectedScopeKey, scene, file);
+      let report = normalizeDiagnosticsSceneReport(run.value, {
+        repositoryId: diagnosticsRepositoryId, branch: workspace.identity.branch, generation: workspaceGeneration, snapshotId: run.snapshot.id,
+      });
+      if (report.identity.sceneId !== scene.id || report.identity.documentPath !== scene.path || report.identity.documentRevision !== scene.manuscriptRevision) {
+        throw Object.assign(new Error("Diagnostics report does not match the selected Narrative scene."), { code: "snapshot_stale" });
+      }
+
+      let feedbackState: "ready" | "unavailable" = "ready";
+      let feedbackError: string | undefined;
+      try {
+        const findingFingerprints = report.findings.filter(finding => finding.sourceIdentity?.sources.length &&
+          finding.sourceIdentity.findingFingerprint === finding.fingerprint).map(finding => finding.fingerprint);
+        const decisions = await authoring.invokeRead("proprium.diagnostics", "proprium.diagnostics.feedback.read.v1", {
+          sceneId: scene.id, documentPath: scene.path, documentRevision: scene.manuscriptRevision, findingFingerprints,
+        }, new AbortController().signal);
+        if (!decisions.ok) throw Object.assign(new Error(`${decisions.error.code}: ${decisions.error.message}`), { code: decisions.error.code });
+        if (decisions.snapshot.id !== run.snapshot.id) throw Object.assign(new Error("Diagnostics feedback belongs to a different report snapshot."), { code: "snapshot_stale" });
+        const value = decisions.value as { feedbackRevision: string | null; decisions: NonNullable<DiagnosticsFindingsReport["feedback"]>["decisions"]; staleDecisions: NonNullable<DiagnosticsFindingsReport["feedback"]>["staleDecisions"]; snapshot: { id: string } };
+        report = { ...report, feedback: { revision: value.feedbackRevision, decisions: value.decisions, staleDecisions: value.staleDecisions } };
+      } catch (error) {
+        feedbackState = "unavailable";
+        feedbackError = errorMessage(error);
+      }
+      assertCurrentDiagnosticsSource(expectedScopeKey, scene, file);
+      setDiagnosticsReportState({ report, scopeKey: expectedScopeKey, feedbackState, ...(feedbackError ? { feedbackError } : {}) });
+      setSelectedDiagnosticFingerprint(null);
+    } finally { setDiagnosticsRunning(false); }
+  };
+  const onLoadMoreDiagnostics = async (event: Event, cursor: string): Promise<void> => {
+    if (!event.isTrusted || !authoring || !diagnosticsReport || diagnosticsReportStale || !selectedScene || !currentFile) throw Object.assign(new Error("現在のDiagnosticsレポートを再実行してください。"), { code: "snapshot_stale" });
+    const priorState = diagnosticsReportState;
+    const scene = selectedNarrativeScene.current;
+    const file = currentFileRef.current;
+    if (!priorState || priorState.scopeKey !== diagnosticsScopeKey || !scene || !file) throw Object.assign(new Error("Diagnosticsレポートが古くなっています。"), { code: "snapshot_stale" });
+    const expectedScopeKey = diagnosticsScopeKey;
+    assertCurrentDiagnosticsSource(expectedScopeKey, scene, file);
+    setDiagnosticsRunning(true);
+    try {
+      const nextResult = await authoring.invokeRead("proprium.diagnostics", "proprium.diagnostics.scene.run.v1", {
+        sceneId: scene.id, documentPath: scene.path, documentRevision: scene.manuscriptRevision,
+        sections: ["semanticHypotheses"], semanticCursor: cursor,
+      }, new AbortController().signal);
+      if (!nextResult.ok) throw Object.assign(new Error(`${nextResult.error.code}: ${nextResult.error.message}`), { code: nextResult.error.code });
+      if (nextResult.snapshot.id !== priorState.report.identity.snapshot.id) throw Object.assign(new Error("Semantic page belongs to a different report snapshot."), { code: "snapshot_stale" });
+      const page = normalizeDiagnosticsSceneReport(nextResult.value, {
+        repositoryId: diagnosticsRepositoryId, branch: workspace?.identity.branch ?? "", generation: workspaceGeneration, snapshotId: nextResult.snapshot.id,
+      });
+      let report = mergeDiagnosticsSceneReports(priorState.report, page);
+      const findingFingerprints = report.findings.filter(finding => finding.sourceIdentity?.sources.length &&
+        finding.sourceIdentity.findingFingerprint === finding.fingerprint).map(finding => finding.fingerprint);
+      const decisions = await authoring.invokeRead("proprium.diagnostics", "proprium.diagnostics.feedback.read.v1", {
+        sceneId: scene.id, documentPath: scene.path, documentRevision: scene.manuscriptRevision, findingFingerprints,
+      }, new AbortController().signal);
+      let feedbackState: "ready" | "unavailable" = "ready";
+      let feedbackError: string | undefined;
+      if (decisions.ok && decisions.snapshot.id === nextResult.snapshot.id) {
+        const value = decisions.value as { feedbackRevision: string | null; decisions: NonNullable<DiagnosticsFindingsReport["feedback"]>["decisions"]; staleDecisions: NonNullable<DiagnosticsFindingsReport["feedback"]>["staleDecisions"] };
+        report = { ...report, feedback: { revision: value.feedbackRevision, decisions: value.decisions, staleDecisions: value.staleDecisions } };
+      } else {
+        feedbackState = "unavailable";
+        feedbackError = decisions.ok ? "snapshot_stale: feedback revision changed during Semantic pagination" : `${decisions.error.code}: ${decisions.error.message}`;
+      }
+      assertCurrentDiagnosticsSource(expectedScopeKey, scene, file);
+      setDiagnosticsReportState({ report, scopeKey: expectedScopeKey, feedbackState, ...(feedbackError ? { feedbackError } : {}) });
+    } finally { setDiagnosticsRunning(false); }
+  };
+  const proposeDiagnosticsDecision = async (event: Event, findingFingerprint: string, decision: Exclude<DiagnosticsFeedbackDecision, "legacy_dismissed">): Promise<void> => {
+    if (!event.isTrusted || !authoring || !diagnosticsReport || diagnosticsReportStale || diagnosticsReportState?.feedbackState !== "ready" || !diagnosticsReport.feedback) {
+      throw Object.assign(new Error("所見または判断履歴が現在のWorkspaceに一致しません。Diagnosticsを再実行してください。"), { code: "snapshot_stale" });
+    }
+    const expectedScopeKey = diagnosticsReportState.scopeKey;
+    if (expectedScopeKey !== diagnosticsScopeKey) throw Object.assign(new Error("Diagnostics report is stale."), { code: "snapshot_stale" });
+    const finding = diagnosticsReport.findings.find(row => row.fingerprint === findingFingerprint);
+    const identity = finding?.sourceIdentity;
+    if (!finding || !identity || identity.findingFingerprint !== finding.fingerprint || !identity.sources.length ||
+        identity.snapshot !== diagnosticsReport.identity.snapshot.id || identity.sceneId !== undefined && identity.sceneId !== diagnosticsReport.identity.sceneId) {
+      throw Object.assign(new Error("Hostが検証した出典のある所見だけを提案できます。"), { code: "capability_denied" });
+    }
+    const result = await invokeAuthoring(event, "proprium.diagnostics", "proprium.diagnostics.feedback.propose.v1", {
+      findingFingerprint: finding.fingerprint, decision, sourceIdentity: identity,
+      expectedFeedbackRevision: diagnosticsReport.feedback.revision,
+    } as unknown as Readonly<Record<string, import("./authoring/types.js").AuthoringJson>>);
+    if (!result.action_result.ok) throw Object.assign(new Error(`${result.action_result.error.code}: ${result.action_result.error.message}`), { code: result.action_result.error.code });
+    setSelectedDiagnosticFingerprint(finding.fingerprint);
+    revealPanel("review");
+  };
+  const onSelectDiagnosticEvidence = (event: Event, findingFingerprint: string, evidenceIndex = 0): void => {
+    const report = diagnosticsReportState?.report;
+    const finding = report?.findings.find(row => row.fingerprint === findingFingerprint);
+    const evidence = finding?.evidence?.[evidenceIndex];
+    if (!event.isTrusted || diagnosticsReportStale || !evidence || !safeDiagnosticsEvidence(evidence)) {
+      setMessage({ tone: "info", text: "根拠の出典が現在のWorkspaceと一致しないため、原稿を開きませんでした。" });
+      return;
+    }
+    setSelectedDiagnosticFingerprint(findingFingerprint);
+    const target: import("../authoring/service.js").AuthoringNavigationTarget = {
+      path: evidence.path,
+      ...(evidence.start !== undefined && evidence.end !== undefined ? { span: {
+        path: evidence.path, revision: evidence.revision, start: evidence.start, end: evidence.end, quote: evidence.quote,
+      } } : {}),
+    };
+    void navigateAuthoring(event, target, "open").catch(error => setMessage({ tone: "error", text: errorMessage(error) }));
+  };
+  const onSelectDiagnosticMarker = (event: Event, findingFingerprint: string): void => {
+    if (!event.isTrusted || diagnosticsReportStale || !diagnosticsReport?.findings.some(row => row.fingerprint === findingFingerprint)) return;
+    setSelectedDiagnosticFingerprint(findingFingerprint);
+    setDiagnosticFocusRequest(value => value + 1);
+    revealPanel("review");
+  };
+  const onDiagnosticMarkerDecision = (event: Event, marker: DiagnosticsMarginMarker, decision: DiagnosticDecision): void => {
+    const current = diagnosticsMargin.find(row => row.findingFingerprint === marker.findingFingerprint && row.path === marker.path &&
+      row.revision === marker.revision && row.start === marker.start && row.end === marker.end && row.quote === marker.quote &&
+      row.sourceIdentity === marker.sourceIdentity);
+    if (!current) return;
+    void proposeDiagnosticsDecision(event, marker.findingFingerprint, decision).catch(error => setMessage({ tone: "error", text: errorMessage(error) }));
+  };
+  const inspectLegacyDismissals = async (event: Event): Promise<void> => {
+    if (!authoring || !event.isTrusted) throw Object.assign(new Error("過去の記録を確認するには新しいユーザー操作が必要です。"), { code: "capability_denied" });
+    const result = await authoring.invokeRead("proprium.diagnostics", "proprium.diagnostics.legacy-dismissals.inspect.v1", {}, new AbortController().signal);
+    if (!result.ok) throw Object.assign(new Error(`${result.error.code}: ${result.error.message}`), { code: result.error.code });
+    const report = result.value as unknown as DiagnosticsLegacyMigrationReport;
+    if (report.snapshot?.id !== result.snapshot.id || !Array.isArray(report.rows) || !Array.isArray(report.sources) || typeof report.complete !== "boolean") {
+      throw Object.assign(new Error("過去の却下記録がHost検証を通過しませんでした。"), { code: "incompatible_abi" });
+    }
+    setDiagnosticsMigrationState({ report, scopeKey: diagnosticsWorkspaceScopeKey });
+  };
+  const proposeLegacyDismissals = async (event: Event, selectedRowIds: readonly string[]): Promise<void> => {
+    if (!event.isTrusted || !authoring || !diagnosticsMigration || diagnosticsMigrationStale || !diagnosticsMigration.complete) {
+      throw Object.assign(new Error("過去の却下記録が古いか、移行元の確認が完了していません。再確認してください。"), { code: "snapshot_stale" });
+    }
+    const selected = [...new Set(selectedRowIds)];
+    if (!selected.length || selected.length > 100) throw Object.assign(new Error("移行する行を1〜100件選択してください。"), { code: "invalid_input" });
+    const rows = selected.map(rowId => {
+      const row = diagnosticsMigration.rows.find(item => item.rowId === rowId);
+      if (!row || row.disposition !== "importable" || !/^[a-f0-9]{64}$/u.test(row.rowId) ||
+          !/^[a-f0-9]{64}$/u.test(row.sourceRevision) || !row.sourcePath) {
+        throw Object.assign(new Error("Hostが確認した移行可能行だけを提案できます。記録を再確認してください。"), { code: "capability_denied" });
+      }
+      return { sourcePath: row.sourcePath, sourceRevision: row.sourceRevision, rowId: row.rowId };
+    });
+    const result = await invokeAuthoring(event, "proprium.diagnostics", "proprium.diagnostics.legacy-dismissals.propose.v1", {
+      rows, expectedFeedbackRevision: diagnosticsMigration.feedbackRevision,
+    } as unknown as Readonly<Record<string, import("./authoring/types.js").AuthoringJson>>);
+    if (!result.action_result.ok) throw Object.assign(new Error(`${result.action_result.error.code}: ${result.action_result.error.message}`), { code: result.action_result.error.code });
+    revealPanel("review");
+  };
   const beforeLayoutChange = async (): Promise<boolean> => {
     try { await editorFlush.current?.(); return true; }
     catch (error) { setMessage({ tone: "error", text: errorMessage(error) }); return false; }
@@ -1183,6 +1416,26 @@ export function HostApp(): ReactElement {
             onRegisterLiveInvoker={registerLivePluginInvoker}
             onAuthoringSurfacesChanged={refreshAuthoring}
           />}{authoring && <>
+    {diagnosticsReady && <DiagnosticsFindings
+      report={diagnosticsReport}
+      onRun={onRunDiagnostics}
+      running={diagnosticsRunning}
+      runDisabledReason={diagnosticsRunDisabledReason}
+      sourceStatus={diagnosticsSourceStatus}
+      stale={diagnosticsReportStale}
+      staleReason={diagnosticsRunDisabledReason || "Workspace、Scene、保存済み原稿またはDraftが分析後に変わりました。明示的に再分析してください。"}
+      feedbackState={diagnosticsReportState?.feedbackState ?? "ready"}
+      feedbackError={diagnosticsReportState?.feedbackError}
+      selectedFingerprint={selectedDiagnosticFingerprint}
+      focusRequest={diagnosticFocusRequest}
+      onFeedback={proposeDiagnosticsDecision}
+      onSelect={onSelectDiagnosticEvidence}
+      onLoadMore={onLoadMoreDiagnostics}
+      migration={diagnosticsMigration}
+      migrationStale={diagnosticsMigrationStale}
+      onInspectLegacy={inspectLegacyDismissals}
+      onMigrateLegacy={proposeLegacyDismissals}
+    />}
     {authoringRegistrations.some(row=>row.pluginId==="proprium.semantic"&&row.status==="ready") && <details><summary>Semantic のローカル設定</summary><SemanticPreferences key={`semantic-prefs:${workspaceGeneration}:${preferences.email}`} scopeKey={authoring.localPreferenceScope()}
       readLocal={async(signal)=>{if(signal.aborted)throw new Error("cancelled");const value=await authoring.readLocalPreference(authoring.localPreferenceScope(),"proprium.semantic","reranker.enabled",1);if(signal.aborted)throw new Error("cancelled");return value;}}
       read={async(signal)=>{const result=await authoring.invokeRead("proprium.semantic","proprium.semantic.settings.read",{},signal);if(!result.ok)throw new Error(result.error.message);return result.value as unknown as SemanticSettingsValue;}}
@@ -1352,7 +1605,7 @@ export function HostApp(): ReactElement {
       <strong aria-label="Current file">{currentFile.path}</strong>
       <p>Binary file · {currentFile.data?.byteLength ?? 0} bytes</p>
       {hostFileActions}
-    </> : <RestoredEditor key={`${workspace.identity.localWorkspaceId}:${currentFile.path}`} workspace={workspace.identity} file={currentFile} onCompositionChange={value => { composingRef.current = value; }} hostNavigationSelection={navigationSelection} onHostNavigationSelectionApplied={() => setNavigationSelection(undefined)} onWritingPosition={captureWritingPosition} hostResume={hostResume?.generation === workspaceGeneration && hostResume.authorScope === (preferences.email || "local") && hostResume.savedBytes === currentFile.data && hostResume.position.manuscript_path === currentFile.path && !currentFile.dirty ? hostResume : undefined} onHostResumeApplied={(id, restored) => { setHostResume(current => current?.requestId === id ? undefined : current); if (!restored) setMessage({ tone: "error", text: "続き位置が現在の原稿と一致しないため、カーソルを移動しませんでした。" }); }} readOnly={fileMutationBusy} head={status.head} published={syncState === "published"} localCommitted={!!status.head && status.entries.length === 0} busy={busy} checkpointBusy={checkpointBusy} publishBusy={publishBusy} authorScope={preferences.email || "local"} author={preferences} git={git} hostFileActions={hostFileActions}
+    </> : <RestoredEditor key={`${workspace.identity.localWorkspaceId}:${currentFile.path}`} workspace={workspace.identity} file={currentFile} onCompositionChange={value => { composingRef.current = value; }} diagnosticMarkers={diagnosticsMargin} onDiagnosticMarkerSelect={onSelectDiagnosticMarker} onDiagnosticMarkerDecision={onDiagnosticMarkerDecision} hostNavigationSelection={navigationSelection} onHostNavigationSelectionApplied={() => setNavigationSelection(undefined)} onWritingPosition={captureWritingPosition} hostResume={hostResume?.generation === workspaceGeneration && hostResume.authorScope === (preferences.email || "local") && hostResume.savedBytes === currentFile.data && hostResume.position.manuscript_path === currentFile.path && !currentFile.dirty ? hostResume : undefined} onHostResumeApplied={(id, restored) => { setHostResume(current => current?.requestId === id ? undefined : current); if (!restored) setMessage({ tone: "error", text: "続き位置が現在の原稿と一致しないため、カーソルを移動しませんでした。" }); }} readOnly={fileMutationBusy} head={status.head} published={syncState === "published"} localCommitted={!!status.head && status.entries.length === 0} busy={busy} checkpointBusy={checkpointBusy} publishBusy={publishBusy} authorScope={preferences.email || "local"} author={preferences} git={git} hostFileActions={hostFileActions}
       onChange={text => { setCurrentFile(previous => previous ? { ...previous, text, dirty: true } : previous); setSyncState("editing"); }}
       onSave={() => void saveDraft()} onCommit={() => revealPanel("inspector")} onPublish={() => void publishRemote()} canPublish={!!syncClient && status.localState === "local-committed" && !currentFile.dirty}
       onHistory={() => revealPanel("history")} onRegisterFlush={registerEditorFlush} onRegisterQuickAppend={registerQuickAppend} onScratchApplied={refreshAfterPlugin} />}
