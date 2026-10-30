@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  BGE_ASSET_GROUP_ID, BGE_MODEL, BGE_PREPARATION_TOTAL, releaseBgeReranker, setBgeRerankerBindings,
+  BGE_ASSET_GROUP_ID, BGE_MODEL, BGE_PREPARATION_TOTAL, rankBgeLogits, releaseBgeReranker, setBgeRerankerBindings,
   startBgePreparation, stepBgePreparation,
 } from "./reranker-inference.ts";
 import type { HostCall } from "../shared/guest.ts";
@@ -60,6 +60,32 @@ function invokeStep(taskId: string, sequence: number) {
   while (!state.done) state = iterator.next(assetResult(state.value as HostCall) as never);
   return state.value;
 }
+
+test("BGE outputs sigmoid-normalized scores while preserving raw-logit order and finite bounds", () => {
+  const results = rankBgeLogits([
+    { candidateId: "negative-real", logit: -4.454114 },
+    { candidateId: "positive-real", logit: 8.533679 },
+    { candidateId: "equal-first", logit: 2 },
+    { candidateId: "equal-second", logit: 2 },
+    { candidateId: "extreme-negative", logit: -1000 },
+    { candidateId: "near-extreme-negative", logit: -999 },
+    { candidateId: "near-extreme-positive", logit: 999 },
+    { candidateId: "extreme-positive", logit: 1000 },
+  ], 8);
+
+  assert.deepEqual(results.map(result => result.candidateId), [
+    "extreme-positive", "near-extreme-positive", "positive-real", "equal-first", "equal-second",
+    "negative-real", "near-extreme-negative", "extreme-negative",
+  ]);
+  assert.ok(Math.abs(results.find(result => result.candidateId === "positive-real")!.score - 0.9998033088272947) < 1e-15);
+  assert.ok(Math.abs(results.find(result => result.candidateId === "negative-real")!.score - 0.011496903919214803) < 1e-15);
+  assert.equal(results.find(result => result.candidateId === "extreme-positive")!.score, 1);
+  assert.equal(results.find(result => result.candidateId === "near-extreme-positive")!.score, 1);
+  assert.equal(results.find(result => result.candidateId === "near-extreme-negative")!.score, 0);
+  assert.equal(results.find(result => result.candidateId === "extreme-negative")!.score, 0);
+  assert.ok(results.every(result => Number.isFinite(result.score) && result.score >= 0 && result.score <= 1));
+  assert.throws(() => rankBgeLogits([{ candidateId: "bad", logit: Number.POSITIVE_INFINITY }], 1), /non-finite/);
+});
 
 test("BGE uses a separate exact asset group and each scheduler action stays below 4096 range calls", () => {
   calls = []; appends = 0; releases = 0; loaded = false;

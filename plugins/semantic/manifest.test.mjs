@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { assertAuthoringDeclarations } from '../../scripts/authoring-manifest-schema.mjs';
 import { assertValue } from '../../app/src/browser/proprium/authoring/schema.ts';
+import { BGE_MODEL, rankBgeLogits } from './reranker-inference.ts';
 
 test('Semantic declarations satisfy the Host manifest contract and indexed task result variants', async () => {
   const manifest = JSON.parse(await readFile(new URL('./plugin.json', import.meta.url), 'utf8'));
@@ -40,4 +41,21 @@ test('Semantic declarations satisfy the Host manifest contract and indexed task 
   const rerank = manifest.actions.find(action => action.action_id === 'proprium.semantic.rerank');
   assert.ok(rerank.required_capabilities.includes('workspace.file.read'), 'reranking must retain the explicit pinned source read grant');
   assert.ok(rerank.required_capabilities.includes('plugin.preferences'));
+});
+
+test('BGE sigmoid scores conform to the existing closed rerank output schema', async () => {
+  const manifest = JSON.parse(await readFile(new URL('./plugin.json', import.meta.url), 'utf8'));
+  const schema = manifest.actions.find(action => action.action_id === 'proprium.semantic.rerank').output_schema;
+  const output = {
+    snapshot: { id: 'pin', local_commit: null, worktree_generation: 'generation', draft_generation: null },
+    model: { id: BGE_MODEL.id, revision: BGE_MODEL.revision, role: 'reranker', digest: BGE_MODEL.group_sha256,
+      byte_length: BGE_MODEL.group_bytes, license: BGE_MODEL.license, status: 'ready' },
+    results: rankBgeLogits([
+      { candidateId: 'positive', logit: 8.533679 },
+      { candidateId: 'negative', logit: -4.454114 },
+    ], 2),
+  };
+  assertValue(schema, output, 'BGE rerank output');
+  assert.throws(() => assertValue(schema, { ...output, results: [{ ...output.results[0], score: 8.533679 }] }, 'raw positive BGE logit'));
+  assert.throws(() => assertValue(schema, { ...output, results: [{ ...output.results[1], score: -4.454114 }] }, 'raw negative BGE logit'));
 });

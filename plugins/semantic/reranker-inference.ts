@@ -51,6 +51,7 @@ export interface BgeRerankerBindings {
   appendTokenizer(offset: number, bytes: Uint8Array): void;
   finishTokenizer(): void;
   loadModel(): void;
+  /** Returns the raw BGE relevance logit; the guest maps it to the action's bounded ranking score. */
   scorePair(query: string, passage: string): number;
   modelId(): string;
   modelRevision(): string;
@@ -240,15 +241,36 @@ export interface BgeRerankCandidate {
   readonly evidence: readonly { path: string; revision: string; start: number; end: number; quote: string }[];
 }
 
+export interface BgeRerankLogit { readonly candidateId: string; readonly logit: number }
+
+/** Convert raw relevance logits into the bounded score required by the plugin action contract. */
+export function rankBgeLogits(scored: readonly BgeRerankLogit[], limit: number) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 30 || scored.length > 30) {
+    throw fail("invalid_input", "BGE candidate count or output limit is invalid");
+  }
+  const seen = new Set<string>();
+  const ranked = scored.map((item, originalIndex) => {
+    if (!item || typeof item.candidateId !== "string" || item.candidateId.length < 1 || item.candidateId.length > 128 || seen.has(item.candidateId)) {
+      throw fail("invalid_input", "BGE candidate IDs must be unique nonempty strings up to 128 characters");
+    }
+    seen.add(item.candidateId);
+    if (!Number.isFinite(item.logit)) throw fail("model_unavailable", "BGE returned a non-finite score");
+    const score = item.logit >= 0
+      ? 1 / (1 + Math.exp(-item.logit))
+      : Math.exp(item.logit) / (1 + Math.exp(item.logit));
+    return { candidateId: item.candidateId, logit: item.logit, score, originalIndex };
+  });
+  ranked.sort((left, right) => left.logit === right.logit ? left.originalIndex - right.originalIndex : left.logit > right.logit ? -1 : 1);
+  return ranked.slice(0, limit).map(({ candidateId, score }, index) => ({ candidateId, score, rank: index + 1 }));
+}
+
 export function rerankBge(query: string, candidates: readonly BgeRerankCandidate[], limit: number) {
   if (!prepared) throw fail("provider_unavailable", "The explicitly prepared BGE reranker is not loaded in this runtime");
   const inference = engine();
-  const results = candidates.map(candidate => {
-    const score = inference.scorePair(query, candidate.text);
-    if (!Number.isFinite(score)) throw fail("model_unavailable", "BGE returned a non-finite score");
-    return { candidateId: candidate.candidateId, score };
-  }).sort((left, right) => right.score - left.score || left.candidateId.localeCompare(right.candidateId))
-    .slice(0, limit).map((row, index) => ({ ...row, rank: index + 1 }));
+  const results = rankBgeLogits(candidates.map(candidate => ({
+    candidateId: candidate.candidateId,
+    logit: inference.scorePair(query, candidate.text),
+  })), limit);
   return { model: { id: BGE_MODEL.id, revision: BGE_MODEL.revision, role: "reranker" as const,
     digest: BGE_MODEL.group_sha256, byte_length: BGE_MODEL.group_bytes, license: BGE_MODEL.license, status: "ready" as const }, results };
 }
