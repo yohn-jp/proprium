@@ -166,6 +166,7 @@ async function attachMetrics(testInfo: TestInfo, stage: string, value: Record<st
 
 test('signed E5 admission gates by real device capacity; semantic search works locally and WebKit keeps lexical fallback', async ({ page, browserName }, testInfo) => {
   const metrics: Record<string, unknown> = { project: testInfo.project.name, browserName, startedAt: new Date().toISOString() };
+  const transferProbe = process.env.PROPRIUM_SEMANTIC_TRANSFER_PROBE === '1';
   const { allowedOrigins } = await routeSignedRegistry(page);
   const network = watchNetwork(page, allowedOrigins);
   const identity = { provider: 'local' as const, name: 'semantic-real', branch: 'main', localWorkspaceId: `semantic-real-${Date.now()}` };
@@ -232,21 +233,43 @@ test('signed E5 admission gates by real device capacity; semantic search works l
   const rebuild = tasks.getByRole('button', { name: /モデルを準備|インデックスを(作成|再構築|構築)/u });
   await expect(rebuild).toBeVisible();
   const buildStart = Date.now();
+  if (transferProbe) {
+    page.on('console', message => {
+      if (message.text().startsWith('SEMANTIC_TASK_PULSE ')) console.log(message.text());
+    });
+    await page.evaluate(startedAt => {
+      window.setInterval(() => {
+        const region = document.querySelector("section[aria-label='Semantic タスク']");
+        const progress = region?.querySelector('progress');
+        const status = region?.textContent?.replace(/\s+/gu, ' ').trim() ?? 'none';
+        console.log(`SEMANTIC_TASK_PULSE ${Date.now() - startedAt}ms ${progress?.value ?? 0}/${progress?.max ?? 0} ${status.slice(0, 200)}`);
+      }, 30_000);
+    }, buildStart);
+  }
   await rebuild.click();
   const progress = tasks.getByRole('progressbar').first();
   await expect(progress).toBeVisible({ timeout: 90_000 });
-  await page.waitForFunction(() => {
+  await page.waitForFunction(threshold => {
     const region = document.querySelector("section[aria-label='Semantic タスク']");
     return region && (/:\s*failed\b/u.test(region.textContent ?? '') ||
-      Array.from(region.querySelectorAll('progress')).some(element => element.value > 0));
-  }, undefined, { timeout: 90_000 });
+      Array.from(region.querySelectorAll('progress')).some(element => element.value >= threshold));
+  }, transferProbe ? 8 * 1024 * 1024 : 1, { timeout: 90_000 });
   expect(await tasks.innerText()).not.toMatch(/:\s*failed\b/u);
   expect(await progress.evaluate(element => (element as HTMLProgressElement).value)).toBeGreaterThan(0);
+  const transferProbeCompleted = await progress.evaluate(element => (element as HTMLProgressElement).value);
+  const transferProbeTotal = await progress.evaluate(element => (element as HTMLProgressElement).max);
   const cancel = tasks.getByRole('button', { name: 'キャンセル', exact: true });
   await expect(cancel).toBeVisible();
   await cancel.click();
   const cancelledTask = tasks.getByRole('status').filter({ hasText: /:\s*cancelled\b/u });
   await expect(cancelledTask).toBeVisible({ timeout: 90_000 });
+  if (transferProbe) {
+    const elapsedMs = Date.now() - buildStart;
+    metrics.modelLoadProbe = { completedBytes: transferProbeCompleted, totalBytes: transferProbeTotal, elapsedMs,
+      bytesPerSecond: elapsedMs > 0 ? Math.round(transferProbeCompleted * 1000 / elapsedMs) : null };
+    await attachMetrics(testInfo, 'model-load-probe', metrics);
+    return;
+  }
   const resume = tasks.getByRole('button', { name: /再開/u });
   await expect(resume).toBeVisible({ timeout: 90_000 });
   await resume.click();
