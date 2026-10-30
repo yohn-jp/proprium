@@ -66,6 +66,7 @@ export interface HostTaskProgress {
 }
 export interface AuthoringTaskUpdate {
   readonly pluginId: string;
+  readonly profileId: string;
   readonly scope: Scope;
   readonly snapshot: Snapshot;
   readonly task: HostTaskProgress;
@@ -552,7 +553,8 @@ export class AuthoringTaskRegistry {
 
   private emit(record: StoredAuthoringTask): void {
     if (!this.listeners.size) return;
-    this.pendingUpdates.set(record.key, { pluginId: record.identity.plugin_id, scope: structuredClone(record.scope), snapshot: structuredClone(record.snapshot),
+    this.pendingUpdates.set(record.key, { pluginId: record.identity.plugin_id, profileId: profileForIdentity(record.identity)!.profile_id,
+      scope: structuredClone(record.scope), snapshot: structuredClone(record.snapshot),
       task: structuredClone(record.progress) });
     if (this.notificationTimer !== undefined) return;
     this.notificationTimer = setTimeout(() => {

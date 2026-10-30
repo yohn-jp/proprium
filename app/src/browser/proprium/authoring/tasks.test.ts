@@ -183,15 +183,15 @@ test("model transfer progress restarts from zero when a resumable worker is recr
 
 test("task notifications coalesce to the latest bounded progress and retain scope identity", async () => {
   const tasks = new AuthoringTaskRegistry(new MemoryAuthoringTaskStore(), () => 1000, "session");
-  const events: Array<{ pluginId: string; scope: Scope; snapshot: Snapshot; taskId: string; completed: number }> = [];
-  const unsubscribe = tasks.subscribe(update => events.push({ pluginId: update.pluginId, scope: update.scope, snapshot: update.snapshot,
+  const events: Array<{ pluginId: string; profileId: string; scope: Scope; snapshot: Snapshot; taskId: string; completed: number }> = [];
+  const unsubscribe = tasks.subscribe(update => events.push({ pluginId: update.pluginId, profileId: update.profileId, scope: update.scope, snapshot: update.snapshot,
     taskId: update.task.taskId, completed: update.task.completed }));
   await tasks.begin("start", 1, scope, snapshot, "task", identity, new AbortController());
   await tasks.setStartResult("start", 1, scope, {
     snapshot, taskId: "task", state: "running", phase: "embedding", completed: 1, total: 3,
   });
   await new Promise(resolve => setTimeout(resolve, 120));
-  assert.deepEqual(events, [{ pluginId: "proprium.semantic", scope, snapshot, taskId: "task", completed: 1 }]);
+  assert.deepEqual(events, [{ pluginId: "proprium.semantic", profileId: "semantic-index-v1", scope, snapshot, taskId: "task", completed: 1 }]);
   unsubscribe();
   await tasks.dispose();
 });
@@ -270,6 +270,8 @@ test("BGE preparation has its own explicit action profile and cannot use E5 task
   assert.equal(profile!.restart_on_new_session, true);
 
   const tasks = new AuthoringTaskRegistry(new MemoryAuthoringTaskStore(), () => 1000, "reranker-session");
+  const profiles: string[] = [];
+  tasks.subscribe(update => profiles.push(update.profileId));
   const rerankerIdentity: AuthoringTaskIdentity = {
     ...identity, profile_id: profile!.profile_id, idempotency_key: "bge-prepare", config_digest: "e".repeat(64),
   };
@@ -292,6 +294,8 @@ test("BGE preparation has its own explicit action profile and cannot use E5 task
   assert.deepEqual(await tasks.status("proprium.semantic", scope, snapshot, "1.0.0", "a".repeat(64)), []);
   await tasks.finishStep("bge-step");
   assert.equal(await tasks.cancel("proprium.semantic", scope, 1, "bge-task", profile!.profile_id), true);
+  await new Promise(resolve => setTimeout(resolve, 120));
+  assert.deepEqual(profiles, ["semantic-reranker-v1"]);
   await tasks.dispose();
   assert.equal(begun.task.identity.profile_id, profile!.profile_id);
 });

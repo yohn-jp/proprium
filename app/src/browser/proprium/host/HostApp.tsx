@@ -1220,7 +1220,7 @@ export function HostApp(): ReactElement {
           if(!result.action_result.ok)throw Object.assign(new Error(result.action_result.error.message),{code:result.action_result.error.code});
           return result.action_result;
         }} subscribe={listener=>authoring.subscribeTaskUpdates(update=>{
-          if(update.pluginId!=="proprium.research")return;
+          if(update.pluginId!=="proprium.research"||update.profileId!=="research-index-v1")return;
           const selected=workspaceRef.current;
           let repositoryId:number|null=null;
           if(selected&&isGitHubWorkspaceIdentity(selected.identity))repositoryId=selected.identity.repositoryId;
@@ -1259,7 +1259,7 @@ export function HostApp(): ReactElement {
     {authoringRegistrations.some(row=>row.pluginId==="proprium.semantic"&&row.status==="ready") && <SemanticTaskControls key={`semantic:${workspaceGeneration}`} scopeKey={JSON.stringify([workspaceGeneration,workspace?.identity.localWorkspaceId,semanticRepositoryId,workspace?.identity.branch,status.head,status.entries.map(entry=>[entry.path,entry.worktree,entry.stage]),authoringRegistrations.filter(row=>row.pluginId==="proprium.semantic").map(row=>[row.manifestDigest,row.status])])}
       invokeRead={(pluginId,actionId,input,signal)=>authoring.invokeRead(pluginId,actionId,input,signal)} invokeUi={(event,pluginId,actionId,input)=>authoring.invokeUi(event,pluginId,actionId,input)}
       subscribe={listener=>authoring.subscribeTaskUpdates(update=>{
-        if(update.pluginId!=="proprium.semantic")return;
+        if(update.pluginId!=="proprium.semantic"||update.profileId!=="semantic-index-v1")return;
         const selected=workspaceRef.current;
         let repositoryId:number|null=null;
         if(selected&&isGitHubWorkspaceIdentity(selected.identity))repositoryId=selected.identity.repositoryId;
