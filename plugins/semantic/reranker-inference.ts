@@ -16,7 +16,7 @@ export const BGE_MODEL = {
   tokenizer_sha256: "8bf8afbfd11306bd872018c53bfdf2e160a56f8edbcf49933324404791c148d3",
   license: "Apache-2.0",
   group_bytes: 2_288_661_281,
-  group_sha256: "ad3cb54cb73a8afb7bce52012d027d3d0ca30927df69a41070026b81cde29ca0",
+  group_sha256: "970674bb1a64e34e9ce5c74bded1b90f85b602700f86344f0e209312163b9447",
 } as const;
 
 const RANGE_BYTES = 256 * 1024;

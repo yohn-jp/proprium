@@ -20,7 +20,8 @@ test('signed BGE manifest pins provenance, complete source files and bounded con
   const manifest = JSON.parse(bytes.toString('utf8'));
   assert.equal(manifest.schema, 'proprium.assets/v1');
   assert.equal(manifest.id, ref.id);
-  assert.equal(manifest.version, source.revision);
+  assert.equal(manifest.version, `0.1.0-${source.revision}`);
+  assert.match(manifest.version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/u);
   assert.equal(manifest.license, source.license);
 
   const expected = new Map(source.files.map(file => [file.path, file]));

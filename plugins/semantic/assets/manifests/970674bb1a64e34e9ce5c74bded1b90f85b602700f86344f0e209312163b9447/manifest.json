@@ -1,0 +1,876 @@
+{
+  "schema": "proprium.assets/v1",
+  "id": "proprium.semantic.reranker.bge-v2-m3",
+  "version": "0.1.0-e5023553f6c47f09057da7a19cdd79ef850a4985",
+  "license": "Apache-2.0",
+  "files": [
+    {
+      "path": "proprium/semantic/reranker/bge-reranker-v2-m3/onnx/model.onnx",
+      "bytes": 489245,
+      "sha256": "ed283424d9a40dbd6fe2f3081386848a88cc8057b7ab43e02d84077d6b69ba42",
+      "chunks": [
+        {
+          "path": "proprium/semantic/chunks/ed283424d9a40dbd6fe2f3081386848a88cc8057b7ab43e02d84077d6b69ba42/chunk.bin",
+          "offset": 0,
+          "bytes": 489245,
+          "sha256": "ed283424d9a40dbd6fe2f3081386848a88cc8057b7ab43e02d84077d6b69ba42"
+        }
+      ]
+    },
+    {
+      "path": "proprium/semantic/reranker/bge-reranker-v2-m3/onnx/model.onnx_data",
+      "bytes": 2271088656,
+      "sha256": "9a748c82efb2079d24650c489e053dbb3c71d8acbbcf04d7b2340db66f2748f7",
+      "chunks": [
+        {
+          "path": "proprium/semantic/chunks/dc532ec7c70ced3f143461f42048f01929acf6cb804d04d42dd593fe99df0b6e/chunk.bin",
+          "offset": 0,
+          "bytes": 16777216,
+          "sha256": "dc532ec7c70ced3f143461f42048f01929acf6cb804d04d42dd593fe99df0b6e"
+        },
+        {
+          "path": "proprium/semantic/chunks/21881f4b05eb29532c0195ff8a00b9d7714a28d29b1f07b48db79676062d1283/chunk.bin",
+          "offset": 16777216,
+          "bytes": 16777216,
+          "sha256": "21881f4b05eb29532c0195ff8a00b9d7714a28d29b1f07b48db79676062d1283"
+        },
+        {
+          "path": "proprium/semantic/chunks/49ae57329b5a892f85d0914ae865d60474be40e11f0ce9154b88a89ef7ceb41b/chunk.bin",
+          "offset": 33554432,
+          "bytes": 16777216,
+          "sha256": "49ae57329b5a892f85d0914ae865d60474be40e11f0ce9154b88a89ef7ceb41b"
+        },
+        {
+          "path": "proprium/semantic/chunks/1edd82f2d43cb400958d18d166638f6d5c74aca24ec1b9e4742b5c5b57e3cf17/chunk.bin",
+          "offset": 50331648,
+          "bytes": 16777216,
+          "sha256": "1edd82f2d43cb400958d18d166638f6d5c74aca24ec1b9e4742b5c5b57e3cf17"
+        },
+        {
+          "path": "proprium/semantic/chunks/4ba41da287408b56acbf1bbc83bc9fce7c6d436ac33c81acccef5518249a20c4/chunk.bin",
+          "offset": 67108864,
+          "bytes": 16777216,
+          "sha256": "4ba41da287408b56acbf1bbc83bc9fce7c6d436ac33c81acccef5518249a20c4"
+        },
+        {
+          "path": "proprium/semantic/chunks/b74f4fbcb858414d2999aac672548646191e53a29cf0875deb74152b328784ed/chunk.bin",
+          "offset": 83886080,
+          "bytes": 16777216,
+          "sha256": "b74f4fbcb858414d2999aac672548646191e53a29cf0875deb74152b328784ed"
+        },
+        {
+          "path": "proprium/semantic/chunks/e768e443fa1cc1329dd12b11663f00e0ffce9199889c604ba6033f7976ce9fc6/chunk.bin",
+          "offset": 100663296,
+          "bytes": 16777216,
+          "sha256": "e768e443fa1cc1329dd12b11663f00e0ffce9199889c604ba6033f7976ce9fc6"
+        },
+        {
+          "path": "proprium/semantic/chunks/6ade2ed2524d9416083d46b71dd639013eb0e74b83eda5852c146da093631bc5/chunk.bin",
+          "offset": 117440512,
+          "bytes": 16777216,
+          "sha256": "6ade2ed2524d9416083d46b71dd639013eb0e74b83eda5852c146da093631bc5"
+        },
+        {
+          "path": "proprium/semantic/chunks/4c3bea2e19e558014915c452f25a7efb2a07c9c9f35d1737a20464d9720a1c83/chunk.bin",
+          "offset": 134217728,
+          "bytes": 16777216,
+          "sha256": "4c3bea2e19e558014915c452f25a7efb2a07c9c9f35d1737a20464d9720a1c83"
+        },
+        {
+          "path": "proprium/semantic/chunks/92ae1973699e828e23b1445aff2075b5d55495565c2baf0ff24347cc9e43d9bb/chunk.bin",
+          "offset": 150994944,
+          "bytes": 16777216,
+          "sha256": "92ae1973699e828e23b1445aff2075b5d55495565c2baf0ff24347cc9e43d9bb"
+        },
+        {
+          "path": "proprium/semantic/chunks/ae2b3d2f9c323cea6da676beb0598ee79cd13a75f129f1d1c6129a0e4bb6a7b8/chunk.bin",
+          "offset": 167772160,
+          "bytes": 16777216,
+          "sha256": "ae2b3d2f9c323cea6da676beb0598ee79cd13a75f129f1d1c6129a0e4bb6a7b8"
+        },
+        {
+          "path": "proprium/semantic/chunks/2c56c95987d1b32e8229bfd8d3a65b6e8f56302c73c6c811b1cfc4be019d5c9d/chunk.bin",
+          "offset": 184549376,
+          "bytes": 16777216,
+          "sha256": "2c56c95987d1b32e8229bfd8d3a65b6e8f56302c73c6c811b1cfc4be019d5c9d"
+        },
+        {
+          "path": "proprium/semantic/chunks/ff38ad06eef5d8b75bb8a16d342b4c951c771fe1d1b85a20271b691393fd50ee/chunk.bin",
+          "offset": 201326592,
+          "bytes": 16777216,
+          "sha256": "ff38ad06eef5d8b75bb8a16d342b4c951c771fe1d1b85a20271b691393fd50ee"
+        },
+        {
+          "path": "proprium/semantic/chunks/2e1f16aeb652b5ebe96448db0e0f266701efae70b7cae5211de60478f5cd539a/chunk.bin",
+          "offset": 218103808,
+          "bytes": 16777216,
+          "sha256": "2e1f16aeb652b5ebe96448db0e0f266701efae70b7cae5211de60478f5cd539a"
+        },
+        {
+          "path": "proprium/semantic/chunks/8a9b45127f9fa2e2d3d2c92ea98d52ef6e879123ae567d4a95a022c03d0f7c72/chunk.bin",
+          "offset": 234881024,
+          "bytes": 16777216,
+          "sha256": "8a9b45127f9fa2e2d3d2c92ea98d52ef6e879123ae567d4a95a022c03d0f7c72"
+        },
+        {
+          "path": "proprium/semantic/chunks/e6271db5122099314e03cd344cc520aa3e65efede614cce1ac452c51c8a36095/chunk.bin",
+          "offset": 251658240,
+          "bytes": 16777216,
+          "sha256": "e6271db5122099314e03cd344cc520aa3e65efede614cce1ac452c51c8a36095"
+        },
+        {
+          "path": "proprium/semantic/chunks/e775a9e4390d94d21be002ed871be6a97c27349d07a856a04410273afafa78f2/chunk.bin",
+          "offset": 268435456,
+          "bytes": 16777216,
+          "sha256": "e775a9e4390d94d21be002ed871be6a97c27349d07a856a04410273afafa78f2"
+        },
+        {
+          "path": "proprium/semantic/chunks/4d2a813a443b8443f07bb72f383775811ec44dd29c13baaa17df4ff1001199d0/chunk.bin",
+          "offset": 285212672,
+          "bytes": 16777216,
+          "sha256": "4d2a813a443b8443f07bb72f383775811ec44dd29c13baaa17df4ff1001199d0"
+        },
+        {
+          "path": "proprium/semantic/chunks/222c1e38b269d04bdb19aa1a58a30838f4f1e63c5fe3a1f1842d777a09ce7a79/chunk.bin",
+          "offset": 301989888,
+          "bytes": 16777216,
+          "sha256": "222c1e38b269d04bdb19aa1a58a30838f4f1e63c5fe3a1f1842d777a09ce7a79"
+        },
+        {
+          "path": "proprium/semantic/chunks/6c99358dd453ea8dcd6b9cf9414de73a2128ad63e9f57b946cc9b06c4b8a2f6a/chunk.bin",
+          "offset": 318767104,
+          "bytes": 16777216,
+          "sha256": "6c99358dd453ea8dcd6b9cf9414de73a2128ad63e9f57b946cc9b06c4b8a2f6a"
+        },
+        {
+          "path": "proprium/semantic/chunks/fe31661d9d24b4a88550a969acd065125e562e3890ffb781e8c00acfdc68dfe6/chunk.bin",
+          "offset": 335544320,
+          "bytes": 16777216,
+          "sha256": "fe31661d9d24b4a88550a969acd065125e562e3890ffb781e8c00acfdc68dfe6"
+        },
+        {
+          "path": "proprium/semantic/chunks/b8b63c30e5d506bc04f39686aba65261680731c31e956718a9a8b1e408153c1e/chunk.bin",
+          "offset": 352321536,
+          "bytes": 16777216,
+          "sha256": "b8b63c30e5d506bc04f39686aba65261680731c31e956718a9a8b1e408153c1e"
+        },
+        {
+          "path": "proprium/semantic/chunks/5bc2f599ba870825988844c8a1ee912dbdf33e21e9e2c020285f8561e0505612/chunk.bin",
+          "offset": 369098752,
+          "bytes": 16777216,
+          "sha256": "5bc2f599ba870825988844c8a1ee912dbdf33e21e9e2c020285f8561e0505612"
+        },
+        {
+          "path": "proprium/semantic/chunks/906f974d2783abbb1bc192e0808b9db87438b6309fe7e378046d422d78fb9202/chunk.bin",
+          "offset": 385875968,
+          "bytes": 16777216,
+          "sha256": "906f974d2783abbb1bc192e0808b9db87438b6309fe7e378046d422d78fb9202"
+        },
+        {
+          "path": "proprium/semantic/chunks/3e2051cfc1e7591d9497af1842767796cdc1acc087bac8111576f944a2ebf6cf/chunk.bin",
+          "offset": 402653184,
+          "bytes": 16777216,
+          "sha256": "3e2051cfc1e7591d9497af1842767796cdc1acc087bac8111576f944a2ebf6cf"
+        },
+        {
+          "path": "proprium/semantic/chunks/2259a9e1d21e15e131e38ca7c7fa9c06edf83f6d30e7115c2bc8a5da1d5232d6/chunk.bin",
+          "offset": 419430400,
+          "bytes": 16777216,
+          "sha256": "2259a9e1d21e15e131e38ca7c7fa9c06edf83f6d30e7115c2bc8a5da1d5232d6"
+        },
+        {
+          "path": "proprium/semantic/chunks/b0e99b0b0a64b26b9a6d4019085393e8a9881d90a595e3afdc487bd5713bbd63/chunk.bin",
+          "offset": 436207616,
+          "bytes": 16777216,
+          "sha256": "b0e99b0b0a64b26b9a6d4019085393e8a9881d90a595e3afdc487bd5713bbd63"
+        },
+        {
+          "path": "proprium/semantic/chunks/7476bd7dd77cbf3f202674a3adbbebad8bd824fb30357c297330f58e96453e59/chunk.bin",
+          "offset": 452984832,
+          "bytes": 16777216,
+          "sha256": "7476bd7dd77cbf3f202674a3adbbebad8bd824fb30357c297330f58e96453e59"
+        },
+        {
+          "path": "proprium/semantic/chunks/aeed3081506cea37f0e13b2e32996ed4791161e3368d7690caa9e346c4da62de/chunk.bin",
+          "offset": 469762048,
+          "bytes": 16777216,
+          "sha256": "aeed3081506cea37f0e13b2e32996ed4791161e3368d7690caa9e346c4da62de"
+        },
+        {
+          "path": "proprium/semantic/chunks/3de13b084fd20f44b3427080a7b02995fd3eb0cd56ae5f5e63ee560efaf3c924/chunk.bin",
+          "offset": 486539264,
+          "bytes": 16777216,
+          "sha256": "3de13b084fd20f44b3427080a7b02995fd3eb0cd56ae5f5e63ee560efaf3c924"
+        },
+        {
+          "path": "proprium/semantic/chunks/2fb698f7feb3528158d977d52c366468b8b9d2cac33770dfbfcefa76b79ab78b/chunk.bin",
+          "offset": 503316480,
+          "bytes": 16777216,
+          "sha256": "2fb698f7feb3528158d977d52c366468b8b9d2cac33770dfbfcefa76b79ab78b"
+        },
+        {
+          "path": "proprium/semantic/chunks/8a0b96ece7e9bbd1fbf7ff8caa657c821d97954fa1acdbf9bf4ee21abb34ffce/chunk.bin",
+          "offset": 520093696,
+          "bytes": 16777216,
+          "sha256": "8a0b96ece7e9bbd1fbf7ff8caa657c821d97954fa1acdbf9bf4ee21abb34ffce"
+        },
+        {
+          "path": "proprium/semantic/chunks/a05b7d99089e2a31ba804b60a684fd7b65769c47877cd98865fa443332ccc391/chunk.bin",
+          "offset": 536870912,
+          "bytes": 16777216,
+          "sha256": "a05b7d99089e2a31ba804b60a684fd7b65769c47877cd98865fa443332ccc391"
+        },
+        {
+          "path": "proprium/semantic/chunks/0bf1f4412da10c5aa2b4b1094a8fb07f390b53da3971963bc8f2d4be127b0c15/chunk.bin",
+          "offset": 553648128,
+          "bytes": 16777216,
+          "sha256": "0bf1f4412da10c5aa2b4b1094a8fb07f390b53da3971963bc8f2d4be127b0c15"
+        },
+        {
+          "path": "proprium/semantic/chunks/813c255ced56e58152caf9289e7d8c909d5e3fab8af4dc77b8aab8cc8b50d44b/chunk.bin",
+          "offset": 570425344,
+          "bytes": 16777216,
+          "sha256": "813c255ced56e58152caf9289e7d8c909d5e3fab8af4dc77b8aab8cc8b50d44b"
+        },
+        {
+          "path": "proprium/semantic/chunks/24ffa2424c674ac9883d93288758d5c9d3b61193d9d43dbf744a5d3a8db123b2/chunk.bin",
+          "offset": 587202560,
+          "bytes": 16777216,
+          "sha256": "24ffa2424c674ac9883d93288758d5c9d3b61193d9d43dbf744a5d3a8db123b2"
+        },
+        {
+          "path": "proprium/semantic/chunks/2042050e06fe4f97dbd9c43a9a252217547c851437ef18a6361dd92399082160/chunk.bin",
+          "offset": 603979776,
+          "bytes": 16777216,
+          "sha256": "2042050e06fe4f97dbd9c43a9a252217547c851437ef18a6361dd92399082160"
+        },
+        {
+          "path": "proprium/semantic/chunks/8cfccc83f2efbd1642991329b91adc9f481d6db55806079c67218abc26a6025f/chunk.bin",
+          "offset": 620756992,
+          "bytes": 16777216,
+          "sha256": "8cfccc83f2efbd1642991329b91adc9f481d6db55806079c67218abc26a6025f"
+        },
+        {
+          "path": "proprium/semantic/chunks/e8cc53636dfae43d3358dad1d9c9f7e93ef46605c5a72c2af6414b21f746a2eb/chunk.bin",
+          "offset": 637534208,
+          "bytes": 16777216,
+          "sha256": "e8cc53636dfae43d3358dad1d9c9f7e93ef46605c5a72c2af6414b21f746a2eb"
+        },
+        {
+          "path": "proprium/semantic/chunks/4949c349e65af424f8193b6c80f845ea7e2b4e272078bbf2fa10298267750fc4/chunk.bin",
+          "offset": 654311424,
+          "bytes": 16777216,
+          "sha256": "4949c349e65af424f8193b6c80f845ea7e2b4e272078bbf2fa10298267750fc4"
+        },
+        {
+          "path": "proprium/semantic/chunks/244dfceb75de326554fd36f4deabca7487dc8defdc75e9066513cdac44105a02/chunk.bin",
+          "offset": 671088640,
+          "bytes": 16777216,
+          "sha256": "244dfceb75de326554fd36f4deabca7487dc8defdc75e9066513cdac44105a02"
+        },
+        {
+          "path": "proprium/semantic/chunks/f3bbe0fe8efafbacacd465b1c6ab4a7e938e3173f9c88a33c1d6e637ea06d9c5/chunk.bin",
+          "offset": 687865856,
+          "bytes": 16777216,
+          "sha256": "f3bbe0fe8efafbacacd465b1c6ab4a7e938e3173f9c88a33c1d6e637ea06d9c5"
+        },
+        {
+          "path": "proprium/semantic/chunks/c774013063e0b593f54a7c672b08bd0bbdad3a7a443acc4f85249c476a4974b4/chunk.bin",
+          "offset": 704643072,
+          "bytes": 16777216,
+          "sha256": "c774013063e0b593f54a7c672b08bd0bbdad3a7a443acc4f85249c476a4974b4"
+        },
+        {
+          "path": "proprium/semantic/chunks/ed068b2836b198e60e3fec51d91c2da73c641dedb8bba191c6f6e0a743fc72f9/chunk.bin",
+          "offset": 721420288,
+          "bytes": 16777216,
+          "sha256": "ed068b2836b198e60e3fec51d91c2da73c641dedb8bba191c6f6e0a743fc72f9"
+        },
+        {
+          "path": "proprium/semantic/chunks/1806b3a536143ad4a08d3299a509e3507d6af41c7fe36e55a36c1fa85bce2da9/chunk.bin",
+          "offset": 738197504,
+          "bytes": 16777216,
+          "sha256": "1806b3a536143ad4a08d3299a509e3507d6af41c7fe36e55a36c1fa85bce2da9"
+        },
+        {
+          "path": "proprium/semantic/chunks/291956973cb4e9b9b4325b65cdb834e958c7e215861f846677fb1d995bf444c9/chunk.bin",
+          "offset": 754974720,
+          "bytes": 16777216,
+          "sha256": "291956973cb4e9b9b4325b65cdb834e958c7e215861f846677fb1d995bf444c9"
+        },
+        {
+          "path": "proprium/semantic/chunks/40ace7f4ec2cce86b07ff16126b498b73a770b0ca69091fb089301c16cc89b90/chunk.bin",
+          "offset": 771751936,
+          "bytes": 16777216,
+          "sha256": "40ace7f4ec2cce86b07ff16126b498b73a770b0ca69091fb089301c16cc89b90"
+        },
+        {
+          "path": "proprium/semantic/chunks/57bdf907867e252a1805c8e19581b03bc0f47b080e90f332c08b1e94afb2d024/chunk.bin",
+          "offset": 788529152,
+          "bytes": 16777216,
+          "sha256": "57bdf907867e252a1805c8e19581b03bc0f47b080e90f332c08b1e94afb2d024"
+        },
+        {
+          "path": "proprium/semantic/chunks/968dfc24dfe1ce1c60fd0adedcd036452019988ab9743746886464dce1f959a2/chunk.bin",
+          "offset": 805306368,
+          "bytes": 16777216,
+          "sha256": "968dfc24dfe1ce1c60fd0adedcd036452019988ab9743746886464dce1f959a2"
+        },
+        {
+          "path": "proprium/semantic/chunks/d801da58bb7318d980bbdb6e2e8eeeb506d0770df6f6ef439af7a8514b1327b3/chunk.bin",
+          "offset": 822083584,
+          "bytes": 16777216,
+          "sha256": "d801da58bb7318d980bbdb6e2e8eeeb506d0770df6f6ef439af7a8514b1327b3"
+        },
+        {
+          "path": "proprium/semantic/chunks/5332dfb90455cae5c2adbb46568e980cf8ff7814a8d0984c9b7fd2260d83c640/chunk.bin",
+          "offset": 838860800,
+          "bytes": 16777216,
+          "sha256": "5332dfb90455cae5c2adbb46568e980cf8ff7814a8d0984c9b7fd2260d83c640"
+        },
+        {
+          "path": "proprium/semantic/chunks/a668421d68826e0bce06344aeb58375ba2d595e3c6f6c5bf915cd33328598030/chunk.bin",
+          "offset": 855638016,
+          "bytes": 16777216,
+          "sha256": "a668421d68826e0bce06344aeb58375ba2d595e3c6f6c5bf915cd33328598030"
+        },
+        {
+          "path": "proprium/semantic/chunks/e8439871eb6f30a6fa0f5eff36ac9b6fe03cc4e7b67764ba56e6189348011a0d/chunk.bin",
+          "offset": 872415232,
+          "bytes": 16777216,
+          "sha256": "e8439871eb6f30a6fa0f5eff36ac9b6fe03cc4e7b67764ba56e6189348011a0d"
+        },
+        {
+          "path": "proprium/semantic/chunks/d30f18257a6d50c782e1f534c3081ef5ac282d8ff2184d8709fa05e06d29aa86/chunk.bin",
+          "offset": 889192448,
+          "bytes": 16777216,
+          "sha256": "d30f18257a6d50c782e1f534c3081ef5ac282d8ff2184d8709fa05e06d29aa86"
+        },
+        {
+          "path": "proprium/semantic/chunks/21662e2aa7b7bdcd379e8f631ab111bb745a54345b45c1e7c61136a23a51007c/chunk.bin",
+          "offset": 905969664,
+          "bytes": 16777216,
+          "sha256": "21662e2aa7b7bdcd379e8f631ab111bb745a54345b45c1e7c61136a23a51007c"
+        },
+        {
+          "path": "proprium/semantic/chunks/23728cb23fa27e6bbcdec135587fe844d7bca4acf55c12ad79d7b99871d12092/chunk.bin",
+          "offset": 922746880,
+          "bytes": 16777216,
+          "sha256": "23728cb23fa27e6bbcdec135587fe844d7bca4acf55c12ad79d7b99871d12092"
+        },
+        {
+          "path": "proprium/semantic/chunks/e54b0dd876767a35140aa101fe1559d915b513c6914cf9a3653de7d197f7d7c2/chunk.bin",
+          "offset": 939524096,
+          "bytes": 16777216,
+          "sha256": "e54b0dd876767a35140aa101fe1559d915b513c6914cf9a3653de7d197f7d7c2"
+        },
+        {
+          "path": "proprium/semantic/chunks/d00f29257e2b2b1e0906a58e75da76f712ff60be6e5cddd7f45692e7900741d8/chunk.bin",
+          "offset": 956301312,
+          "bytes": 16777216,
+          "sha256": "d00f29257e2b2b1e0906a58e75da76f712ff60be6e5cddd7f45692e7900741d8"
+        },
+        {
+          "path": "proprium/semantic/chunks/762441f1f54d96a89f38eb8300c30236778459179eadeb330e2ffa44154ed87f/chunk.bin",
+          "offset": 973078528,
+          "bytes": 16777216,
+          "sha256": "762441f1f54d96a89f38eb8300c30236778459179eadeb330e2ffa44154ed87f"
+        },
+        {
+          "path": "proprium/semantic/chunks/573642e05a09637a50d831d38cb5bf4f4ad346b961ae3d284a18133659debbf8/chunk.bin",
+          "offset": 989855744,
+          "bytes": 16777216,
+          "sha256": "573642e05a09637a50d831d38cb5bf4f4ad346b961ae3d284a18133659debbf8"
+        },
+        {
+          "path": "proprium/semantic/chunks/1f03a3092e4f5f4c4d29367318d1749c4b59f76f73586b4b23fd7294a6d00f94/chunk.bin",
+          "offset": 1006632960,
+          "bytes": 16777216,
+          "sha256": "1f03a3092e4f5f4c4d29367318d1749c4b59f76f73586b4b23fd7294a6d00f94"
+        },
+        {
+          "path": "proprium/semantic/chunks/aabfb7a542a519833411e4250a7e233425b519e40e537986250f0d4e8a7d4bd7/chunk.bin",
+          "offset": 1023410176,
+          "bytes": 16777216,
+          "sha256": "aabfb7a542a519833411e4250a7e233425b519e40e537986250f0d4e8a7d4bd7"
+        },
+        {
+          "path": "proprium/semantic/chunks/f3d3592449056b8cc5a3b5dee3f6e819ec38bd7b4cd16871060aa52e7abee800/chunk.bin",
+          "offset": 1040187392,
+          "bytes": 16777216,
+          "sha256": "f3d3592449056b8cc5a3b5dee3f6e819ec38bd7b4cd16871060aa52e7abee800"
+        },
+        {
+          "path": "proprium/semantic/chunks/7c9b516ff09883e710d5c6d65fde26bc7f3032fc8d9ac217c95be855f4ac94e1/chunk.bin",
+          "offset": 1056964608,
+          "bytes": 16777216,
+          "sha256": "7c9b516ff09883e710d5c6d65fde26bc7f3032fc8d9ac217c95be855f4ac94e1"
+        },
+        {
+          "path": "proprium/semantic/chunks/b63786138eef94c53758e40c9a70ac1342a12530702f728c5ed7a403ab537f6d/chunk.bin",
+          "offset": 1073741824,
+          "bytes": 16777216,
+          "sha256": "b63786138eef94c53758e40c9a70ac1342a12530702f728c5ed7a403ab537f6d"
+        },
+        {
+          "path": "proprium/semantic/chunks/aa5a3fc06d9d5521b400b0fbabd26cda0a615d750e7883853f0dd3cc151add78/chunk.bin",
+          "offset": 1090519040,
+          "bytes": 16777216,
+          "sha256": "aa5a3fc06d9d5521b400b0fbabd26cda0a615d750e7883853f0dd3cc151add78"
+        },
+        {
+          "path": "proprium/semantic/chunks/efe683155a9d69f28307609f91d43cb950033a0cf4623bf951fb7c688647baae/chunk.bin",
+          "offset": 1107296256,
+          "bytes": 16777216,
+          "sha256": "efe683155a9d69f28307609f91d43cb950033a0cf4623bf951fb7c688647baae"
+        },
+        {
+          "path": "proprium/semantic/chunks/9f8e4d6f3e749da20234028e2fa45b6f839a646862ddab83debbdee6b02147c8/chunk.bin",
+          "offset": 1124073472,
+          "bytes": 16777216,
+          "sha256": "9f8e4d6f3e749da20234028e2fa45b6f839a646862ddab83debbdee6b02147c8"
+        },
+        {
+          "path": "proprium/semantic/chunks/b8d99ad1f9184b5451e0e42083c105634535f978fc83352cac13921a6532c191/chunk.bin",
+          "offset": 1140850688,
+          "bytes": 16777216,
+          "sha256": "b8d99ad1f9184b5451e0e42083c105634535f978fc83352cac13921a6532c191"
+        },
+        {
+          "path": "proprium/semantic/chunks/153d710aeec1481466b3601902f713f0cd4474330f63121f3a3c381713837c0e/chunk.bin",
+          "offset": 1157627904,
+          "bytes": 16777216,
+          "sha256": "153d710aeec1481466b3601902f713f0cd4474330f63121f3a3c381713837c0e"
+        },
+        {
+          "path": "proprium/semantic/chunks/22e2b62107a6d18cd53b8396d9f53b472a853db34e9c98c74c308cab475e5e02/chunk.bin",
+          "offset": 1174405120,
+          "bytes": 16777216,
+          "sha256": "22e2b62107a6d18cd53b8396d9f53b472a853db34e9c98c74c308cab475e5e02"
+        },
+        {
+          "path": "proprium/semantic/chunks/a6c888bd5a3605de8954e32b2cf5a67c3c50333b51b325efc2336417fa0f535b/chunk.bin",
+          "offset": 1191182336,
+          "bytes": 16777216,
+          "sha256": "a6c888bd5a3605de8954e32b2cf5a67c3c50333b51b325efc2336417fa0f535b"
+        },
+        {
+          "path": "proprium/semantic/chunks/8d05037c918188d1820de96df9dbb22bb581186dce671c6a8d95f20f0a38f3fb/chunk.bin",
+          "offset": 1207959552,
+          "bytes": 16777216,
+          "sha256": "8d05037c918188d1820de96df9dbb22bb581186dce671c6a8d95f20f0a38f3fb"
+        },
+        {
+          "path": "proprium/semantic/chunks/c1c68ba93d842fff925c46b58e4d28930919df1bdfc384539a615d4b82bab895/chunk.bin",
+          "offset": 1224736768,
+          "bytes": 16777216,
+          "sha256": "c1c68ba93d842fff925c46b58e4d28930919df1bdfc384539a615d4b82bab895"
+        },
+        {
+          "path": "proprium/semantic/chunks/675a626952e2a67d2613b7c06ef359acb7f828cf998d4ba30683c4a40f0af24d/chunk.bin",
+          "offset": 1241513984,
+          "bytes": 16777216,
+          "sha256": "675a626952e2a67d2613b7c06ef359acb7f828cf998d4ba30683c4a40f0af24d"
+        },
+        {
+          "path": "proprium/semantic/chunks/d1d81801d603ef9fbece6e2b737ac5c113d7c7c8f13137c305156c5760e5b8fd/chunk.bin",
+          "offset": 1258291200,
+          "bytes": 16777216,
+          "sha256": "d1d81801d603ef9fbece6e2b737ac5c113d7c7c8f13137c305156c5760e5b8fd"
+        },
+        {
+          "path": "proprium/semantic/chunks/d7f55885bcdddd991fa333c6f7d0073a9b2cfa6509fac4e2e337a8315714dde1/chunk.bin",
+          "offset": 1275068416,
+          "bytes": 16777216,
+          "sha256": "d7f55885bcdddd991fa333c6f7d0073a9b2cfa6509fac4e2e337a8315714dde1"
+        },
+        {
+          "path": "proprium/semantic/chunks/23f0c3fb858b8c0de8914755bb6c4c6eb01b5ed6ae48576b2fc19f3327b11fee/chunk.bin",
+          "offset": 1291845632,
+          "bytes": 16777216,
+          "sha256": "23f0c3fb858b8c0de8914755bb6c4c6eb01b5ed6ae48576b2fc19f3327b11fee"
+        },
+        {
+          "path": "proprium/semantic/chunks/4e12e5048261f94a9f30874bae28b0fdafb672888ebc95a379c888dc274f11a8/chunk.bin",
+          "offset": 1308622848,
+          "bytes": 16777216,
+          "sha256": "4e12e5048261f94a9f30874bae28b0fdafb672888ebc95a379c888dc274f11a8"
+        },
+        {
+          "path": "proprium/semantic/chunks/a8f28cde4870de0d4875386497f98ba1828cf1149f6b4b1f136beef9a77dbe9a/chunk.bin",
+          "offset": 1325400064,
+          "bytes": 16777216,
+          "sha256": "a8f28cde4870de0d4875386497f98ba1828cf1149f6b4b1f136beef9a77dbe9a"
+        },
+        {
+          "path": "proprium/semantic/chunks/adb3e1b46e96a68a893d6dbda5c0aa0ecd61a300e8058ec59bca2914e321e8d2/chunk.bin",
+          "offset": 1342177280,
+          "bytes": 16777216,
+          "sha256": "adb3e1b46e96a68a893d6dbda5c0aa0ecd61a300e8058ec59bca2914e321e8d2"
+        },
+        {
+          "path": "proprium/semantic/chunks/d7907c81f1821719b3ed7e6e25bb0617e4483b82c7c4beda89881810f61247b5/chunk.bin",
+          "offset": 1358954496,
+          "bytes": 16777216,
+          "sha256": "d7907c81f1821719b3ed7e6e25bb0617e4483b82c7c4beda89881810f61247b5"
+        },
+        {
+          "path": "proprium/semantic/chunks/58d5ccf17cc341a6b06cb03262cbfbef72465c9d609ce58c5fe10d999cf272e0/chunk.bin",
+          "offset": 1375731712,
+          "bytes": 16777216,
+          "sha256": "58d5ccf17cc341a6b06cb03262cbfbef72465c9d609ce58c5fe10d999cf272e0"
+        },
+        {
+          "path": "proprium/semantic/chunks/8e34ee18199c02e1d58fd1f3c95859a363bee483c884d6b5ebe1e760c485a5d5/chunk.bin",
+          "offset": 1392508928,
+          "bytes": 16777216,
+          "sha256": "8e34ee18199c02e1d58fd1f3c95859a363bee483c884d6b5ebe1e760c485a5d5"
+        },
+        {
+          "path": "proprium/semantic/chunks/8a4f4b515348d9359e1b2e48e41b6ee10b9686197c461ac345e51b22b3b2cc85/chunk.bin",
+          "offset": 1409286144,
+          "bytes": 16777216,
+          "sha256": "8a4f4b515348d9359e1b2e48e41b6ee10b9686197c461ac345e51b22b3b2cc85"
+        },
+        {
+          "path": "proprium/semantic/chunks/2bafa6d9499ed8f1d15b3b6fb5d74e1fe91e070f95dfb090c11e52c87a977202/chunk.bin",
+          "offset": 1426063360,
+          "bytes": 16777216,
+          "sha256": "2bafa6d9499ed8f1d15b3b6fb5d74e1fe91e070f95dfb090c11e52c87a977202"
+        },
+        {
+          "path": "proprium/semantic/chunks/26a74961543f440fdcc6bd606b4e8c1344783f490a36991ab140c03a6180f07f/chunk.bin",
+          "offset": 1442840576,
+          "bytes": 16777216,
+          "sha256": "26a74961543f440fdcc6bd606b4e8c1344783f490a36991ab140c03a6180f07f"
+        },
+        {
+          "path": "proprium/semantic/chunks/4819b9b78e45e14c2ae8758a18c8e266c8efb055f24ec18fafb1b7e7fae2e05a/chunk.bin",
+          "offset": 1459617792,
+          "bytes": 16777216,
+          "sha256": "4819b9b78e45e14c2ae8758a18c8e266c8efb055f24ec18fafb1b7e7fae2e05a"
+        },
+        {
+          "path": "proprium/semantic/chunks/48f2ff352ce93e6ff68ef19d76d6b9ffd1dbd3d754534f93abf2d99863361e17/chunk.bin",
+          "offset": 1476395008,
+          "bytes": 16777216,
+          "sha256": "48f2ff352ce93e6ff68ef19d76d6b9ffd1dbd3d754534f93abf2d99863361e17"
+        },
+        {
+          "path": "proprium/semantic/chunks/0bb3a6c73c2a31bfe1a1ef0d2e43db5b0ea30bd66d793f2e0b547c56f12cb491/chunk.bin",
+          "offset": 1493172224,
+          "bytes": 16777216,
+          "sha256": "0bb3a6c73c2a31bfe1a1ef0d2e43db5b0ea30bd66d793f2e0b547c56f12cb491"
+        },
+        {
+          "path": "proprium/semantic/chunks/16144889f99fb0e3c89ca0f52f3a3967e6da0938af27519e2c4e58c923259b77/chunk.bin",
+          "offset": 1509949440,
+          "bytes": 16777216,
+          "sha256": "16144889f99fb0e3c89ca0f52f3a3967e6da0938af27519e2c4e58c923259b77"
+        },
+        {
+          "path": "proprium/semantic/chunks/9eb5b6eeb473ddd66c0264541952829677496dd633eb1d5a2b1ef8d95bd94065/chunk.bin",
+          "offset": 1526726656,
+          "bytes": 16777216,
+          "sha256": "9eb5b6eeb473ddd66c0264541952829677496dd633eb1d5a2b1ef8d95bd94065"
+        },
+        {
+          "path": "proprium/semantic/chunks/2e03762e6e62ed23636867f957d1d736f1d1e19e2ba825892b7283a1233f019b/chunk.bin",
+          "offset": 1543503872,
+          "bytes": 16777216,
+          "sha256": "2e03762e6e62ed23636867f957d1d736f1d1e19e2ba825892b7283a1233f019b"
+        },
+        {
+          "path": "proprium/semantic/chunks/1cb32bee331dedfc0bbf02574249e0d8caaea961f8916f2406820b771f78a8de/chunk.bin",
+          "offset": 1560281088,
+          "bytes": 16777216,
+          "sha256": "1cb32bee331dedfc0bbf02574249e0d8caaea961f8916f2406820b771f78a8de"
+        },
+        {
+          "path": "proprium/semantic/chunks/11690607b89538a5730fc6a0c2706b9a7d58ddaff76b7379992ab50ad8ac976b/chunk.bin",
+          "offset": 1577058304,
+          "bytes": 16777216,
+          "sha256": "11690607b89538a5730fc6a0c2706b9a7d58ddaff76b7379992ab50ad8ac976b"
+        },
+        {
+          "path": "proprium/semantic/chunks/93569344145374d708f00b9109a6e52cd621296bf57b3a04b4ca6da422b76e7f/chunk.bin",
+          "offset": 1593835520,
+          "bytes": 16777216,
+          "sha256": "93569344145374d708f00b9109a6e52cd621296bf57b3a04b4ca6da422b76e7f"
+        },
+        {
+          "path": "proprium/semantic/chunks/858cbba2971f023ab79423b7e083f331be9c4c38c902372870b0b32283db8cc4/chunk.bin",
+          "offset": 1610612736,
+          "bytes": 16777216,
+          "sha256": "858cbba2971f023ab79423b7e083f331be9c4c38c902372870b0b32283db8cc4"
+        },
+        {
+          "path": "proprium/semantic/chunks/52e2860049f8de5998a661ab615353d634f862ab668dc669597cbef0c8fda8d8/chunk.bin",
+          "offset": 1627389952,
+          "bytes": 16777216,
+          "sha256": "52e2860049f8de5998a661ab615353d634f862ab668dc669597cbef0c8fda8d8"
+        },
+        {
+          "path": "proprium/semantic/chunks/f852b8ae92e5019b7b1d66d6f89bfb659af61b33ef482012749808cc1cf236c2/chunk.bin",
+          "offset": 1644167168,
+          "bytes": 16777216,
+          "sha256": "f852b8ae92e5019b7b1d66d6f89bfb659af61b33ef482012749808cc1cf236c2"
+        },
+        {
+          "path": "proprium/semantic/chunks/45cef7a69c71f4cd9707167f58ed81da16937938228629652495ffbf1c37defa/chunk.bin",
+          "offset": 1660944384,
+          "bytes": 16777216,
+          "sha256": "45cef7a69c71f4cd9707167f58ed81da16937938228629652495ffbf1c37defa"
+        },
+        {
+          "path": "proprium/semantic/chunks/a4f66c7997af8e140c589ecb14c6ae9e6668ab9362ac86e5df4a796ce48034ed/chunk.bin",
+          "offset": 1677721600,
+          "bytes": 16777216,
+          "sha256": "a4f66c7997af8e140c589ecb14c6ae9e6668ab9362ac86e5df4a796ce48034ed"
+        },
+        {
+          "path": "proprium/semantic/chunks/b297347dd7f6b787134c1f7ad313c98415e588cf69c4425cff9f0f4786e2b1d8/chunk.bin",
+          "offset": 1694498816,
+          "bytes": 16777216,
+          "sha256": "b297347dd7f6b787134c1f7ad313c98415e588cf69c4425cff9f0f4786e2b1d8"
+        },
+        {
+          "path": "proprium/semantic/chunks/7af807c34b252f62d5055b9faca67528f995b2ab1fec69dd16db382105ee889e/chunk.bin",
+          "offset": 1711276032,
+          "bytes": 16777216,
+          "sha256": "7af807c34b252f62d5055b9faca67528f995b2ab1fec69dd16db382105ee889e"
+        },
+        {
+          "path": "proprium/semantic/chunks/3d1cafa3b33514bb10fbef9a3e78ca0831deabb4a847a1d955947cbbd3d03f62/chunk.bin",
+          "offset": 1728053248,
+          "bytes": 16777216,
+          "sha256": "3d1cafa3b33514bb10fbef9a3e78ca0831deabb4a847a1d955947cbbd3d03f62"
+        },
+        {
+          "path": "proprium/semantic/chunks/2e546f3e3b6debc3a355f7d239e7b60f75221bedba0631672edabbfd4c878cb7/chunk.bin",
+          "offset": 1744830464,
+          "bytes": 16777216,
+          "sha256": "2e546f3e3b6debc3a355f7d239e7b60f75221bedba0631672edabbfd4c878cb7"
+        },
+        {
+          "path": "proprium/semantic/chunks/f98dfe75dc477ae613e397fb7043908c3823986e9d910ad6965e8465f7f89fd9/chunk.bin",
+          "offset": 1761607680,
+          "bytes": 16777216,
+          "sha256": "f98dfe75dc477ae613e397fb7043908c3823986e9d910ad6965e8465f7f89fd9"
+        },
+        {
+          "path": "proprium/semantic/chunks/d4265c27aef6d93ec33120a7c74611d1e39cea323b1719d97255079970835b8c/chunk.bin",
+          "offset": 1778384896,
+          "bytes": 16777216,
+          "sha256": "d4265c27aef6d93ec33120a7c74611d1e39cea323b1719d97255079970835b8c"
+        },
+        {
+          "path": "proprium/semantic/chunks/8f40c16093ab86118ffe4feb06102dadc2031f778aeb62b9dc8dd831cede775f/chunk.bin",
+          "offset": 1795162112,
+          "bytes": 16777216,
+          "sha256": "8f40c16093ab86118ffe4feb06102dadc2031f778aeb62b9dc8dd831cede775f"
+        },
+        {
+          "path": "proprium/semantic/chunks/b3c850621d775384ad3ee4ae71f98f7887668dd00963fddf7b12a6cd03f31633/chunk.bin",
+          "offset": 1811939328,
+          "bytes": 16777216,
+          "sha256": "b3c850621d775384ad3ee4ae71f98f7887668dd00963fddf7b12a6cd03f31633"
+        },
+        {
+          "path": "proprium/semantic/chunks/8b2514795502f43d10c884fb42e51af2d1d9ced35601f20e14b9bf21bb6c8c79/chunk.bin",
+          "offset": 1828716544,
+          "bytes": 16777216,
+          "sha256": "8b2514795502f43d10c884fb42e51af2d1d9ced35601f20e14b9bf21bb6c8c79"
+        },
+        {
+          "path": "proprium/semantic/chunks/abf004565c338647626dd58177b0923e56d9b221fc4acfcf7b7bece0884efc47/chunk.bin",
+          "offset": 1845493760,
+          "bytes": 16777216,
+          "sha256": "abf004565c338647626dd58177b0923e56d9b221fc4acfcf7b7bece0884efc47"
+        },
+        {
+          "path": "proprium/semantic/chunks/e827e8e9a277041b3a594f54e84bfa6a02dadfdb196225d8caea5fdf5030a738/chunk.bin",
+          "offset": 1862270976,
+          "bytes": 16777216,
+          "sha256": "e827e8e9a277041b3a594f54e84bfa6a02dadfdb196225d8caea5fdf5030a738"
+        },
+        {
+          "path": "proprium/semantic/chunks/5a2c3a7b15c355a8695ded34b59087ec21d71e795e490ef78b83e03c3a9145aa/chunk.bin",
+          "offset": 1879048192,
+          "bytes": 16777216,
+          "sha256": "5a2c3a7b15c355a8695ded34b59087ec21d71e795e490ef78b83e03c3a9145aa"
+        },
+        {
+          "path": "proprium/semantic/chunks/df17a8e609aff632d3aa973f21d0032c7234201e36ac0ccf351649c9116a4c7b/chunk.bin",
+          "offset": 1895825408,
+          "bytes": 16777216,
+          "sha256": "df17a8e609aff632d3aa973f21d0032c7234201e36ac0ccf351649c9116a4c7b"
+        },
+        {
+          "path": "proprium/semantic/chunks/25c01f67e3160bc99dd47d8baab89bf0f3e35cf276d9cc8ab02f34082759bee7/chunk.bin",
+          "offset": 1912602624,
+          "bytes": 16777216,
+          "sha256": "25c01f67e3160bc99dd47d8baab89bf0f3e35cf276d9cc8ab02f34082759bee7"
+        },
+        {
+          "path": "proprium/semantic/chunks/f3fb20d582f8e7d6586970606c71e7fbd5275ee5769c779f0eeee75a647ba1e7/chunk.bin",
+          "offset": 1929379840,
+          "bytes": 16777216,
+          "sha256": "f3fb20d582f8e7d6586970606c71e7fbd5275ee5769c779f0eeee75a647ba1e7"
+        },
+        {
+          "path": "proprium/semantic/chunks/e76ea748e59410c41fa741c649cabde8ba0c36a67440aa37fad3a6c8e64817c7/chunk.bin",
+          "offset": 1946157056,
+          "bytes": 16777216,
+          "sha256": "e76ea748e59410c41fa741c649cabde8ba0c36a67440aa37fad3a6c8e64817c7"
+        },
+        {
+          "path": "proprium/semantic/chunks/edb2aace13810ea917db928857ddd3b607aa7857276db6767bca1c213d0cadf3/chunk.bin",
+          "offset": 1962934272,
+          "bytes": 16777216,
+          "sha256": "edb2aace13810ea917db928857ddd3b607aa7857276db6767bca1c213d0cadf3"
+        },
+        {
+          "path": "proprium/semantic/chunks/eb1694c2e1c97dfae6bc6d699a17707f934357229728539d9e5442dd7a60ae69/chunk.bin",
+          "offset": 1979711488,
+          "bytes": 16777216,
+          "sha256": "eb1694c2e1c97dfae6bc6d699a17707f934357229728539d9e5442dd7a60ae69"
+        },
+        {
+          "path": "proprium/semantic/chunks/a4d886f6a33475c9c1e152319e574a931f6b39cc6b76bccff710d9612cbf9336/chunk.bin",
+          "offset": 1996488704,
+          "bytes": 16777216,
+          "sha256": "a4d886f6a33475c9c1e152319e574a931f6b39cc6b76bccff710d9612cbf9336"
+        },
+        {
+          "path": "proprium/semantic/chunks/25e8a3e592337b80536935546381feec12cc7e4eaf5136e58fbe2fb58ed0f206/chunk.bin",
+          "offset": 2013265920,
+          "bytes": 16777216,
+          "sha256": "25e8a3e592337b80536935546381feec12cc7e4eaf5136e58fbe2fb58ed0f206"
+        },
+        {
+          "path": "proprium/semantic/chunks/94c89270d94987345aab5b59203b3b7280dfb59aee8fc9012c7bbbb6a450e9bc/chunk.bin",
+          "offset": 2030043136,
+          "bytes": 16777216,
+          "sha256": "94c89270d94987345aab5b59203b3b7280dfb59aee8fc9012c7bbbb6a450e9bc"
+        },
+        {
+          "path": "proprium/semantic/chunks/9472217bedd3cefab7969642ab81843b5b808a812cf7ddcab7cd43fea9bcde5c/chunk.bin",
+          "offset": 2046820352,
+          "bytes": 16777216,
+          "sha256": "9472217bedd3cefab7969642ab81843b5b808a812cf7ddcab7cd43fea9bcde5c"
+        },
+        {
+          "path": "proprium/semantic/chunks/494e2c0bc81a5f750136e0df26858f60596dbeaefaf8d7a2a594d23f19b7a128/chunk.bin",
+          "offset": 2063597568,
+          "bytes": 16777216,
+          "sha256": "494e2c0bc81a5f750136e0df26858f60596dbeaefaf8d7a2a594d23f19b7a128"
+        },
+        {
+          "path": "proprium/semantic/chunks/0b852ffe60eece1f4476c8b27b887d0b90dd3ccbbf893c6bd9428c87955e15f9/chunk.bin",
+          "offset": 2080374784,
+          "bytes": 16777216,
+          "sha256": "0b852ffe60eece1f4476c8b27b887d0b90dd3ccbbf893c6bd9428c87955e15f9"
+        },
+        {
+          "path": "proprium/semantic/chunks/6417dcf7ae38d91e46a9bb590da39382a3937a7c1922806dd3c8ce8eead4a15a/chunk.bin",
+          "offset": 2097152000,
+          "bytes": 16777216,
+          "sha256": "6417dcf7ae38d91e46a9bb590da39382a3937a7c1922806dd3c8ce8eead4a15a"
+        },
+        {
+          "path": "proprium/semantic/chunks/a7801aa860530c268161635f4abb84b591eff3ee1f1648a173778b7fe9eef844/chunk.bin",
+          "offset": 2113929216,
+          "bytes": 16777216,
+          "sha256": "a7801aa860530c268161635f4abb84b591eff3ee1f1648a173778b7fe9eef844"
+        },
+        {
+          "path": "proprium/semantic/chunks/72491f7df9a9b40c902ed01de1f5966721c91549a2d66e878b1884a3bd76917d/chunk.bin",
+          "offset": 2130706432,
+          "bytes": 16777216,
+          "sha256": "72491f7df9a9b40c902ed01de1f5966721c91549a2d66e878b1884a3bd76917d"
+        },
+        {
+          "path": "proprium/semantic/chunks/e161ad3775082d358d53166e0757d52251658b82e9be1afd1ccd581fa3e404a7/chunk.bin",
+          "offset": 2147483648,
+          "bytes": 16777216,
+          "sha256": "e161ad3775082d358d53166e0757d52251658b82e9be1afd1ccd581fa3e404a7"
+        },
+        {
+          "path": "proprium/semantic/chunks/dfc81c381dec4165573841f465a60f8ed9514fa82ec421f5e87d0aa989fd6302/chunk.bin",
+          "offset": 2164260864,
+          "bytes": 16777216,
+          "sha256": "dfc81c381dec4165573841f465a60f8ed9514fa82ec421f5e87d0aa989fd6302"
+        },
+        {
+          "path": "proprium/semantic/chunks/b17fbd778a792edd7f7cbb62c952a1f3b0b88d94a8a0c6d06a44c596ee60f1c7/chunk.bin",
+          "offset": 2181038080,
+          "bytes": 16777216,
+          "sha256": "b17fbd778a792edd7f7cbb62c952a1f3b0b88d94a8a0c6d06a44c596ee60f1c7"
+        },
+        {
+          "path": "proprium/semantic/chunks/a6c5381a46d9650d679d5081f74f259677bc78ad88233bb9168094d1def3a532/chunk.bin",
+          "offset": 2197815296,
+          "bytes": 16777216,
+          "sha256": "a6c5381a46d9650d679d5081f74f259677bc78ad88233bb9168094d1def3a532"
+        },
+        {
+          "path": "proprium/semantic/chunks/3e225a12f7a1891c78a6521297c7206f30cf05d9ef2b70eb7ded342047273043/chunk.bin",
+          "offset": 2214592512,
+          "bytes": 16777216,
+          "sha256": "3e225a12f7a1891c78a6521297c7206f30cf05d9ef2b70eb7ded342047273043"
+        },
+        {
+          "path": "proprium/semantic/chunks/b96e01acf88fe36755d12e434f0864fbd0dc1f0b8b9d082aa0c0b44272627399/chunk.bin",
+          "offset": 2231369728,
+          "bytes": 16777216,
+          "sha256": "b96e01acf88fe36755d12e434f0864fbd0dc1f0b8b9d082aa0c0b44272627399"
+        },
+        {
+          "path": "proprium/semantic/chunks/8332e70fe4218b2a1d22e19c5e4cd7a1bfcc4ff9f4e642a15de2fa5a8c352c27/chunk.bin",
+          "offset": 2248146944,
+          "bytes": 16777216,
+          "sha256": "8332e70fe4218b2a1d22e19c5e4cd7a1bfcc4ff9f4e642a15de2fa5a8c352c27"
+        },
+        {
+          "path": "proprium/semantic/chunks/dc7f0766b415c5cb06ba8a9ba3aa8845005be25132d919cd1a885a616f2973f9/chunk.bin",
+          "offset": 2264924160,
+          "bytes": 6164496,
+          "sha256": "dc7f0766b415c5cb06ba8a9ba3aa8845005be25132d919cd1a885a616f2973f9"
+        }
+      ]
+    },
+    {
+      "path": "proprium/semantic/reranker/bge-reranker-v2-m3/tokenizer.json",
+      "bytes": 17082900,
+      "sha256": "8bf8afbfd11306bd872018c53bfdf2e160a56f8edbcf49933324404791c148d3",
+      "chunks": [
+        {
+          "path": "proprium/semantic/chunks/3f3c700bca3846d02196b4eb65bbef32d29ef7ffe432911ee4fe715a450eb64a/chunk.bin",
+          "offset": 0,
+          "bytes": 16777216,
+          "sha256": "3f3c700bca3846d02196b4eb65bbef32d29ef7ffe432911ee4fe715a450eb64a"
+        },
+        {
+          "path": "proprium/semantic/chunks/4176f7fcbbe60feaa3e0e088723f1685a923d377615bb8db4ff0579884e95acf/chunk.bin",
+          "offset": 16777216,
+          "bytes": 305684,
+          "sha256": "4176f7fcbbe60feaa3e0e088723f1685a923d377615bb8db4ff0579884e95acf"
+        }
+      ]
+    },
+    {
+      "path": "proprium/semantic/reranker/bge-reranker-v2-m3/provenance.json",
+      "bytes": 480,
+      "sha256": "73eadc51ba2b1a7bd72c0e96bf97b81273ffd12df5b7a1d68282f6f9994a379f",
+      "chunks": [
+        {
+          "path": "proprium/semantic/chunks/73eadc51ba2b1a7bd72c0e96bf97b81273ffd12df5b7a1d68282f6f9994a379f/chunk.bin",
+          "offset": 0,
+          "bytes": 480,
+          "sha256": "73eadc51ba2b1a7bd72c0e96bf97b81273ffd12df5b7a1d68282f6f9994a379f"
+        }
+      ]
+    }
+  ]
+}

@@ -53,7 +53,7 @@ for (const file of fileInputs) {
   if (pinned && (total !== pinned.bytes || digest !== pinned.sha256)) throw new Error(`Pinned source digest differs: ${relative}`);
   files.push({ path: file.path, bytes: total, sha256: digest, chunks });
 }
-const manifest = { schema: 'proprium.assets/v1', id: 'proprium.semantic.reranker.bge-v2-m3', version: source.revision, license: source.license, files };
+const manifest = { schema: 'proprium.assets/v1', id: 'proprium.semantic.reranker.bge-v2-m3', version: `0.1.0-${source.revision}`, license: source.license, files };
 const bytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
 const manifestDigest = sha(bytes);
 const manifestPath = `assets/manifests/${manifestDigest}/manifest.json`;
