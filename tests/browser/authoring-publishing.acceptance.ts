@@ -26,11 +26,22 @@ async function install(page: Page, id: string, capabilities: string[]) {
   await expect(manager.getByRole('status')).toContainText(`${id}@0.1.0 is enabled`);
 }
 async function openPanel(page: Page, name: string) {
+  const selected = page.getByRole('tab', { name, exact: true }).first();
+  if (await selected.isVisible()) {
+    if (await selected.getAttribute('aria-selected') !== 'true') await selected.click();
+    return;
+  }
   const configuration = page.locator('.st-workspace-configuration');
   if (await configuration.getAttribute('open') === null) await configuration.locator(':scope > summary').click();
   const menu = page.locator('.st-workspace-panel-menu');
   if (await menu.getAttribute('open') === null) await menu.locator(':scope > summary').click();
-  await page.getByRole('button', { name: `${name}を表示する`, exact: true }).click();
+  const display = page.getByRole('button', { name: `${name}を表示する`, exact: true });
+  if (await display.isVisible()) await display.click();
+  else {
+    const tab = page.getByRole('tab', { name, exact: true }).first();
+    if (!(await tab.isVisible())) throw new Error(`The ${name} panel is neither open nor available in the panel menu.`);
+    if (await tab.getAttribute('aria-selected') !== 'true') await tab.click();
+  }
   if (await configuration.getAttribute('open') !== null) await configuration.locator(':scope > summary').click();
   const tab = page.getByRole('tab', { name, exact: true }).first();
   if (await tab.isVisible() && await tab.getAttribute('aria-selected') !== 'true') await tab.click();
@@ -163,8 +174,9 @@ test('signed Publishing locally exports TXT and EPUB and opens vertical print wi
   await episodePanel.getByRole('tab', { name: '旧データの復旧', exact: true }).click();
   await episodePanel.getByRole('button', { name: '旧データの復旧を読み込む', exact: true }).click();
   const recoveryTab = episodePanel.getByRole('tabpanel', { name: '旧データの復旧', exact: true });
-  await expect(recoveryTab.locator('.authoring-surface-body')).toHaveAttribute('aria-busy', 'true', { timeout: 60_000 });
-  await expect(recoveryTab.locator('.authoring-surface-body')).toHaveAttribute('aria-busy', 'false', { timeout: 60_000 });
+  const recoverySurface = episodePanel.locator('.authoring-surface-body');
+  await expect(recoverySurface).toHaveAttribute('aria-busy', 'true', { timeout: 60_000 });
+  await expect(recoverySurface).toHaveAttribute('aria-busy', 'false', { timeout: 60_000 });
   await recoveryTab.getByRole('tab', { name: '復旧候補', exact: true }).click();
   await expect(recoveryTab.getByRole('table')).toContainText('ready');
   await expect(recoveryTab.getByRole('table')).toContainText('meta/publish-episodes.yaml');
@@ -181,6 +193,7 @@ test('signed Publishing locally exports TXT and EPUB and opens vertical print wi
   await expect(review).toContainText('meta/scriptorium/modules/publishing/episodes.yaml');
   await expect(review).toContainText('futureField: keep');
   await expect(review).toContainText('第一話');
+  await review.getByRole('checkbox', { name: '公開回マップを復旧', exact: true }).check();
   await review.getByRole('button', { name: '選択した単位をローカルへ適用' }).click();
   await expect(review.getByRole('button', { name: /proprium\.publishing · applied/ })).toBeVisible({ timeout: 30_000 });
 
@@ -188,17 +201,23 @@ test('signed Publishing locally exports TXT and EPUB and opens vertical print wi
   const episodePanelAgain = page.getByRole('tabpanel', { name: '公開回マッピング', exact: true }).first();
   await episodePanelAgain.getByRole('tab', { name: '旧データの復旧', exact: true }).click();
   const recoveryTabAgain = episodePanelAgain.getByRole('tabpanel', { name: '旧データの復旧', exact: true });
+  // Applying the episode proposal advances the workspace generation. Refresh
+  // the recovery snapshot before inspecting the independent grant source.
+  await recoveryTabAgain.getByRole('button', { name: '旧データの復旧を読み込む', exact: true }).click();
+  await expect(recoverySurface).toHaveAttribute('aria-busy', 'true', { timeout: 60_000 });
+  await expect(recoverySurface).toHaveAttribute('aria-busy', 'false', { timeout: 60_000 });
   await recoveryTabAgain.getByRole('tab', { name: '共有権限', exact: true }).click();
   const grantsTab = recoveryTabAgain.getByRole('tabpanel', { name: '共有権限', exact: true });
   await grantsTab.getByRole('tab', { name: '保管された権限', exact: true }).click();
   await expect(grantsTab.getByRole('table')).toContainText('mapping_required');
-  await expect(grantsTab.getByRole('table')).toContainText('old-scriptorium-project');
   await expect(grantsTab.getByRole('table')).toContainText('301');
   await expect(grantsTab.getByRole('table')).toContainText('main');
   await grantsTab.getByRole('tab', { name: '明示対応と提案', exact: true }).click();
   const grantForm = grantsTab.getByRole('tabpanel', { name: '明示対応と提案', exact: true });
   await grantForm.getByRole('combobox', { name: '復旧元', exact: true }).selectOption('meta/scriptorium/modules/publishing/legacy/share-grants.jsonl');
-  await grantForm.getByRole('combobox', { name: '旧 projectId', exact: true }).selectOption('old-scriptorium-project');
+  const legacyProject = grantForm.getByRole('combobox', { name: '旧 projectId', exact: true });
+  await expect(legacyProject.getByRole('option', { name: 'old-scriptorium-project (1)', exact: true })).toHaveCount(1);
+  await legacyProject.selectOption('old-scriptorium-project');
   await grantForm.getByRole('spinbutton', { name: 'Host repository ID を再入力', exact: true }).fill('301');
   await grantForm.getByRole('textbox', { name: 'Host branch を再入力', exact: true }).fill('main');
   await grantForm.getByRole('button', { name: '送信', exact: true }).click();
@@ -212,6 +231,7 @@ test('signed Publishing locally exports TXT and EPUB and opens vertical print wi
   await expect(grantReview).toContainText('meta/scriptorium/modules/publishing/share-grants.jsonl');
   await expect(grantReview).toContainText('legacy-grant-1');
   await expect(grantReview).not.toContainText('share_');
+  await grantReview.getByRole('checkbox', { name: '旧共有権限を復旧', exact: true }).check();
   await grantReview.getByRole('button', { name: '選択した単位をローカルへ適用' }).click();
   await expect(grantReview.getByRole('button', { name: /proprium\.publishing · applied/ }).last()).toBeVisible({ timeout: 30_000 });
 

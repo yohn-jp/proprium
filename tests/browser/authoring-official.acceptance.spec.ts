@@ -121,6 +121,7 @@ test("signed Narrative explains an unrecognized repository and leaves generic Fi
   const outline = await activateNarrativeOutline(page);
   await outline.getByRole("button", { name: "読み込む", exact: true }).click();
   await waitForNarrativeRead(outline, "作品構成は見つかりません。通常のファイル表示はそのまま利用でき");
+  await showPanel(page, "outline");
   await expect(page.getByRole("list", { name: "Repository files" }).getByRole("button", { name: "README.md" })).toBeVisible();
 });
 
@@ -167,6 +168,9 @@ test("signed Narrative reorders chapters and scenes with accessible move control
   await outline.getByRole("tab", { name: "章を並べ替え", exact: true }).click();
   const chapterOrder = outline.getByRole("textbox", { name: "章の順序（1行に1件）", exact: true });
   await expect(chapterOrder).toHaveValue("chapter-one\nchapter-two");
+  const chapterLine = outline.getByRole("spinbutton", { name: "移動する行番号", exact: true });
+  await chapterLine.fill("2");
+  await expect(chapterLine).toHaveValue("2");
   const chapterMove = outline.getByRole("button", { name: "章の順序 2行目を上へ移動", exact: true });
   if (await page.locator(".mobile-shell").count()) await chapterMove.click();
   else { await chapterMove.focus(); await page.keyboard.press("Enter"); }
@@ -183,15 +187,19 @@ test("signed Narrative reorders chapters and scenes with accessible move control
   await review.getByRole("button", { name: "選択した単位をローカルへ適用" }).last().click();
   await expect(review.getByRole("button", { name: /proprium\.narrative · applied/u })).toHaveCount(1, { timeout: 60_000 });
 
-  await showPanel(page, "outline");
+  await showPanel(page, "review");
   outline = await activateNarrativeOutline(page);
   await outline.getByRole("button", { name: "読み込む", exact: true }).click();
   await waitForNarrativeRead(outline, "このリポジトリの作品構成を認識しました。");
   await showNarrativeOutline(page);
+  await outline.getByRole("button", { name: "Volume One", exact: true }).click();
   await outline.getByRole("button", { name: "Chapter One を編集対象に選択", exact: true }).click();
   await outline.getByRole("tab", { name: "シーンを並べ替え", exact: true }).click();
   const sceneOrder = outline.getByRole("textbox", { name: "シーンの順序（1行に1件）", exact: true });
   await expect(sceneOrder).toHaveValue("scene-one\nscene-two");
+  const sceneLine = outline.getByRole("spinbutton", { name: "移動する行番号", exact: true });
+  await sceneLine.fill("2");
+  await expect(sceneLine).toHaveValue("2");
   const sceneMove = outline.getByRole("button", { name: /2行目を上へ移動/u });
   await sceneMove.click();
   await expect(sceneOrder).toHaveValue("scene-two\nscene-one");

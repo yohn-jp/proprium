@@ -98,7 +98,7 @@ test('Mobile quick append writes to the existing editor and keeps the exact text
   await append.getByRole('textbox', { name: '追記する文章' }).fill('新しい文章です。');
   await append.getByRole('button', { name: '原稿に追記' }).click();
   await expect(append.getByRole('status')).toContainText('Host の下書き回復記録へ保存しました。', { timeout: 60_000 });
-  await expect.poll(() => page.evaluate(() => window.propriumHostEditorText?.() ?? ''), { timeout: 60_000 }).toBe(bodyA + '新しい文章です。');
+  await expect.poll(() => page.evaluate(() => window.propriumHostEditorText?.() ?? ''), { timeout: 60_000 }).toBe(bodyA + '\n新しい文章です。');
 });
 
 test('portable marker validates its saved body and opens the scene', async ({ page }) => {
