@@ -63,6 +63,8 @@ async function openSceneA(page: Page) {
   if (await outlineTab.isVisible()) await outlineTab.click();
   const outline = page.getByRole('tabpanel', { name: 'Work outline', exact: true }).first();
   await outline.getByRole('button', { name: '読み込む', exact: true }).click();
+  await expect(outline.getByRole('button', { name: '更新', exact: true })).toBeVisible({ timeout: 60_000 });
+  await expect(outline.locator('.authoring-surface-body')).toHaveAttribute('aria-busy', 'false', { timeout: 60_000 });
   await outline.getByRole('tab', { name: '構成', exact: true }).click();
   await outline.getByText('第一巻', { exact: true }).click();
   await outline.getByText('始まり', { exact: true }).click();

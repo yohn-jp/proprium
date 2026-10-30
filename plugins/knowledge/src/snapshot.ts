@@ -176,7 +176,7 @@ function parseStoryEntity(file: StoryFile): StoryEntity | null {
   if (!type) return null;
   return {
     id: raw.id, type,
-    name: typeof raw.name === "string" ? raw.name : undefined,
+    name: typeof raw.name === "string" ? raw.name : typeof raw.title === "string" ? raw.title : undefined,
     aliases: Array.isArray(raw.aliases) ? raw.aliases.filter((value): value is string => typeof value === "string") : undefined,
     status: typeof raw.status === "string" ? raw.status : undefined,
     tags: Array.isArray(raw.tags) ? raw.tags.filter((value): value is string => typeof value === "string") : undefined,

@@ -7,6 +7,11 @@ async function showNarrativeOutline(page: import("@playwright/test").Page): Prom
   await page.getByRole("tabpanel", { name: "Work outline", exact: true }).first().getByRole("tab", { name: "構成", exact: true }).click();
 }
 
+async function waitForNarrativeRead(outline: import("@playwright/test").Locator, message: string): Promise<void> {
+  await expect(outline.getByRole("status").filter({ hasText: message })).toContainText(message, { timeout: 120_000 });
+  await expect(outline.locator(".authoring-surface-body")).toHaveAttribute("aria-busy", "false", { timeout: 120_000 });
+}
+
 async function activateNarrativeOutline(page: import("@playwright/test").Page): Promise<import("@playwright/test").Locator> {
   let tab = page.getByRole("tab", { name: "Work outline", exact: true }).first();
   if (!(await tab.isVisible())) {
@@ -71,7 +76,7 @@ test("signed Narrative installs and navigates a large work in the real Host", as
   if (await tab.isVisible() && await tab.getAttribute("aria-selected") !== "true") await tab.click();
   const outlinePanel = page.getByRole("tabpanel", { name: "Work outline", exact: true }).first();
   await page.getByRole("button", { name: "読み込む", exact: true }).click();
-  await expect(outlinePanel.getByRole("status")).toContainText("このリポジトリの作品構成を認識しました。");
+  await waitForNarrativeRead(outlinePanel, "このリポジトリの作品構成を認識しました。");
   await showNarrativeOutline(page);
   await expect(page.getByText("Volume One", { exact: true })).toBeVisible({ timeout: 120_000 });
   await page.getByText("Volume One", { exact: true }).click();
@@ -113,9 +118,9 @@ test("signed Narrative explains an unrecognized repository and leaves generic Fi
   await page.locator(".st-workspace-panel-menu > summary").click();
   await page.getByRole("button", { name: "Work outlineを表示する", exact: true }).click();
   await page.locator(".st-workspace-configuration > summary").click();
-  const outline = page.getByRole("tabpanel", { name: "Work outline", exact: true }).first();
+  const outline = await activateNarrativeOutline(page);
   await outline.getByRole("button", { name: "読み込む", exact: true }).click();
-  await expect(outline.getByRole("status")).toContainText("作品構成は見つかりません。通常のファイル表示はそのまま利用でき", { timeout: 60_000 });
+  await waitForNarrativeRead(outline, "作品構成は見つかりません。通常のファイル表示はそのまま利用でき");
   await expect(page.getByRole("list", { name: "Repository files" }).getByRole("button", { name: "README.md" })).toBeVisible();
 });
 
@@ -156,6 +161,7 @@ test("signed Narrative reorders chapters and scenes with accessible move control
 
   let outline = await activateNarrativeOutline(page);
   await outline.getByRole("button", { name: "読み込む", exact: true }).click();
+  await waitForNarrativeRead(outline, "このリポジトリの作品構成を認識しました。");
   await showNarrativeOutline(page);
   await outline.getByRole("button", { name: "Volume One を編集対象に選択", exact: true }).click();
   await outline.getByRole("tab", { name: "章を並べ替え", exact: true }).click();
@@ -180,6 +186,7 @@ test("signed Narrative reorders chapters and scenes with accessible move control
   await showPanel(page, "outline");
   outline = await activateNarrativeOutline(page);
   await outline.getByRole("button", { name: "読み込む", exact: true }).click();
+  await waitForNarrativeRead(outline, "このリポジトリの作品構成を認識しました。");
   await showNarrativeOutline(page);
   await outline.getByRole("button", { name: "Chapter One を編集対象に選択", exact: true }).click();
   await outline.getByRole("tab", { name: "シーンを並べ替え", exact: true }).click();
@@ -338,6 +345,8 @@ test("signed Narrative reviews and applies a scene title", async ({ page }) => {
   const tab = page.getByRole("tab", { name: "Work outline", exact: true });
   if (await tab.isVisible() && await tab.getAttribute("aria-selected") !== "true") await tab.click();
   await page.getByRole("button", { name: "読み込む", exact: true }).click();
+  const outline = page.getByRole("tabpanel", { name: "Work outline", exact: true }).first();
+  await waitForNarrativeRead(outline, "このリポジトリの作品構成を認識しました。");
   await showNarrativeOutline(page);
   await expect(page.getByText("Volume One", { exact: true })).toBeVisible({ timeout: 120_000 });
   await page.getByText("Volume One", { exact: true }).click();
@@ -409,6 +418,8 @@ test("signed Narrative reviews and applies a scene manuscript link", async ({ pa
   const tab = page.getByRole("tab", { name: "Work outline", exact: true });
   if (await tab.isVisible() && await tab.getAttribute("aria-selected") !== "true") await tab.click();
   await page.getByRole("button", { name: "読み込む", exact: true }).click();
+  const outline = page.getByRole("tabpanel", { name: "Work outline", exact: true }).first();
+  await waitForNarrativeRead(outline, "このリポジトリの作品構成を認識しました。");
   await showNarrativeOutline(page);
   await expect(page.getByText("Volume One", { exact: true })).toBeVisible({ timeout: 120_000 });
   await page.getByText("Volume One", { exact: true }).click();
