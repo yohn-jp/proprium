@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { chooseFile, expectEditorText, showPanel } from "./restored-ui.helpers.js";
@@ -20,12 +20,21 @@ async function install(page: Page, id: string, grants: string[]) {
   await expect(manager.getByRole("status")).toContainText(`${id}@`, { timeout: 60_000 });
 }
 
+async function selectAllReviewUnits(review: Locator): Promise<void> {
+  const units = review.getByRole("checkbox");
+  const count = await units.count();
+  expect(count).toBeGreaterThan(0);
+  for (let index = 0; index < count; index += 1) await units.nth(index).check();
+  await expect(review.getByRole("status")).toContainText(`${count} / ${count} 単位を選択`);
+}
+
 async function reviewProposal(page: Page, pluginId: string, decision: "apply" | "reject"): Promise<void> {
   const review = page.getByRole("region", { name: "Authoring proposals" });
   const proposal = review.getByRole("button", { name: new RegExp(`${pluginId.replaceAll(".", "\\.")} · pending`) }).last();
   await expect(proposal).toBeVisible({ timeout: 30_000 });
   await proposal.click();
   if (decision === "apply") {
+    await selectAllReviewUnits(review);
     await review.getByRole("button", { name: "選択した単位をローカルへ適用" }).click();
   } else {
     await review.getByRole("button", { name: "提案を却下" }).click();
@@ -98,6 +107,7 @@ test("signed Research review discovers Knowledge evidence, hands it to Knowledge
   await knowledgeProposal.click();
   await expect(hostReview.locator("pre")).toContainText("bible/characters/char-a.yaml");
   await expect(hostReview.locator("pre")).toContainText("黒猫");
+  await selectAllReviewUnits(hostReview);
   await hostReview.getByRole("button", { name: "選択した単位をローカルへ適用" }).click();
 
   // The new entity becomes a known term; rerun from Knowledge before reviewing a separate candidate.
