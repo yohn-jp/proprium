@@ -123,3 +123,39 @@ test("BGE uses a separate exact asset group and each scheduler action stays belo
   assert.ok(appends <= 64);
   releaseBgeReranker();
 });
+
+test("BGE resumes from the next Host-permitted sequence after cancellation and still rejects later gaps", () => {
+  calls = []; appends = 0; releases = 0; loaded = false;
+  releaseBgeReranker();
+  const start = startBgePreparation("bge_task");
+  assert.equal(start.state, "running");
+  const first = invokeStep("bge_task", 1);
+  assert.equal(first.state, "running");
+  assert.equal(first.phase, "load_tensors");
+  assert.equal(first.completed, 64);
+
+  const cancelledStep = stepBgePreparation("bge_task", 2, host() as never);
+  const pending = cancelledStep.next();
+  assert.equal(pending.done, false);
+  assert.equal(pending.value?.operation, "workspace.asset.read");
+  assert.throws(() => cancelledStep.throw(Object.assign(new Error("task cancelled"), { code: "cancelled" })),
+    (error: Error & { code?: string }) => error.code === "cancelled");
+
+  const resumedStart = startBgePreparation("bge_task");
+  assert.equal(resumedStart.state, "running");
+  assert.equal(resumedStart.completed, 0);
+  calls = [];
+  const resumed = invokeStep("bge_task", 2);
+  assert.equal(resumed.state, "running");
+  assert.equal(resumed.phase, "load_tensors");
+  assert.equal(resumed.completed, 64);
+  assert.equal(calls[0]?.file_path, BGE_MODEL.graph_path);
+  assert.equal(calls[0]?.offset, 0);
+
+  const replay = stepBgePreparation("bge_task", 2, host() as never).next();
+  assert.equal(replay.done, true);
+  assert.deepEqual(replay.value, resumed);
+  const skipped = stepBgePreparation("bge_task", 4, host() as never);
+  assert.throws(() => skipped.next(), (error: Error & { code?: string }) => error.code === "snapshot_stale");
+  releaseBgeReranker();
+});

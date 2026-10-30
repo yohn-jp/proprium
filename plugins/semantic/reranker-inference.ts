@@ -61,7 +61,7 @@ export interface BgeRerankerBindings {
 
 interface PreparationState {
   readonly taskId: string;
-  nextSequence: number;
+  nextSequence: number | undefined;
   completed: number;
   phase: BgePreparationPhase;
   graphOffset: number;
@@ -97,7 +97,7 @@ function complete(taskId: string, completed = BGE_PREPARATION_TOTAL): BgePrepara
   return { taskId, state: "complete", phase: "complete", completed, total: BGE_PREPARATION_TOTAL,
     modelId: BGE_MODEL.id, modelRevision: BGE_MODEL.revision, groupId: BGE_ASSET_GROUP_ID };
 }
-function newState(taskId: string, sequence: number): PreparationState {
+function newState(taskId: string, sequence?: number): PreparationState {
   const progress: BgePreparationProgress = { taskId, state: "running", phase: "inspect_graph", completed: 0, total: BGE_PREPARATION_TOTAL };
   return { taskId, nextSequence: sequence, completed: 0, phase: "inspect_graph", graphOffset: 0, ranges: [], tensorIndex: 0,
     tensorOffset: 0, dataOffset: 0, tensorStarted: false, tokenizerOffset: 0, tokenizerStarted: false, lastProgress: progress };
@@ -108,7 +108,9 @@ export function startBgePreparation(taskId: string): BgePreparationProgress {
   if (!/^[A-Za-z0-9_-]{1,128}$/u.test(taskId)) throw fail("invalid_input", "BGE task ID is invalid");
   if (prepared) return complete(taskId);
   engine().release();
-  preparation = newState(taskId, 1);
+  // The Host's private one-use step permit owns the first sequence. Bind to it
+  // on the first step so a same-session resume can continue at Host sequence N+1.
+  preparation = newState(taskId);
   return running(preparation);
 }
 
@@ -125,6 +127,9 @@ export function* stepBgePreparation(taskId: string, sequence: number, host: Gues
     preparation = newState(taskId, sequence);
   }
   const state = preparation;
+  // A new or explicitly restarted guest runtime has no durable cursor. Accept
+  // only the sequence the Host has already authorized, then enforce continuity.
+  state.nextSequence ??= sequence;
   if (sequence < state.nextSequence) return state.lastProgress;
   if (sequence !== state.nextSequence) throw fail("snapshot_stale", "BGE preparation sequence skipped a checkpoint");
   let reads = 0;
