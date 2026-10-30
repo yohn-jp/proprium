@@ -21,15 +21,16 @@ function action(requiresGesture = false): ActionDescriptor {
   };
 }
 
-function makeService(descriptor = action(), editorState: ConstructorParameters<typeof BrowserAuthoringService>[0]["editorState"] = () => ({ path: null, dirty: false, draft_generation: null, composing: false })) {
+function makeService(descriptor = action(), editorState: ConstructorParameters<typeof BrowserAuthoringService>[0]["editorState"] = () => ({ path: null, dirty: false, draft_generation: null, composing: false }),
+  assetProbe?: { granted: boolean; reads: Array<{ pluginId: string; caller: string }> }) {
   const calls: Array<{ caller: string; request: ActionRequest }> = [];
   const hostReads: Array<{ scope: Scope; snapshot: Snapshot }> = [];
   let sequence = 0;
   let pins = 0;
   const admitted: VerifiedActionSet = {
     plugin_id: descriptor.plugin_id, version: "1.0.0", manifest_digest: "c".repeat(64), enabled: true,
-    activation_epoch: 1, descriptors: [descriptor], dependencies: [], grants: ["workspace.identity.read"],
-    host_capabilities: ["workspace.identity.read"],
+    activation_epoch: 1, descriptors: [descriptor], dependencies: [], grants: assetProbe ? assetProbe.granted ? ["workspace.asset.read"] : [] : ["workspace.identity.read"],
+    host_capabilities: assetProbe ? ["workspace.asset.read"] : ["workspace.identity.read"],
   };
   const runtime = {
     async invoke(options: { request: ActionRequest; caller: string; resolve_host_call(call: {
@@ -37,7 +38,8 @@ function makeService(descriptor = action(), editorState: ConstructorParameters<t
     }): Promise<unknown> }): Promise<ActionResult> {
       calls.push({ caller: options.caller, request: options.request });
       const value = await options.resolve_host_call({ call_id: `${options.request.request_id}:identity`,
-        operation: "workspace.identity.read", payload: { paths: [] } });
+        operation: assetProbe ? "workspace.asset.read" : "workspace.identity.read", payload: assetProbe
+          ? { group_id: "model", file_path: "models/model.onnx", offset: 0, length: 1 } : { paths: [] } });
       return { request_id: options.request.request_id, scope: options.request.scope, snapshot: options.request.snapshot,
         ok: true, value, warnings: [] };
     },
@@ -63,7 +65,10 @@ function makeService(descriptor = action(), editorState: ConstructorParameters<t
     },
     gestures: { issue: () => ({}), consume: () => false },
     createRequestId: () => `request-${++sequence}`,
-    backends: { identityRead: async context => {
+    backends: { assetRead: assetProbe ? async (pluginId, caller) => {
+      assetProbe.reads.push({ pluginId, caller });
+      return { bytes: [1] };
+    } : undefined, identityRead: async context => {
       hostReads.push({ scope: context.scope, snapshot: context.snapshot });
       return { scope: context.scope, snapshot: context.snapshot, device_id: "device-local", legacy_project_ids: [],
         publication: { remote_commit: null, files: [] } };
@@ -88,6 +93,27 @@ test("UI background reads and MCP use the same typed Host dispatcher and selecte
   assert.equal(service.authority.isSnapshotCurrent({ scope, snapshot } as never), true);
   await service.dispose();
   assert.equal(service.authority.isSnapshotCurrent({ scope, snapshot } as never), false);
+});
+
+test("UI and MCP guest asset reads retain verified plugin attribution while direct and ungranted reads fail closed", async () => {
+  const descriptor = { ...action(), required_capabilities: ["workspace.asset.read"] };
+  const reads: Array<{ pluginId: string; caller: string }> = [];
+  const { service, calls } = makeService(descriptor, undefined, { granted: true, reads });
+  assert.equal((await service.invokeRead(pluginId, actionId, {})).ok, true);
+  assert.equal((await service.invokeMcp(pluginId, actionId, {}, "gateway", "asset-mcp")).ok, true);
+  assert.deepEqual(reads, [{ pluginId, caller: "plugin" }, { pluginId, caller: "plugin" }]);
+  assert.deepEqual(calls.map(call => call.caller), ["ui", "mcp"]);
+  await assert.rejects(service.hostPort.request("workspace.asset.read", {
+    group_id: "model", file_path: "models/model.onnx", offset: 0, length: 1,
+  }, calls[0]!.request, pluginId), error => (error as { code?: string }).code === "capability_denied");
+  assert.equal(reads.length, 2);
+  await service.dispose();
+  const denied = makeService(descriptor, undefined, { granted: false, reads });
+  const result = await denied.service.invokeRead(pluginId, actionId, {});
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.code, "capability_denied");
+  assert.equal(reads.length, 2);
+  await denied.service.dispose();
 });
 
 test("a synthetic UI event never satisfies a signed action gesture requirement", async () => {
