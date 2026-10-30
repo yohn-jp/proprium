@@ -1251,6 +1251,7 @@
         }
       },
       "required_capabilities": [
+        "workspace.file.read",
         "workspace.asset.read",
         "plugin.preferences"
       ],

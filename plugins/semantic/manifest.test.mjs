@@ -37,4 +37,7 @@ test('Semantic declarations satisfy the Host manifest contract and indexed task 
   assert.equal(step.requires_user_gesture, false);
   assert.ok(prepare.required_capabilities.includes('plugin.preferences'));
   assert.ok(step.required_capabilities.includes('workspace.asset.read'));
+  const rerank = manifest.actions.find(action => action.action_id === 'proprium.semantic.rerank');
+  assert.ok(rerank.required_capabilities.includes('workspace.file.read'), 'reranking must retain the explicit pinned source read grant');
+  assert.ok(rerank.required_capabilities.includes('plugin.preferences'));
 });

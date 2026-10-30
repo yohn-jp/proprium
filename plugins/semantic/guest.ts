@@ -1,11 +1,12 @@
-import { createGuest, type Handler } from "../shared/guest.ts";
-import { HOST_OPERATIONS, type FileChunk, type FilePage } from "../shared/operations.ts";
+import { createGuest, type GuestHost, type Handler, type HostCall } from "../shared/guest.ts";
+import { HOST_OPERATIONS, readFileVersioned, type FileChunk, type FilePage } from "../shared/operations.ts";
 import type { ActionRequest } from "../../app/src/browser/proprium/authoring/types.js";
 import { clusterTerms, EMBEDDING_MODEL, RERANKER_MODEL, type CandidateTerm } from "./core.ts";
 import { E5_MODEL, embedPassages, embeddingLoaded, ensureEmbedding, ensureEmbeddingStep, releaseEmbedding } from "./inference.ts";
 import { loadIndex, releaseSemanticIndex, startIndexBuild, stepIndexBuild, queryIndex, contradictionPage } from "./index-operations.ts";
 import { cancelSemanticTask, endSemanticTask, semanticTasks } from "./tasks.ts";
 import { BGE_MODEL, bgeRerankerLoaded, rerankBge, startBgePreparation, stepBgePreparation } from "./reranker-inference.ts";
+import { parseSemanticSourceFile, type SemanticSourcePassage } from "./source.ts";
 
 function fail(code: string, message: string): Error {
   return Object.assign(new Error(message), { code, retryable: false });
@@ -20,6 +21,69 @@ function exactObject(value: unknown, allowed: readonly string[], label: string):
 
 const SETTINGS_PATH = "meta/scriptorium/modules/semantic/settings.json";
 const MAX_LEGACY_SETTINGS_BYTES = 64 * 1024;
+const MAX_RERANK_SOURCE_FILE_BYTES = 2 * 1024 * 1024;
+const MAX_RERANK_SOURCE_BYTES = 8 * 1024 * 1024;
+const MAX_RERANK_EVIDENCE_BYTES = 128 * 1024;
+
+interface RerankInputSpan { path: string; revision: string; start: number; end: number; quote: string }
+interface RerankInputCandidate {
+  candidateId: string; entityId: string; sourcePath: string; sourceRevision: string; text: string;
+  evidence: RerankInputSpan[];
+}
+
+function sameSourceSpan(left: RerankInputSpan, right: RerankInputSpan): boolean {
+  return left.path === right.path && left.revision === right.revision && left.start === right.start &&
+    left.end === right.end && left.quote === right.quote;
+}
+
+/** Re-read bounded Host-pinned source files before BGE scores any candidate. */
+function* validateRerankEvidence(candidates: readonly RerankInputCandidate[], snapshot: ActionRequest["snapshot"],
+  host: GuestHost): Generator<HostCall, void, unknown> {
+  const required = new Set(candidates.map(candidate => candidate.sourcePath));
+  const sources = new Map<string, { revision: string; passages: SemanticSourcePassage[]; text: string }>();
+  let totalBytes = 0;
+  for (const path of required) {
+    const page = yield* host.request<FilePage>(HOST_OPERATIONS.list, { snapshot, prefix: path, limit: 1 });
+    if (!page || !Array.isArray(page.entries) || !(page.next_cursor === null || typeof page.next_cursor === "string")) {
+      throw fail("storage_unknown", "Host returned an invalid source listing for rerank evidence");
+    }
+    const entry = page.entries.find(item => item.path === path);
+    const candidate = candidates.find(item => item.sourcePath === path)!;
+    if (!entry || entry.revision !== candidate.sourceRevision) throw fail("snapshot_stale", "A rerank source revision changed");
+    if (!Number.isSafeInteger(entry.byte_length) || entry.byte_length < 0 || entry.byte_length > MAX_RERANK_SOURCE_FILE_BYTES ||
+        totalBytes + entry.byte_length > MAX_RERANK_SOURCE_BYTES) {
+      throw fail("capacity", "Rerank source files exceed the bounded verification budget");
+    }
+    const file = yield* readFileVersioned(host, snapshot, path, entry.revision);
+    if (file.bytes.byteLength !== entry.byte_length) throw fail("snapshot_stale", "Rerank source length changed");
+    let text: string;
+    try { text = new TextDecoder("utf-8", { fatal: true }).decode(file.bytes); }
+    catch { throw fail("unsupported_format", "A rerank source file is not valid UTF-8"); }
+    let entity: ReturnType<typeof parseSemanticSourceFile>;
+    try { entity = parseSemanticSourceFile(path, file.revision, text); }
+    catch { throw fail("snapshot_stale", "A rerank source cannot reproduce its Semantic evidence"); }
+    if (!entity) throw fail("snapshot_stale", "A rerank source no longer contains an indexed Semantic entity");
+    totalBytes += file.bytes.byteLength;
+    sources.set(path, { revision: file.revision, passages: entity.passages, text });
+  }
+
+  for (const candidate of candidates) {
+    const source = sources.get(candidate.sourcePath)!;
+    if (candidate.sourceRevision !== source.revision) throw fail("snapshot_stale", "A rerank source revision changed");
+    let evidenceBytes = 0;
+    for (const span of candidate.evidence) {
+      evidenceBytes += new TextEncoder().encode(span.quote).byteLength;
+      if (evidenceBytes > MAX_RERANK_EVIDENCE_BYTES || span.end > source.text.length ||
+          source.text.slice(span.start, span.end) !== span.quote) {
+        throw fail("snapshot_stale", "A rerank evidence quote no longer matches its pinned source");
+      }
+    }
+    const matchingPassage = source.passages.some(passage => passage.sourceRevision === candidate.sourceRevision &&
+      passage.sourcePath === candidate.sourcePath && passage.text === candidate.text &&
+      candidate.evidence.some(span => sameSourceSpan(span, passage.evidence)));
+    if (!matchingPassage) throw fail("snapshot_stale", "A rerank passage does not match its current source evidence");
+  }
+}
 
 function parseEmpty(raw: unknown): void {
   const input = exactObject(raw, [], "input");
@@ -98,7 +162,8 @@ const rerank: Handler = function* (raw, context, host) {
     if (typeof candidate.candidateId !== "string" || !candidate.candidateId || candidate.candidateId.length > 128 || ids.has(candidate.candidateId) ||
         typeof candidate.entityId !== "string" || !candidate.entityId || candidate.entityId.length > 256 ||
         typeof candidate.sourcePath !== "string" || !candidate.sourcePath || candidate.sourcePath.length > 4096 ||
-        candidate.sourcePath.startsWith("/") || candidate.sourcePath.includes("\\") || candidate.sourcePath.split("/").some(part => !part || part === "." || part === "..") ||
+        candidate.sourcePath.startsWith("/") || candidate.sourcePath.includes("\\") || candidate.sourcePath.includes("\0") ||
+        candidate.sourcePath.split("/").some(part => !part || part === "." || part === "..") ||
         typeof candidate.sourceRevision !== "string" || !/^[a-f0-9]{64}$/u.test(candidate.sourceRevision) ||
         (candidate.sentenceIndex !== undefined && (!Number.isSafeInteger(candidate.sentenceIndex) || (candidate.sentenceIndex as number) < 0)) ||
         typeof candidate.text !== "string" || new TextEncoder().encode(candidate.text).length > 32_768 ||
@@ -106,9 +171,10 @@ const rerank: Handler = function* (raw, context, host) {
     for (const [spanIndex, rawSpan] of candidate.evidence.entries()) {
       const span = exactObject(rawSpan, ["path", "revision", "start", "end", "quote"], `candidates[${index}].evidence[${spanIndex}]`);
       if (typeof span.path !== "string" || span.path !== candidate.sourcePath || typeof span.revision !== "string" ||
+          typeof span.quote !== "string" || !span.quote ||
           span.revision !== candidate.sourceRevision || !Number.isSafeInteger(span.start) || !Number.isSafeInteger(span.end) ||
-          (span.start as number) < 0 || (span.end as number) < (span.start as number) || (span.end as number) - (span.start as number) > 32_768 ||
-          typeof span.quote !== "string" || !span.quote || new TextEncoder().encode(span.quote).length > 32_768) {
+          (span.start as number) < 0 || (span.end as number) <= (span.start as number) || (span.end as number) - (span.start as number) > 32_768 ||
+          (span.end as number) - (span.start as number) !== span.quote.length || new TextEncoder().encode(span.quote).length > 32_768) {
         throw fail("invalid_input", `Candidate ${index} evidence is invalid`);
       }
     }
@@ -121,6 +187,7 @@ const rerank: Handler = function* (raw, context, host) {
     throw fail("capability_denied", "Enable the Host reranker preference before requesting BGE scores");
   }
   const candidates = input.candidates as Parameters<typeof rerankBge>[1];
+  yield* validateRerankEvidence(candidates as RerankInputCandidate[], context.snapshot, host);
   const scored = rerankBge(input.query, candidates, input.limit as number);
   return { snapshot: context.snapshot, model: scored.model, results: scored.results };
 };

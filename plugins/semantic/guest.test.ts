@@ -1,9 +1,20 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import { guest } from "./guest.ts";
+import { parseSemanticSourceFile } from "./source.ts";
 
 const scope = { workspace_id: "workspace-a", repository_id: 7, branch: "main", generation: "g1" };
 const snapshot = { id: "snapshot-a", local_commit: null, worktree_generation: "w1", draft_generation: null };
+const rerankSourcePath = "bible/scenes/one.yaml";
+const rerankSourceText = "id: scene-a\ntype: scene\nbody: '🌃 旅人は町へ入った。'\n";
+const revisionFor = (text: string) => createHash("sha256").update(new TextEncoder().encode(text)).digest("hex");
+const rerankSourceRevision = revisionFor(rerankSourceText);
+const rerankSourcePassage = parseSemanticSourceFile(rerankSourcePath, rerankSourceRevision, rerankSourceText)!.passages[0]!;
+const validRerankCandidate = {
+  candidateId: "candidate-1", entityId: "scene-a", sourcePath: rerankSourcePath, sourceRevision: rerankSourceRevision,
+  sentenceIndex: rerankSourcePassage.sentenceIndex, text: rerankSourcePassage.text, evidence: [rerankSourcePassage.evidence],
+};
 
 function startInvoke(actionId: string, input: Record<string, unknown>) {
   guest.initialize({ pluginId: "proprium.semantic", version: "0.1.0", workspaceId: scope.workspace_id });
@@ -24,6 +35,36 @@ function invoke(input: Record<string, unknown>) {
   const response = startInvoke("proprium.semantic.terms.cluster", input);
   guest.dispose();
   return JSON.parse(response) as Record<string, any>;
+}
+
+function rerankAfterHostReads(candidate: typeof validRerankCandidate, currentText = rerankSourceText,
+  currentRevision = rerankSourceRevision) {
+  const response = JSON.parse(startInvoke("proprium.semantic.rerank", { query: "旅人", limit: 1, candidates: [candidate] })) as Record<string, any>;
+  const operations: string[] = [];
+  let next = response;
+  for (;;) {
+    if (next.kind !== "host_call") {
+      guest.dispose();
+      return { result: next, operations };
+    }
+    operations.push(next.operation);
+    if (next.operation === "plugin.preferences.read") {
+      next = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: next.call_id, ok: true,
+        value: { found: true, value: { rerankerEnabled: true } } })));
+    } else if (next.operation === "workspace.file.list") {
+      assert.equal(next.payload.prefix, rerankSourcePath);
+      assert.equal(next.payload.snapshot.id, snapshot.id);
+      next = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: next.call_id, ok: true,
+        value: { entries: [{ path: rerankSourcePath, revision: currentRevision, byte_length: new TextEncoder().encode(currentText).length,
+          media_type: "text/yaml" }], next_cursor: null } })));
+    } else if (next.operation === "workspace.file.read") {
+      assert.equal(next.payload.path, rerankSourcePath);
+      assert.equal(next.payload.snapshot.id, snapshot.id);
+      const bytes = [...new TextEncoder().encode(currentText)];
+      next = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: next.call_id, ok: true,
+        value: { revision: currentRevision, total_bytes: bytes.length, offset: 0, bytes, next_offset: null } })));
+    } else throw new Error(`Unexpected rerank Host operation: ${next.operation}`);
+  }
 }
 
 test("guest routes term candidates through the canonical snapshot and deterministic clustering", () => {
@@ -128,16 +169,49 @@ test("BGE preparation and inference require the Host reranker preference, indepe
   assert.equal(prepare.snapshot.id, snapshot.id);
   guest.dispose();
 
-  let rerank = JSON.parse(startInvoke("proprium.semantic.rerank", { query: "旅", limit: 1, candidates: [{
-    candidateId: "candidate-1", entityId: "scene-1", sourcePath: "bible/scenes/one.yaml", sourceRevision: "a".repeat(64),
-    sentenceIndex: 0, text: "旅人は町へ入った。", evidence: [{ path: "bible/scenes/one.yaml", revision: "a".repeat(64),
-      start: 0, end: 10, quote: "旅人は町へ入った。" }],
-  }] })) as Record<string, any>;
+  let rerank = JSON.parse(startInvoke("proprium.semantic.rerank", { query: "旅", limit: 1, candidates: [validRerankCandidate] })) as Record<string, any>;
   assert.equal(rerank.operation, "plugin.preferences.read");
   rerank = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: rerank.call_id, ok: true, value: { found: true, value: { rerankerEnabled: false } } }))) as Record<string, any>;
   assert.equal(rerank.ok, false);
   assert.equal(rerank.error.code, "capability_denied");
   guest.dispose();
+});
+
+test("BGE reranking rereads and verifies the exact current UTF-16 source evidence before inference", () => {
+  const valid = rerankAfterHostReads(validRerankCandidate);
+  assert.deepEqual(valid.operations, ["plugin.preferences.read", "workspace.file.list", "workspace.file.read"]);
+  assert.equal(valid.result.ok, false);
+  assert.equal(valid.result.error.code, "provider_unavailable", "valid source must advance to the unavailable, unprepared model");
+
+  const staleRevision = rerankAfterHostReads({ ...validRerankCandidate,
+    sourceRevision: "b".repeat(64), evidence: validRerankCandidate.evidence.map(span => ({ ...span, revision: "b".repeat(64) })) });
+  assert.equal(staleRevision.result.error.code, "snapshot_stale");
+  assert.deepEqual(staleRevision.operations, ["plugin.preferences.read", "workspace.file.list"]);
+
+  const forgedQuote = validRerankCandidate.evidence[0]!.quote.replace("旅人", "旅行");
+  assert.equal(forgedQuote.length, validRerankCandidate.evidence[0]!.quote.length);
+  const mismatchedQuote = rerankAfterHostReads({ ...validRerankCandidate, evidence: [{ ...validRerankCandidate.evidence[0]!, quote: forgedQuote }] });
+  assert.equal(mismatchedQuote.result.error.code, "snapshot_stale");
+  assert.deepEqual(mismatchedQuote.operations, ["plugin.preferences.read", "workspace.file.list", "workspace.file.read"]);
+
+  const forgedText = rerankAfterHostReads({ ...validRerankCandidate, text: validRerankCandidate.text.replace("入", "出") });
+  assert.equal(forgedText.result.error.code, "snapshot_stale");
+  assert.deepEqual(forgedText.operations, ["plugin.preferences.read", "workspace.file.list", "workspace.file.read"]);
+
+  const bomText = `\uFEFF${rerankSourceText}`;
+  const bomRevision = revisionFor(bomText);
+  const bomEvidence = rerankAfterHostReads({ ...validRerankCandidate, sourceRevision: bomRevision,
+    evidence: validRerankCandidate.evidence.map(span => ({ ...span, revision: bomRevision })) }, bomText, bomRevision);
+  assert.equal(bomEvidence.result.error.code, "provider_unavailable", "BOM stripping must preserve indexed UTF-16 offsets");
+
+  const missingQuote = rerankAfterHostReads({ ...validRerankCandidate, evidence: [{ ...validRerankCandidate.evidence[0]!, quote: undefined as unknown as string }] });
+  assert.equal(missingQuote.result.error.code, "invalid_input");
+  assert.deepEqual(missingQuote.operations, [], "malformed quote shapes must fail before Host access");
+
+  const nulPath = rerankAfterHostReads({ ...validRerankCandidate, sourcePath: "bible/scenes/one.yaml\0evil",
+    evidence: [{ ...validRerankCandidate.evidence[0]!, path: "bible/scenes/one.yaml\0evil" }] });
+  assert.equal(nulPath.result.error.code, "invalid_input");
+  assert.deepEqual(nulPath.operations, [], "malformed paths must fail before Host access or model scoring");
 });
 
 test("guest rejects unknown fields and reports missing admitted model capability explicitly", () => {
