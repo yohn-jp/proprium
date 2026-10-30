@@ -16,6 +16,11 @@
 }
 
 .diagnostics-findings__header { justify-content: space-between; }
+.diagnostics-findings__source,
+.diagnostics-findings__run-hint { margin: 0; overflow-wrap: anywhere; }
+.diagnostics-findings__list > li[data-selected="true"] .diagnostics-finding { outline: 2px solid currentColor; outline-offset: 2px; }
+.diagnostics-findings__list > li:focus { outline: none; }
+.diagnostics-findings__stale { overflow-wrap: anywhere; }
 .diagnostics-findings__header h2,
 .diagnostics-finding h3 { margin: 0; }
 .diagnostics-findings__header p,
@@ -37,6 +42,7 @@
 .diagnostics-findings pre { overflow-wrap: anywhere; }
 .diagnostics-finding__decision--open,
 .diagnostics-findings__empty { opacity: 0.75; }
+.diagnostics-finding__untrusted { margin: 0; opacity: 0.8; }
 .diagnostics-migration__rows pre { max-height: 12rem; overflow: auto; white-space: pre-wrap; font-size: 0.85em; }
 .diagnostics-findings button,
 .diagnostics-findings select { font: inherit; }
