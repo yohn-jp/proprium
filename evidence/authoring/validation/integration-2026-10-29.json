@@ -1,0 +1,78 @@
+{
+  "schema": "proprium.integration-checkpoint/v1",
+  "overall": "INCOMPLETE",
+  "implementation_pr": "https://github.com/yohn-jp/proprium/pull/24",
+  "tracking_issue": "https://github.com/yohn-jp/proprium/issues/23",
+  "scope": "Incremental verification. Historical acceptance records remain historical; these checks do not certify all seven active plugins or all R01–R14 gates.",
+  "checks": [
+    {
+      "id": "host-unit-and-types",
+      "source_sha": "00a33f7",
+      "commands": ["pnpm test:browser:unit", "pnpm typecheck:browser"],
+      "status": "PASS",
+      "result": "280 unit tests passed; Host TypeScript check passed."
+    },
+    {
+      "id": "semantic-first-host-sequence",
+      "source_sha": "72cc29f",
+      "command": "pnpm --dir plugins/semantic test",
+      "status": "PASS",
+      "result": "49 domain/guest tests and one asset-build test passed; a Host first step numbered 1 succeeds while skipped checkpoints remain rejected."
+    },
+    {
+      "id": "signed-component-build",
+      "source_sha": "72a1781468e8b6476c0c94ee058bc5d07b2f9fb7",
+      "command": "node scripts/test-authoring-plugin-build.mjs",
+      "status": "PASS",
+      "registry_sha256": "1b245f0b7af8962455c058d45a2143cfd42f0069da8e4bf88afa2b4ebb51cfda",
+      "semantic_component_sha256": "1e8c7f7f3982745c8205316051939078ccda0fc0763bdc89690cdc1cdfb7e91a",
+      "result": "Eight actual v2 Components built; signed manifests, registry and dependency graph verified using ephemeral test keys. This is not a production release or browser certification."
+    },
+    {
+      "id": "canon-and-evidence",
+      "source_sha": "ab6120a",
+      "commands": ["node scripts/verify-authoring-canon.mjs --sources /home/sophia/src", "node --test scripts/authoring-feature-audit.test.mjs scripts/authoring-evidence-metadata.test.mjs scripts/build-authoring-evidence.test.mjs"],
+      "status": "PASS",
+      "result": "114 features, 136 source actions, 33 legacy MCP tools, 42 UI contributions, 937 links and 228 source paths validated; 13 evidence tests passed."
+    }
+  ],
+  "observed_browser_failures": [
+    {
+      "host_source_sha": "5ec3d1d",
+      "component_source_sha": "855a44e",
+      "status": "FAIL",
+      "operation": "Semantic source_scan",
+      "classification": "snapshot_stale",
+      "cause": "Fresh checkpoint initialization overwrote the Host's first sequence 1 with 0.",
+      "repair": "72a1781",
+      "browser_reverification": "IN_PROGRESS"
+    },
+    {
+      "host_source_sha": "238fece",
+      "component_source_sha": "72a1781",
+      "status": "FAIL",
+      "operation": "Semantic source_scan",
+      "classification": "invalid_input",
+      "cause": "The dispatcher rejected key_prefix and required an explicit plugin_id even though Host identity binding supplies it.",
+      "repair": "3e173fd",
+      "browser_reverification": "IN_PROGRESS"
+    },
+    {
+      "host_source_sha": "00a33f7",
+      "component_source_sha": "855a44e",
+      "status": "FAIL",
+      "operation": "Desktop official local-authoring outline",
+      "result": "604 persisted files were listed, but the Narrative Structure panel was empty before the editor reload assertion.",
+      "repair": "aa0752a",
+      "browser_reverification": "PASS",
+      "reverification_scope": "Focused local-authoring edit/review/apply/commit/reload: Desktop Chromium 43.4s and Mobile WebKit 51.2s. Test patch ce3fa1b, Host leaf base 9090258, signed Components from 72a1781. Full official suite and the separately patched reviewed-volume case are not certified."
+    }
+  ],
+  "acceptance": {
+    "R01": "NOT_CHECKED", "R02": "NOT_CHECKED", "R03": "NOT_CHECKED", "R04": "NOT_CHECKED",
+    "R05": "NOT_CHECKED", "R06": "NOT_CHECKED", "R07": "NOT_CHECKED", "R08": "NOT_CHECKED",
+    "R09": "FROZEN", "R10": "NOT_CHECKED", "R11": "NOT_CHECKED", "R12": "NOT_CHECKED",
+    "R13": "NOT_CHECKED", "R14": "NOT_CHECKED"
+  },
+  "acceptance_note": "R09 is Paired Writing-specific and FROZEN is distinct from PASS. Other gates remain required. Partial successes and observed failures above do not substitute for each gate's full current-source matrix; prior outcomes and pre-freeze history remain in implementation.json."
+}

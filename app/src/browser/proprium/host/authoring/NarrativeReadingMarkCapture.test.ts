@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
-import { savedSelectionRange } from "./NarrativeReadingMarkCapture.js";
+import { findMarkForSelectedRange, NarrativeReadingMarkCapture, savedSelectionRange } from "./NarrativeReadingMarkCapture.js";
 
 test("saved offsets include BOM and preserve Japanese surrogate pairs and CRLF", () => {
   const text = "漢🙂\r\n次";
@@ -16,4 +18,26 @@ test("reject mismatched body, empty/out-of-range and split surrogate selections"
   assert.throws(() => savedSelectionRange("🙂", "🙂", 1, 2), /途中/);
   const big = "a".repeat(16385);
   assert.throws(() => savedSelectionRange(big, big, 0, big.length), /16384/);
+});
+
+test("selection removes only one current mark with the exact saved UTF-16 range", () => {
+  const selected = { scene_id: "scene", offset: 1, length: 2, snippet: "漢🙂", expected_metadata_revision: "metadata", expected_manuscript_revision: "body" };
+  const current = { id: "mark-current", ...selected, position_status: "current" as const };
+  const snapshot = { metadata_revision: "metadata", manuscript_revision: "body", marks: [current] };
+  assert.deepEqual(findMarkForSelectedRange(snapshot, selected), current);
+  assert.throws(() => findMarkForSelectedRange({ ...snapshot, marks: [{ ...current, position_status: "stale" }] }, selected), /一致/);
+  assert.throws(() => findMarkForSelectedRange({ ...snapshot, marks: [{ ...current, offset: 0 }] }, selected), /一致/);
+  assert.throws(() => findMarkForSelectedRange({ ...snapshot, marks: [current, { ...current, id: "mark-duplicate" }] }, selected), /複数/);
+  assert.throws(() => findMarkForSelectedRange({ ...snapshot, manuscript_revision: "new-body" }, selected), /変更/u);
+  assert.throws(() => findMarkForSelectedRange({ ...snapshot, metadata_revision: "new-metadata" }, selected), /変更/u);
+});
+
+test("reader capture surface exposes a review-gated delete action for the selected saved range", () => {
+  const html = renderToStaticMarkup(createElement(NarrativeReadingMarkCapture, {
+    capture: () => ({ scene_id: "scene", offset: 0, length: 1, snippet: "漢", expected_metadata_revision: "meta", expected_manuscript_revision: "body" }),
+    propose: async () => undefined,
+    removeSelected: async () => undefined,
+  }));
+  assert.match(html, /選択範囲に読書マークを提案/u);
+  assert.match(html, /選択した読書マークの削除を提案/u);
 });

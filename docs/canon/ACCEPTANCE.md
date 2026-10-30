@@ -17,12 +17,12 @@
 | P0 Narrative | H0 + Scriptorium structure/reference code | Signed `proprium.narrative` installs, detects work, renders true Volume/Chapter/Scene tree, resumes/edits/recovers, creates/reorders via guarded proposal |
 | P1 Knowledge | P0 stable identities + H0 UI | Bible, graph, world/reader state, threads and source-jump working |
 | P1 Research | H0 paged snapshot (narrative labels optional) | Model-free lexical search, terms/aliases, safe navigation; can be implemented in parallel with Knowledge |
-| P1 Paired Writing | H0 proposal/action + P0 scenes | MCP scoped context, ChangeSet diff, partial approval and return-to-editor; can proceed parallel with Knowledge/Research |
+| P1 Paired Writing — FROZEN | H0 proposal/action + P0 scenes | Preserve existing MCP/context/ChangeSet requirements; paired-only delivery is frozen and remains uncertified |
 | P1 Diagnostics | H0 + P0, optional Knowledge/Research | Structure/prose/continuity evidence, stale invalidation and lint proposal; baseline in parallel |
 | P2 Speaker | P0 + Knowledge, optional Research/Diagnostics | Attribution/review queue, corrections, voice dashboard, eval reports |
 | P2 Semantic | Research, optional Knowledge | Opt-in model/embedding/rerank/contradiction enhancement with no-model fallback |
 | Early portability / P2 Publishing | P0 hierarchy and Host artifact download | Actual EPUB/plaintext/vertical-print output, reviewed episode map, honest sharing availability |
-| C Complete product | H0 + P0 + P1 + P2 | Independently distributed signed plugins, all author jobs in inventory demonstrable, Core zero-plugin PASS and acceptance matrix below PASS |
+| C Active seven-plugin recovery | H0 + P0 + active P1/P2 lanes | Independently distributed signed active plugins, active author jobs in inventory demonstrable, Core zero-plugin PASS and all applicable non-frozen acceptance rows passed; R09 remains visible as FROZEN |
 
 Only required **new generic Host capabilities** are shared prerequisites; code from legacy modules should be ported rather than reimplemented without reason. Heavy model or offline-unsupported features should provide explicit unavailable states and never block P0/P1 local writing.
 
@@ -32,7 +32,7 @@ Only required **new generic Host capabilities** are shared prerequisites; code f
 2. **Narrative lane:** hierarchy parser, exact IDs/manuscript links, continue and navigation, structure semantic operations, v1 writer plugin + fixtures. Deliver P0 vertical slice as soon as H0 is viable.
 3. **Knowledge lane:** pure domain graph/threads/world/reader/series + story Bible UI descriptors. It may port/compile pure algorithms before Host H0 completes; integration awaits Narrative IDs.
 4. **Research/Diagnostics lane:** lexical index and terminology as one plugin; diagnostics separate plugin with shared optional capabilities. Index and rule fixtures run independently.
-5. **Paired/MCP lane:** translate Scriptorium+Loom ChangeSet/Context concepts to Host action/proposal broker; do not modify Gateway tool visibility/auth contracts.
+5. **Paired/MCP lane:** FROZEN. Preserve the existing plugin and its contracts. Keep shared MCP/Gateway verification active under its own acceptance gates.
 6. **Speaker/Semantic/Publishing lanes:** import tested algorithms, build independent signed artifacts, wait only on their typed API prerequisites. Publishing outputs can be tested against a synthetic Narrative reader early.
 7. **Integration/certification lane:** owns acceptance fixtures and anti-false-green gates, source parity inventory, install/distribution and desktop/mobile workflow. It does not fabricate PASS from code review.
 
@@ -60,31 +60,36 @@ Use no private books, real access credentials or unlicensed model weights. At mi
 | R06 | Semantic structure edits | Create/edit/reorder chapter/scene and semantic metadata through reviewed multi-file preconditions, preserve unrelated YAML/frontmatter |
 | R07 | Story Knowledge | Bible/notes/character/relationships/threads/map/timeline/reader state linked and rendered, author-approved updates |
 | R08 | Search/NLP/Diagnostics | Model-free search, terms/alias ambiguity, findings with evidence, source jump, stale invalidation, lint changes as proposals |
-| R09 | MCP-first paired writing | Explicit repository ID -> context/manifest -> typed proposal -> diff/evidence -> selective author approval -> apply -> same editing location, no external self-approval |
+| R09 **FROZEN** | MCP-first paired writing | Explicit repository ID -> context/manifest -> typed proposal -> diff/evidence -> selective author approval -> apply -> same editing location, no external self-approval |
 | R10 | Speaker and heavy semantics | Human corrections and eval, optional embeddings and contradictions; no-model fallback, no cross-repo leakage |
 | R11 | Publishing | Export actual UTF-8/EPUB/vertical print data, episode metadata, honest service-conditional sharing; no implicit publish |
 | R12 | Isolation/security | Signature/ABI/capability/path validation, no arbitrary JS/DOM/credentials, cancellation, worker failure and stale results do not change Git |
 | R13 | Integration distribution | Desktop Chromium, Mobile WebKit, real Host install/enable/author UI/reload; all relevant Go/Host/plugin/registry workflows green at SAME release SHA |
 | R14 | Provenance/migration | Scriptorium parity and Loom backfill explicitly recorded per inventory row, no deleted author metadata or private fixture leaks |
 
-For every R-ID record `PASS / FAIL / BLOCKED / NOT_CHECKED` and fixture, test command, sha, workflow URL/artifact, browser/platform, exact input/output. Tests passing for a subset are not `R13 PASS`; real iOS/Android/device or live Cloudflare claims require separate physical/prod evidence. CI results belong in execution evidence, not static canon prose.
+For every R-ID record `PASS / FAIL / BLOCKED / NOT_CHECKED / FROZEN`. Executed checks record fixture, test command, SHA, workflow URL/artifact, browser/platform and exact input/output. A FROZEN row records its pre-freeze result and evidence; no new feature run is implied. `FROZEN` is a lifecycle disposition, never a pass. R09 retains its former MCP-first workflow definition but is frozen as a Paired Writing-specific product gate. This means seven-plugin recovery does not wait for R09; it does not certify any Paired Writing feature. The Paired-specific gates `accept-pw-01` through `accept-pw-11` and `accept-pw-21` are also FROZEN, with their last recorded outcomes preserved. Shared Host proposal, security, registry, MCP and mobile checks continue under H0 and applicable R02/R03/R06/R12/R13 gates. Tests passing for a subset are not `R13 PASS`; real iOS/Android/device or live Cloudflare claims require separate physical/prod evidence. CI results belong in execution evidence, not static canon prose.
+
+| Legacy gate | Current treatment | Scope kept active |
+| --- | --- | --- |
+| R09 — MCP-first paired writing | `FROZEN`; retained under the same ID, not PASS | Shared Host proposal/review, MCP/Gateway security, registry and browser distribution remain under H0, R02, R12 and R13. |
+| `accept-pw-01`–`accept-pw-11`, `accept-pw-21` | `FROZEN`; plugin-specific requirements retained | Independently owned Narrative, Knowledge, Research, Diagnostics, Speaker, Semantic, Host and Gateway acceptance remains active; no paired-only Host work is authorized. |
 
 ## Regression/non-goals
 
 - No demotion of generic Git to a novel-only product; no mandatory novel plugin or schema; no restoration of Scriptorium's Node/Fastify/OCI profile just to reuse algorithms.
 - No false-green from an installed placeholder, panels that only list names, generic JSON output, `compute-sum`, demos, WIT declarations, copied source or a green Gateway run.
 - No direct Git mutation by plugin, no auto-approved change, no auto-commit/publish, no unreviewed LLM ingestion/remote egress, no stale result applied after a different scene/draft, no clearing browser storage as a repair technique.
-- No sweeping "today restored" claim without meeting R01–R14. Priority is structured to get an actually usable writing loop first while parallelizing independent ports, not to hide unfinished functions.
+- No sweeping "today restored" claim without meeting every applicable R-ID and plugin gate. R09 is explicitly FROZEN, so the seven-plugin result may not be summarized as all R01–R14 PASS. Freeze does not hide Paired Writing's incomplete or unchecked state.
 
 ## Completion evidence format
 
-An implementation report supplies one record per feature ID: owning canon/acceptance IDs, source revision, synthetic fixture, signed artifact and registry digests, test command, browser/device class, actual input/output/receipt and `PASS|FAIL|BLOCKED|NOT_CHECKED`. Every claimed complete plugin must have immutable proof for every applicable feature, desktop/mobile author flow and migration/no-loss condition. Reports live in CI artifacts; this canon contains no changing deployment-status table. [Inventory](RECOVERY-INVENTORY.md) retains the original coverage obligation even if topology later evolves.
+An implementation report supplies one record per feature ID: owning canon/acceptance IDs, source revision, synthetic fixture, signed artifact and registry digests, test command, browser/device class, actual input/output/receipt and `PASS|FAIL|BLOCKED|NOT_CHECKED|FROZEN`. A frozen row also carries its last pre-freeze status and evidence; `FROZEN` never substitutes for the underlying `FAIL` or `NOT_CHECKED` result. Every claimed complete active plugin must have immutable proof for every applicable feature, desktop/mobile author flow and migration/no-loss condition. Reports live in CI artifacts; this canon contains no changing deployment-status table. [Inventory](RECOVERY-INVENTORY.md) retains the original coverage obligation even if topology later evolves.
 
 ## Canon acceptance versus implementation acceptance
 
 **Canon certification** verifies a complete decision contract: every recovered source action/UI/data/helper has one owner and feature row, every row links a local executable scenario specification, schemas and errors are concrete, all links/source paths resolve, required dependency graph is acyclic, and no target is described as implemented. `node scripts/verify-authoring-canon.mjs --sources /home/sophia/src` checks the structural portion. The eight plugin ledgers refine the inventory; their detailed local acceptance IDs are mandatory in addition to R01–R14. Source tests listed there are legacy evidence, not Proprium browser certification. Canon completion does not mark the implementation matrix PASS.
 
-**Implementation certification** executes the local feature scenarios and R01–R14 against signed installed artifacts and the adopted v2 schema. For each feature row, test its visible success result plus the applicable failure dimensions below. Record waived dimensions as `not_applicable` with the canon rule explaining why; no silent omission. Runtime reports stay in CI artifacts, not dated updates to this canon.
+**Implementation certification** executes active local feature scenarios and applicable R-ID gates against signed installed artifacts and the adopted v2 schema. Frozen Paired Writing scenarios remain recorded as `FROZEN`, not executed as current acceptance. For each active feature row, test its visible success result plus the applicable failure dimensions below. Record waived dimensions as `not_applicable` with the canon rule explaining why; no silent omission. Runtime reports stay in CI artifacts, not dated updates to this canon.
 
 | Dimension | Required procedure and visible pass result |
 | --- | --- |
@@ -111,7 +116,7 @@ An implementation report supplies one record per feature ID: owning canon/accept
 
 ### First usable slice and full recovery
 
-P0 is usable only when H0 and Narrative local scenarios plus R03–R06 pass with signed discovery/install, actual chapter/scene creation/reorder and recovery; a build alone is insufficient. P1 then certifies the long-work loop R07–R09 with optional providers absent and available. Basic text/EPUB export is scheduled immediately after Narrative as data portability, independent of Reader/sharing service. Full recovery still requires all eight product ledgers, P2 scenarios and R01–R14; independent high-memory Semantic unavailability on unsupported devices must match its explicit supported-platform contract, never block local writing.
+P0 is usable only when H0 and Narrative local scenarios plus R03–R06 pass with signed discovery/install, actual chapter/scene creation/reorder and recovery; a build alone is insufficient. Active seven-plugin recovery certifies the long-work loop under R07–R08 and R10–R11 with optional providers absent and available; R09 stays FROZEN until an explicit Paired Writing resume decision. Basic text/EPUB export is scheduled immediately after Narrative as data portability, independent of Reader/sharing service. The eight-plugin canon can be reported as seven active products plus one frozen, uncertified product; it must not be reported as complete eight-plugin recovery. Independent high-memory Semantic unavailability on unsupported devices must match its explicit supported-platform contract, never block local writing.
 
 ## Source delta and UI parity
 

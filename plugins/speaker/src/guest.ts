@@ -1,6 +1,6 @@
 import { parseDocument } from "yaml";
 import { createGuest, type HostCall, type Handler } from "../../shared/guest.js";
-import { HOST_OPERATIONS, invokeAction, propose, readFile } from "../../shared/operations.js";
+import { HOST_OPERATIONS, invokeAction, propose, readFile, readFileVersioned } from "../../shared/operations.js";
 import type { ActionRequest, ChangeSet, FileOperation, SourceSpan } from "../../../app/src/browser/proprium/authoring/types.js";
 import { buildMentionDictionary, hashDialogueText, runSpeakerPipeline, splitIntoSentenceOffsets, type Entity, type SpeakerAttribution, type SpeakerOverride, type SpeakerPipelineResult, type Token } from "./index.js";
 import { findMentions } from "./algorithms/mentionIndex.js";
@@ -14,6 +14,7 @@ import { computeSpeakerRuleGates, emptySpeakerRuleGates, parseSpeakerRuleGates, 
 import { parseSpeakerCorrections } from "./algorithms/speakerCorrectionLog.js";
 import { applySpeakerReranker, attributionAccuracyFromPairs, buildSpeakerRerankExamples, calibrateHighProbabilityThreshold, extractSpeakerRerankFeatures, parseSpeakerModel, scoreSpeakerRerank, SPEAKER_RERANK_FEATURE_NAMES, trainSpeakerRerankModel, type SpeakerModel } from "./algorithms/speakerReranker.js";
 import { SPEAKER_ENGINE_ID, SPEAKER_ENGINE_VERSION, SPEAKER_MODULE_VERSION } from "./engine.js";
+import { prepareSpeakerRecovery, SPEAKER_RECOVERY_FILES, type SpeakerRecoveryFileState } from "./migration.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 
 const SPEAKER_PLUGIN_ID = "proprium.speaker";
@@ -24,6 +25,7 @@ const SPEAKER_PREFIX = "meta/proprium/plugins/proprium.speaker";
 const MAX_SCENES = 500;
 const MAX_SCENE_CHARACTERS = 500_000;
 const MAX_REVIEW_ROWS = 10_000;
+const MAX_RECOVERY_BYTES = 1024 * 1024;
 const TREE_PAGE_SIZE = 128;
 const ENTITY_PAGE_SIZE = 200;
 const CONFIDENCE_RANK = { none: 0, low: 1, high: 2 } as const;
@@ -1269,6 +1271,67 @@ function* retrainingRun(input: Record<string, unknown>, context: ActionRequest, 
   return { ...output, adoption_proposal: { ...proposalReference(adoption), expected_revisions: changeset.read_set } };
 }
 
+function* speakerRecoveryFiles(host: Parameters<Handler>[2], context: ActionRequest): Generator<HostCall, SpeakerRecoveryFileState[], unknown> {
+  const files: SpeakerRecoveryFileState[] = [];
+  let totalBytes = 0;
+  for (const canonical of SPEAKER_RECOVERY_FILES) {
+    for (const path of [canonical.source_path, canonical.target_path]) {
+      const page = yield* host.request<{ entries: Array<{ path: string; revision: string; byte_length: number }>; next_cursor: string | null }>(
+        HOST_OPERATIONS.list, { snapshot: context.snapshot, prefix: path, limit: 8 });
+      if (!page || !Array.isArray(page.entries) || page.next_cursor !== null) {
+        throw Object.assign(new Error(`Host could not return the complete Speaker recovery inventory for ${path}`), { code: "capacity" });
+      }
+      const matches = page.entries.filter((entry) => entry.path === path);
+      if (matches.length > 1) throw Object.assign(new Error(`Recovery inventory repeats ${path}`), { code: "ambiguous_identity" });
+      const entry = matches[0];
+      if (!entry) {
+        files.push({ path, revision: null, bytes: null });
+        continue;
+      }
+      if (!/^[a-f0-9]{64}$/u.test(entry.revision) || !Number.isSafeInteger(entry.byte_length) || entry.byte_length < 0) {
+        throw Object.assign(new Error(`Host returned invalid recovery metadata for ${path}`), { code: "provider_unavailable" });
+      }
+      totalBytes += entry.byte_length;
+      if (totalBytes > MAX_RECOVERY_BYTES) throw Object.assign(new Error("Speaker recovery sources exceed the 1 MiB inspection limit"), { code: "capacity" });
+      const content = yield* readFileVersioned(host, context.snapshot, path, entry.revision);
+      if (content.bytes.byteLength !== entry.byte_length) throw Object.assign(new Error(`Recovery byte length changed while reading ${path}`), { code: "snapshot_stale" });
+      files.push({ path, revision: content.revision, bytes: content.bytes });
+    }
+  }
+  return files;
+}
+
+function recoveryOutput(context: ActionRequest, inventory: ReturnType<typeof prepareSpeakerRecovery>["inventory"],
+  status: "inspected" | "proposal_created" | "no_changes", proposalId: string | null, readSet: Array<{ path: string; revision: string | null }>) {
+  return {
+    status,
+    proposal_id: proposalId,
+    inventory,
+    expected_revisions: readSet,
+    provenance: { action_id: context.action_id, scope: context.scope, snapshot: context.snapshot },
+  };
+}
+
+function* recoveryInspect(input: Record<string, unknown>, context: ActionRequest, host: Parameters<Handler>[2]): Generator<HostCall, unknown, unknown> {
+  exactKeys(input, [], "speaker.recovery.inspect input");
+  const files = yield* speakerRecoveryFiles(host, context);
+  const plan = prepareSpeakerRecovery({ enabled: true, idempotency_key: "inspection-only", scope: context.scope, snapshot: context.snapshot, files });
+  const readSet = files.map((file) => ({ path: file.path, revision: file.revision }));
+  return recoveryOutput(context, plan.inventory, "inspected", null, readSet);
+}
+
+function* recoveryPropose(input: Record<string, unknown>, context: ActionRequest, host: Parameters<Handler>[2]): Generator<HostCall, unknown, unknown> {
+  exactKeys(input, ["idempotency_key"], "speaker.recovery.propose input");
+  const key = proposalKey(input.idempotency_key);
+  validateRequestKey(context, key);
+  const files = yield* speakerRecoveryFiles(host, context);
+  const plan = prepareSpeakerRecovery({ enabled: true, idempotency_key: key, scope: context.scope, snapshot: context.snapshot, files });
+  if (!plan.changeset) return recoveryOutput(context, plan.inventory, "no_changes", null,
+    files.map((file) => ({ path: file.path, revision: file.revision })));
+  const proposal = proposalReference(yield* propose(host, plan.changeset));
+  return recoveryOutput(context, plan.inventory, "proposal_created", proposal.proposal_id, plan.changeset.read_set);
+}
+
 const handlers: Record<string, Handler> = {
   "speaker.scenes.list": listScenes,
   "speaker.attribute": attribute,
@@ -1283,6 +1346,8 @@ const handlers: Record<string, Handler> = {
   "speaker.ruleGates": ruleGates,
   "speaker.evaluation.run": evaluationRun,
   "speaker.retraining.run": retrainingRun,
+  "speaker.recovery.inspect": recoveryInspect,
+  "speaker.recovery.propose": recoveryPropose,
 };
 
 const guest = createGuest(SPEAKER_PLUGIN_ID, handlers);

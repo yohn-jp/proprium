@@ -1,9 +1,8 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import type { ChangeSet, FileOperation, ReadPrecondition, Scope, Snapshot } from "../../../app/src/browser/proprium/authoring/types.js";
 
-// SPK-11 has no stable action ID in the canonical action table yet. Keep this a
-// pure inventory/compiler helper for a Host-owned migration route; do not bind
-// it to an undeclared plugin action or bypass Host proposal review.
+// SPK-11 is exposed only as an inventory read and an explicit Host-reviewed
+// proposal. This helper never mutates workspace files or applies the proposal.
 export const SPEAKER_RECOVERY_FILES = [
   {
     id: "corrections",

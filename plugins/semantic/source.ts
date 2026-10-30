@@ -50,7 +50,7 @@ interface SourceScalar {
 
 const ENTITY_PREFIXES = ["bible", "plot", "meta", "manuscript"] as const;
 const EMBEDDABLE_TYPES = new Set(["scene", "manuscript", "character", "location", "item", "faction", "event", "thread", "lore"]);
-const FRONT_MATTER_RE = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u;
+const FRONT_MATTER_RE = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u;
 
 export function isSemanticSourcePath(path: string): boolean {
   return ENTITY_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`)) && /\.(?:ya?ml|md)$/iu.test(path);
@@ -194,7 +194,7 @@ function parseYaml(yamlSource: string): { raw: Record<string, unknown>; nodes: M
 function markdownParts(path: string, content: string): { raw: Record<string, unknown>; nodes: Map<string, unknown>; parts: MappedText[] } | null {
   const match = FRONT_MATTER_RE.exec(content);
   if (!match) return { raw: {}, nodes: new Map(), parts: [trimMapped(sourceMap(content, 0))] };
-  const opening = /^---[ \t]*\r?\n/u.exec(content)?.[0];
+  const opening = /^\uFEFF?---[ \t]*\r?\n/u.exec(content)?.[0];
   if (!opening) return null;
   const yamlStart = opening.length;
   const parsed = parseYaml(match[1]!);

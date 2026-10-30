@@ -62,6 +62,7 @@ test('saved scene resumes the exact Japanese selection and viewport after reopen
   await openPanel(page, 'Work outline');
   const outline = page.getByRole('tabpanel', { name: 'Work outline', exact: true }).first();
   await outline.getByRole('button', { name: '読み込む', exact: true }).click();
+  await outline.getByRole('tab', { name: '構成', exact: true }).click();
   await outline.getByText('第一巻', { exact: true }).click();
   await outline.getByText('始まり', { exact: true }).click();
   await outline.getByText('雨の夜', { exact: true }).click();
@@ -162,6 +163,7 @@ for (const variant of ['stale', 'foreign'] as const) {
     await openPanel(page, 'Work outline');
     const outline = page.getByRole('tabpanel', { name: 'Work outline', exact: true }).first();
     await outline.getByRole('button', { name: '読み込む', exact: true }).click();
+    await outline.getByRole('tab', { name: '構成', exact: true }).click();
     await outline.getByText('第一巻', { exact: true }).click();
     await outline.getByText('始まり', { exact: true }).click();
     await outline.getByText('雨の夜', { exact: true }).click();

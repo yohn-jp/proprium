@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { sourceTextDecoder } from "../../app/src/browser/proprium/authoring/source-text.ts";
 import { parseSemanticSourceFile } from "./source.ts";
 
 function evidenceText(content: string, passage: { evidence: { start: number; end: number; quote: string } }) {
@@ -63,4 +64,18 @@ test("markdown before a later delimiter remains manuscript text", () => {
   const content = "# Prologue\n---\ntitle: Station\n---\nStory.";
   const entity = parseSemanticSourceFile("manuscript/chapter-1.md", "rev-1", content)!;
   assert.equal(entity.passages[0]!.evidence.quote, "# Prologue");
+});
+
+test("BOM-prefixed YAML front matter preserves exact Host UTF-16 spans across CRLF and emoji", () => {
+  const bytes = new TextEncoder().encode("\uFEFF---\r\ntitle: 🌸 Station\r\ndescription: '旅人は駅へ着いた。'\r\n---\r\n\r\n本文に🧭が現れる。次へ進む。\r\n");
+  const hostText = sourceTextDecoder().decode(bytes);
+  const entity = parseSemanticSourceFile("manuscript/chapter-1.md", "rev-bom", hostText)!;
+
+  assert.equal(hostText.charCodeAt(0), 0xfeff);
+  assert.equal(entity.name, "🌸 Station");
+  assert.deepEqual(entity.passages.map(({ text }) => text), ["本文に🧭が現れる。", "次へ進む。", "旅人は駅へ着いた。"]);
+  for (const passage of entity.passages) {
+    assert.equal(passage.evidence.quote, hostText.slice(passage.evidence.start, passage.evidence.end));
+    assert.equal(passage.evidence.start, hostText.indexOf(passage.evidence.quote));
+  }
 });

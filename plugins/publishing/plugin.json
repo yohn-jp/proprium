@@ -1100,6 +1100,952 @@
         "ui"
       ],
       "requires_user_gesture": true
+    },
+    {
+      "plugin_id": "proprium.publishing",
+      "action_id": "proprium.publishing.recovery.inspect",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "target_path": {
+            "const": "meta/scriptorium/modules/publishing/episodes.yaml"
+          },
+          "episode_sources": {
+            "type": "array",
+            "maxItems": 2,
+            "items": {
+              "type": "object",
+              "properties": {
+                "source_path": {
+                  "type": "string",
+                  "maxLength": 512
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 700
+                },
+                "state": {
+                  "enum": [
+                    "absent",
+                    "invalid",
+                    "ready",
+                    "already_imported",
+                    "conflict"
+                  ]
+                },
+                "source_revision": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 64
+                },
+                "target_revision": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 64
+                },
+                "episode_count": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 10000
+                },
+                "detail": {
+                  "type": "string",
+                  "maxLength": 100
+                }
+              },
+              "required": [
+                "source_path",
+                "label",
+                "state",
+                "source_revision",
+                "target_revision",
+                "episode_count",
+                "detail"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "importable_episode_sources": {
+            "type": "array",
+            "maxItems": 2,
+            "items": {
+              "type": "object",
+              "properties": {
+                "source_path": {
+                  "type": "string",
+                  "maxLength": 512
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 700
+                },
+                "state": {
+                  "enum": [
+                    "absent",
+                    "invalid",
+                    "ready",
+                    "already_imported",
+                    "conflict"
+                  ]
+                },
+                "source_revision": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 64
+                },
+                "target_revision": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 64
+                },
+                "episode_count": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 10000
+                },
+                "detail": {
+                  "type": "string",
+                  "maxLength": 100
+                }
+              },
+              "required": [
+                "source_path",
+                "label",
+                "state",
+                "source_revision",
+                "target_revision",
+                "episode_count",
+                "detail"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "host_recovery_sources": {
+            "type": "array",
+            "maxItems": 2,
+            "items": {
+              "type": "object",
+              "properties": {
+                "source_path": {
+                  "enum": [
+                    "app-state/share-tokens.json",
+                    "share-tokens.json"
+                  ]
+                },
+                "state": {
+                  "const": "host_recovery_required"
+                },
+                "detail": {
+                  "type": "string",
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "source_path",
+                "state",
+                "detail"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "import_available": {
+            "type": "boolean"
+          },
+          "grant_sources": {
+            "type": "array",
+            "maxItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "source_path": {
+                  "const": "meta/scriptorium/modules/publishing/legacy/share-grants.jsonl"
+                },
+                "state": {
+                  "enum": [
+                    "absent",
+                    "invalid",
+                    "empty",
+                    "unavailable",
+                    "mapping_required"
+                  ]
+                },
+                "source_revision": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 64
+                },
+                "target_revision": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 64
+                },
+                "grant_count": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000
+                },
+                "project_ids": {
+                  "type": "array",
+                  "maxItems": 1000,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  }
+                },
+                "target_repository_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "target_branch": {
+                  "type": "string",
+                  "maxLength": 1024
+                },
+                "detail": {
+                  "type": "string",
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "source_path",
+                "state",
+                "source_revision",
+                "target_revision",
+                "grant_count",
+                "project_ids",
+                "target_repository_id",
+                "target_branch",
+                "detail"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "importable_grant_sources": {
+            "type": "array",
+            "maxItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "source_path": {
+                  "const": "meta/scriptorium/modules/publishing/legacy/share-grants.jsonl"
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 600
+                }
+              },
+              "required": [
+                "source_path",
+                "label"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "legacy_project_options": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 600
+                }
+              },
+              "required": [
+                "value",
+                "label"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "grant_import_available": {
+            "type": "boolean"
+          },
+          "mapping_target": {
+            "type": "object",
+            "properties": {
+              "repository_id": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "branch": {
+                "type": "string",
+                "maxLength": 1024
+              }
+            },
+            "required": [
+              "repository_id",
+              "branch"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "target_path",
+          "episode_sources",
+          "importable_episode_sources",
+          "host_recovery_sources",
+          "import_available",
+          "grant_sources",
+          "importable_grant_sources",
+          "legacy_project_options",
+          "grant_import_available",
+          "mapping_target"
+        ],
+        "additionalProperties": false
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.publishing",
+      "action_id": "proprium.publishing.recovery.propose",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_path": {
+            "enum": [
+              "meta/publish-episodes.yaml",
+              "meta/scriptorium/modules/publishing/legacy/files/meta/publish-episodes.yaml"
+            ]
+          }
+        },
+        "required": [
+          "source_path"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "change_set_id": true,
+          "proposal_id": true,
+          "status": true,
+          "preview": true,
+          "source_path": true,
+          "target_path": true,
+          "episode_count": true
+        },
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "change_set_id": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "proposal_id": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "status": {
+                "const": "proposed"
+              },
+              "preview": {
+                "type": "object",
+                "properties": {
+                  "source_path": {
+                    "enum": [
+                      "meta/publish-episodes.yaml",
+                      "meta/scriptorium/modules/publishing/legacy/files/meta/publish-episodes.yaml"
+                    ]
+                  },
+                  "target_path": {
+                    "const": "meta/scriptorium/modules/publishing/episodes.yaml"
+                  },
+                  "episode_count": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  }
+                },
+                "required": [
+                  "source_path",
+                  "target_path",
+                  "episode_count"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "change_set_id",
+              "proposal_id",
+              "status",
+              "preview"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "already_imported"
+              },
+              "source_path": {
+                "enum": [
+                  "meta/publish-episodes.yaml",
+                  "meta/scriptorium/modules/publishing/legacy/files/meta/publish-episodes.yaml"
+                ]
+              },
+              "target_path": {
+                "const": "meta/scriptorium/modules/publishing/episodes.yaml"
+              },
+              "episode_count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              }
+            },
+            "required": [
+              "status",
+              "source_path",
+              "target_path",
+              "episode_count"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": true
+    },
+    {
+      "plugin_id": "proprium.publishing",
+      "action_id": "proprium.publishing.recovery.grants.propose",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_path": {
+            "const": "meta/scriptorium/modules/publishing/legacy/share-grants.jsonl"
+          },
+          "legacy_project_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "repository_id_confirmation": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "branch_confirmation": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        },
+        "required": [
+          "source_path",
+          "legacy_project_id",
+          "repository_id_confirmation",
+          "branch_confirmation"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "change_set_id": true,
+          "proposal_id": true,
+          "status": true,
+          "preview": true,
+          "source_path": true,
+          "target_path": true,
+          "grant_count": true,
+          "legacy_project_id": true,
+          "repository_id": true,
+          "branch": true
+        },
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "change_set_id": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "proposal_id": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "status": {
+                "const": "proposed"
+              },
+              "preview": {
+                "type": "object",
+                "properties": {
+                  "source_path": {
+                    "const": "meta/scriptorium/modules/publishing/legacy/share-grants.jsonl"
+                  },
+                  "target_path": {
+                    "const": "meta/scriptorium/modules/publishing/share-grants.jsonl"
+                  },
+                  "legacy_project_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "repository_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "branch": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "grant_count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000
+                  }
+                },
+                "required": [
+                  "source_path",
+                  "target_path",
+                  "legacy_project_id",
+                  "repository_id",
+                  "branch",
+                  "grant_count"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "change_set_id",
+              "proposal_id",
+              "status",
+              "preview"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "already_imported"
+              },
+              "source_path": {
+                "const": "meta/scriptorium/modules/publishing/legacy/share-grants.jsonl"
+              },
+              "target_path": {
+                "const": "meta/scriptorium/modules/publishing/share-grants.jsonl"
+              },
+              "grant_count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+              },
+              "legacy_project_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "repository_id": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "branch": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              }
+            },
+            "required": [
+              "status",
+              "source_path",
+              "target_path",
+              "grant_count",
+              "legacy_project_id",
+              "repository_id",
+              "branch"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": true
+    },
+    {
+      "plugin_id": "proprium.publishing",
+      "action_id": "proprium.publishing.recovery.hostgrants.propose",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_name": {
+            "enum": [
+              "app-state/share-tokens.json",
+              "share-tokens.json"
+            ]
+          },
+          "source_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "legacy_project_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "repository_id_confirmation": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "branch_confirmation": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "grants": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1000,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "projectId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "scope": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 512
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "project",
+                            "volume",
+                            "chapter",
+                            "scene"
+                          ]
+                        },
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 512
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "id"
+                      ],
+                      "additionalProperties": false,
+                      "maxProperties": 128,
+                      "patternProperties": {
+                        "^.{1,128}$": true
+                      }
+                    }
+                  ]
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                "tokenHash": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$",
+                  "minLength": 64,
+                  "maxLength": 64
+                },
+                "createdAt": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "expiresAt": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "lastUsedAt": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "revokedAt": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "version": {
+                  "const": 1
+                },
+                "grantVersion": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "revocationVersion": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "id",
+                "projectId",
+                "scope",
+                "label",
+                "tokenHash",
+                "createdAt",
+                "expiresAt"
+              ],
+              "additionalProperties": false,
+              "maxProperties": 128,
+              "patternProperties": {
+                "^.{1,128}$": true
+              }
+            }
+          }
+        },
+        "required": [
+          "source_name",
+          "source_sha256",
+          "legacy_project_id",
+          "repository_id_confirmation",
+          "branch_confirmation",
+          "grants"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "change_set_id": true,
+          "proposal_id": true,
+          "status": true,
+          "preview": true,
+          "source_name": true,
+          "source_sha256": true,
+          "legacy_project_id": true,
+          "repository_id": true,
+          "branch": true,
+          "target_path": true,
+          "grant_count": true,
+          "added_count": true
+        },
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "change_set_id": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "proposal_id": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "status": {
+                "const": "proposed"
+              },
+              "preview": {
+                "type": "object",
+                "properties": {
+                  "source_name": {
+                    "enum": [
+                      "app-state/share-tokens.json",
+                      "share-tokens.json"
+                    ]
+                  },
+                  "source_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "minLength": 64,
+                    "maxLength": 64
+                  },
+                  "legacy_project_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "repository_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "branch": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "target_path": {
+                    "const": "meta/scriptorium/modules/publishing/share-grants.jsonl"
+                  },
+                  "grant_count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000
+                  },
+                  "added_count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000
+                  }
+                },
+                "required": [
+                  "source_name",
+                  "source_sha256",
+                  "legacy_project_id",
+                  "repository_id",
+                  "branch",
+                  "target_path",
+                  "grant_count",
+                  "added_count"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "change_set_id",
+              "proposal_id",
+              "status",
+              "preview"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "already_imported"
+              },
+              "source_name": {
+                "enum": [
+                  "app-state/share-tokens.json",
+                  "share-tokens.json"
+                ]
+              },
+              "source_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "minLength": 64,
+                "maxLength": 64
+              },
+              "legacy_project_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "repository_id": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "branch": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "target_path": {
+                "const": "meta/scriptorium/modules/publishing/share-grants.jsonl"
+              },
+              "grant_count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+              },
+              "added_count": {
+                "const": 0
+              }
+            },
+            "required": [
+              "status",
+              "source_name",
+              "source_sha256",
+              "legacy_project_id",
+              "repository_id",
+              "branch",
+              "target_path",
+              "grant_count",
+              "added_count"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": true
     }
   ],
   "ui": [
@@ -1756,6 +2702,239 @@
                   }
                 }
               }
+            }
+          },
+          {
+            "id": "recovery",
+            "title": "旧データの復旧",
+            "body": {
+              "id": "publishing.episode-map.recovery.tabs",
+              "type": "tabs",
+              "title": "旧データの復旧",
+              "load_actions": [
+                {
+                  "key": "recovery",
+                  "action_id": "proprium.publishing.recovery.inspect",
+                  "input_template": {}
+                }
+              ],
+              "tabs": [
+                {
+                  "id": "sources",
+                  "title": "復旧候補",
+                  "body": {
+                    "id": "publishing.episode-map.recovery.sources",
+                    "type": "table",
+                    "title": "公開回マップの復旧候補",
+                    "description": "候補の原本は保持されます。対象ファイルが存在する場合は内容を上書きせず、Host に状態を確認します。",
+                    "rows": {
+                      "data_key": "load.recovery.episode_sources"
+                    },
+                    "columns": [
+                      {
+                        "key": "source_path",
+                        "label": "原本"
+                      },
+                      {
+                        "key": "state",
+                        "label": "状態"
+                      },
+                      {
+                        "key": "episode_count",
+                        "label": "公開回数"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "import",
+                  "title": "復旧提案",
+                  "body": {
+                    "id": "publishing.episode-map.recovery.form",
+                    "type": "form",
+                    "title": "旧公開回マップを提案",
+                    "description": "現在の正規ファイルが存在しない場合だけ、検証した原本バイトを同じメタデータ形式で提案します。原本は削除・変更しません。提案後は Host の差分を確認して承認してください。",
+                    "confirmation": {
+                      "title": "公開回マップの復旧を提案",
+                      "message": "選択した原本と正規の保存先を確認してください。Host が原本のリビジョンと保存先の未作成状態を固定した提案を作ります。",
+                      "continue_label": "復旧提案を作成",
+                      "cancel_label": "キャンセル"
+                    },
+                    "fields": [
+                      {
+                        "id": "source_path",
+                        "label": "復旧元",
+                        "type": "enum",
+                        "required": true,
+                        "options": {
+                          "data_key": "load.recovery.importable_episode_sources"
+                        },
+                        "option_value_key": "source_path",
+                        "option_label_key": "label"
+                      }
+                    ],
+                    "submit": {
+                      "action_id": "proprium.publishing.recovery.propose",
+                      "input_template": {
+                        "source_path": {
+                          "data_key": "form.source_path"
+                        }
+                      }
+                    },
+                    "submit_when": {
+                      "data_key": "load.recovery.import_available"
+                    },
+                    "unavailable_message": "復旧可能な公開回マップがありません。正規ファイルが異なる内容で存在する場合は、原本を保持して競合を解決してください。"
+                  }
+                },
+                {
+                  "id": "grants",
+                  "title": "共有権限",
+                  "body": {
+                    "id": "publishing.recovery.grant-tabs",
+                    "type": "tabs",
+                    "title": "旧共有権限の復旧",
+                    "tabs": [
+                      {
+                        "id": "retained",
+                        "title": "保管された権限",
+                        "body": {
+                          "id": "publishing.recovery.grant-sources",
+                          "type": "table",
+                          "title": "保管済み共有権限の復旧状態",
+                          "description": "旧 projectId は自動対応しません。復旧提案では、現在の Host repository ID と branch を明示確認します。原本は保持されます。",
+                          "rows": {
+                            "data_key": "load.recovery.grant_sources"
+                          },
+                          "columns": [
+                            {
+                              "key": "source_path",
+                              "label": "原本"
+                            },
+                            {
+                              "key": "state",
+                              "label": "状態"
+                            },
+                            {
+                              "key": "grant_count",
+                              "label": "権限数"
+                            },
+                            {
+                              "key": "target_repository_id",
+                              "label": "Host repository ID"
+                            },
+                            {
+                              "key": "target_branch",
+                              "label": "Host branch"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "id": "host-local",
+                        "title": "ブラウザー内の旧データ",
+                        "body": {
+                          "id": "publishing.recovery.host-sources",
+                          "type": "table",
+                          "title": "Host が所有する旧共有データ",
+                          "description": "これらのファイルはリポジトリ外のブラウザー内にあります。現在の Host identity API では未接続のため、Host の専用復旧 UI を使用してください。プラグインは原本を読みません。",
+                          "rows": {
+                            "data_key": "load.recovery.host_recovery_sources"
+                          },
+                          "columns": [
+                            {
+                              "key": "source_path",
+                              "label": "原本名"
+                            },
+                            {
+                              "key": "state",
+                              "label": "状態"
+                            },
+                            {
+                              "key": "detail",
+                              "label": "復旧経路"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "id": "mapping",
+                        "title": "明示対応と提案",
+                        "body": {
+                          "id": "publishing.recovery.grant-map",
+                          "type": "form",
+                          "title": "ハッシュ済み共有権限を提案",
+                          "description": "上の復旧状態に表示された旧 projectId を選び、Host repository ID と branch を同じ値で入力してください。異なるID/branchや既存内容との競合は提案されません。原本を削除せず、Host の差分確認へ送ります。",
+                          "confirmation": {
+                            "title": "旧共有権限の復旧を提案",
+                            "message": "選択した旧 projectId を現在の Host repository ID と branch に明示対応します。公開先はローカルの正規 grant file で、Host 承認後もリモート公開までは利用できません。",
+                            "continue_label": "復旧提案を作成",
+                            "cancel_label": "キャンセル"
+                          },
+                          "fields": [
+                            {
+                              "id": "source_path",
+                              "label": "復旧元",
+                              "type": "enum",
+                              "required": true,
+                              "options": {
+                                "data_key": "load.recovery.importable_grant_sources"
+                              },
+                              "option_value_key": "source_path",
+                              "option_label_key": "label"
+                            },
+                            {
+                              "id": "legacy_project_id",
+                              "label": "旧 projectId",
+                              "type": "enum",
+                              "required": true,
+                              "options": {
+                                "data_key": "load.recovery.legacy_project_options"
+                              },
+                              "option_value_key": "value",
+                              "option_label_key": "label"
+                            },
+                            {
+                              "id": "repository_id_confirmation",
+                              "label": "Host repository ID を再入力",
+                              "type": "integer",
+                              "required": true
+                            },
+                            {
+                              "id": "branch_confirmation",
+                              "label": "Host branch を再入力",
+                              "type": "string",
+                              "required": true,
+                              "max_length": 1024
+                            }
+                          ],
+                          "submit": {
+                            "action_id": "proprium.publishing.recovery.grants.propose",
+                            "input_template": {
+                              "source_path": {
+                                "data_key": "form.source_path"
+                              },
+                              "legacy_project_id": {
+                                "data_key": "form.legacy_project_id"
+                              },
+                              "repository_id_confirmation": {
+                                "data_key": "form.repository_id_confirmation"
+                              },
+                              "branch_confirmation": {
+                                "data_key": "form.branch_confirmation"
+                              }
+                            }
+                          },
+                          "submit_when": {
+                            "data_key": "load.recovery.grant_import_available"
+                          },
+                          "unavailable_message": "有効なハッシュ済み権限または Host-bound repository がありません。既存の正規 grant file は異なる内容であれば上書きできません。"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
             }
           }
         ]

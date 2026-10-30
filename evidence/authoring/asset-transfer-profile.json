@@ -1,0 +1,121 @@
+{
+  "schema": "proprium.asset-transfer-profile/v1",
+  "measured_at_utc": "2026-10-28T22:47:43Z",
+  "scope": "Synthetic AssetGroupBroker range-read microbenchmark; not a full browser or model-inference benchmark.",
+  "environment": {
+    "runtime": "Node.js v24.21.0",
+    "digest": "WebCrypto SHA-256",
+    "baseline_commit": "75816593cec3dbca9080ec7073679ab3998993a7",
+    "profiled_optimization_commit": "696fc2f",
+    "baseline": "AssetGroupBroker before scoped verified-chunk LRU",
+    "optimized": "AssetGroupBroker with 32 MiB grant-scoped verified-chunk LRU"
+  },
+  "method": {
+    "chunk_bytes": 16777216,
+    "chunk_source": "Deterministic synthetic immutable chunks, admitted and verified before timing each run.",
+    "request_offsets": "Contiguous, non-overlapping ranges beginning at offset zero in the same chunk.",
+    "checks": [
+      "Every returned byte in every measured range was compared with the deterministic source bytes.",
+      "The output checksum matched between baseline and optimized runs for each workload.",
+      "Store getChunk calls and returned bytes were counted after admission.",
+      "WebCrypto SHA-256 calls and input bytes were counted during range reads."
+    ],
+    "limits": [
+      "The 1,900-read and 9,000-read cases use synthetic 8 KiB and 1 KiB ranges; they do not reproduce the actual engine's 256 KiB requests or unique-chunk counts.",
+      "The separate 64 MiB case uses four 16 MiB chunks and 256 KiB requests, with returned ranges reduced by the JSON wire ceiling; it is still a sample, not a captured model trace.",
+      "No model startup or inference time is extrapolated from these profiles. They do not establish browser IndexedDB latency, browser memory pressure, model download time, or inference latency."
+    ]
+  },
+  "workloads": [
+    {
+      "name": "e5-read-count-synthetic-8KiB-ranges",
+      "read_count": 1900,
+      "range_bytes": 8192,
+      "requested_and_served_bytes": 15564800,
+      "response_checksum": 1984512000,
+      "baseline": {
+        "elapsed_ms": 40601.08,
+        "store_loads": 1900,
+        "store_bytes_loaded": 31876710400,
+        "sha256_calls": 1900,
+        "sha256_input_bytes": 31876710400
+      },
+      "optimized": {
+        "elapsed_ms": 594.1,
+        "store_loads": 1,
+        "store_bytes_loaded": 16777216,
+        "sha256_calls": 1,
+        "sha256_input_bytes": 16777216
+      },
+      "elapsed_speedup": 68.34
+    },
+    {
+      "name": "bge-read-count-synthetic-1KiB-ranges",
+      "read_count": 9000,
+      "range_bytes": 1024,
+      "requested_and_served_bytes": 9216000,
+      "response_checksum": 1175040000,
+      "baseline": {
+        "elapsed_ms": 157205.82,
+        "store_loads": 9000,
+        "store_bytes_loaded": 150994944000,
+        "sha256_calls": 9000,
+        "sha256_input_bytes": 150994944000
+      },
+      "optimized": {
+        "elapsed_ms": 387.91,
+        "store_loads": 1,
+        "store_bytes_loaded": 16777216,
+        "sha256_calls": 1,
+        "sha256_input_bytes": 16777216
+      },
+      "elapsed_speedup": 405.26
+    },
+    {
+      "name": "64MiB-four-chunk-256KiB-wire-limited-sample",
+      "chunk_count": 4,
+      "chunk_bytes": 16777216,
+      "read_count": 257,
+      "requested_range_bytes": 262144,
+      "max_returned_range_bytes": 262092,
+      "requested_file_bytes": 67108864,
+      "served_bytes": 67108864,
+      "response_checksum": 4227858432,
+      "baseline": {
+        "elapsed_ms": 8320.35,
+        "store_loads": 260,
+        "store_bytes_loaded": 4362076160,
+        "sha256_calls": 260,
+        "sha256_input_bytes": 4362076160
+      },
+      "optimized": {
+        "elapsed_ms": 3053.5,
+        "store_loads": 4,
+        "store_bytes_loaded": 67108864,
+        "sha256_calls": 4,
+        "sha256_input_bytes": 67108864
+      },
+      "elapsed_speedup": 2.72
+    }
+  ],
+  "security_checks": [
+    "Signed manifest current-reference resolution remains on every plugin read.",
+    "Cache entries are keyed by exact plugin, group, scope, grant instance, and chunk path and are discarded on plugin/scope revocation or explicit group clear.",
+    "A late asynchronous read is denied after plugin revocation or cache clear.",
+    "Corrupt stored bytes are not cached and invalidate the scoped grant.",
+    "Plugin response-array mutation cannot modify broker-owned cached bytes.",
+    "LRU storage is capped at 33554432 bytes.",
+    "Verified manifest persistence is capped at 32 records and 8388608 total bytes, uses digest-keyed records, and validates exact current signed-reference metadata plus manifest SHA-256 on reuse.",
+    "Explicit group clear removes cached manifests and chunk records; asynchronous manifest caching is invalidated across clear races."
+  ],
+  "implementation_notes": [
+    "IndexedDB database version 2 adds the manifests object store while preserving the existing chunks object store and records.",
+    "The version 1 to 2 IndexedDB migration path is implemented but was not exercised by this in-memory broker test suite."
+  ],
+  "verification": {
+    "tests": "pnpm exec node --import tsx --test src/browser/proprium/authoring/assets.test.ts",
+    "test_result": "21 passed",
+    "typecheck": "pnpm --dir packages/contracts build && pnpm --dir app typecheck",
+    "typecheck_result": "passed"
+  }
+}

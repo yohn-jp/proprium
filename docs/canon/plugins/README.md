@@ -7,13 +7,15 @@ Each row is **one independently versioned, signed plugin product**, not a mandat
 | P0 | [`proprium.narrative`](NARRATIVE.md) | Work structure, scene selection, continue writing and safe authoring | Generic Host and new typed UI/file capabilities |
 | P1a | [`proprium.knowledge`](KNOWLEDGE.md) | Bible, character/entity graph, threads, timeline, world and reader state | Narrative identity and revision model |
 | P1b | [`proprium.research`](RESEARCH.md) | Fast lexical search, terminology and lightweight Japanese NLP | Host paged reads; narrative for scene-aware results |
-| P1c | [`proprium.paired-writing`](PAIRED-WRITING.md) | MCP context + ChangeSets + partial author approval/return-to-writing | Narrative, Host action/proposal/review bridge |
+| P1c — FROZEN | [`proprium.paired-writing`](PAIRED-WRITING.md) | Preserved MCP context + ChangeSets + author review requirements; feature development frozen | Narrative, Host action/proposal/review bridge |
 | P1d | [`proprium.diagnostics`](DIAGNOSTICS.md) | Structural and prose diagnostics with provenance and fix proposals | Narrative; optional knowledge/research enrichments |
 | P2a | [`proprium.speaker`](SPEAKER.md) | Dialogue attribution, confirmation queue, voice consistency and evaluation | Narrative + Knowledge; Research/Diagnostics capabilities if available |
 | P2b | [`proprium.semantic`](SEMANTIC.md) | Optional embedding similarity, reranking, term clusters and contradiction candidates | Research + optional Knowledge; never basic-search dependency |
 | Early text/EPUB, P2 advanced | [`proprium.publishing`](PUBLISHING.md) | EPUB, plain text, vertical print, episode map and safe shared publication | Narrative; service-only features optional |
 
 Install does not mean enable; enable does not mean model execution. A Writer preset can recommend/enable the authoring stack after author consent, but zero-plugin Git still works. Plugin-to-plugin calls are **typed capability uses at pinned revision**; no plugin directly reads another plugin's private storage. If optional dependencies are absent, disable **only** the affected augmentation and truthfully report unavailable.
+
+Paired Writing's frozen requirements remain inventoried and are not certified by the lifecycle label. Shared Host, proposal, plugin-installation, security and MCP acceptance remains active under the owning product and R-ID gates.
 
 Every specification uses the same checklist:
 

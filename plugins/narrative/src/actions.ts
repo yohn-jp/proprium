@@ -538,7 +538,10 @@ function* executeAction(host: NarrativeHost, request: ActionRequest): Generator<
       const limit = input.limit === undefined ? TREE_LIMIT : positiveInteger(input.limit, "limit", 200);
       const work = yield* readWorkSnapshot(host, request);
       assertTreeRevision(input, work);
-      const rows = treeRows(work, parentId);
+      // Keep the root outline usable for recognition diagnostics even when known
+      // hierarchy paths contain no valid volume root. The lower-level tree
+      // action continues to fail closed for callers that require usable rows.
+      const rows = parentId === null && work.status === "malformed" ? [] : treeRows(work, parentId);
       const offset = input.cursor === undefined ? 0 : parseTreeCursor(nonEmptyString(input.cursor, "cursor"), request.snapshot, parentId, work.treeRevision);
       if (offset > rows.length) fail("snapshot_stale", "Hierarchy cursor is beyond this sibling list");
       const selectedId = input.selected_id === undefined ? null : nonEmptyString(input.selected_id, "selected_id");
@@ -570,7 +573,7 @@ function* executeAction(host: NarrativeHost, request: ActionRequest): Generator<
         } } });
       }
       const nextOffset = offset + Math.min(limit, rows.length - offset);
-      return { parent_id: parentId, items, selected: selectedRow ? treeItem(selectedRow) : null,
+      return { parent_id: parentId, status: work.status, items, selected: selectedRow ? treeItem(selectedRow) : null,
         can_create_chapter: selectedRow?.kind === "volume", can_create_scene: selectedRow?.kind === "chapter",
         selected_children_ids: selectedRow && selectedRow.kind !== "scene" ? treeRows(work, selectedRow.id).map(row => row.id) : [], next_cursor: nextOffset < rows.length ? treeCursor(request.snapshot, parentId, work.treeRevision, nextOffset) : null,
         previous_cursor: offset > 0 ? treeCursor(request.snapshot, parentId, work.treeRevision, Math.max(0, offset - limit)) : null,

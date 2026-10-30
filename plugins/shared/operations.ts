@@ -19,8 +19,12 @@ export const HOST_OPERATIONS = {
   propose: "workspace.change.propose",
   stage: "workspace.change.stage",
   cacheGet: "workspace.derived.cache.get",
+  cacheGetPrevious: "workspace.derived.cache.get_previous",
   cachePut: "workspace.derived.cache.put",
   cacheEvict: "workspace.derived.cache.evict",
+  cacheEvictPrevious: "workspace.derived.cache.evict_previous",
+  cacheEvictPrefix: "workspace.derived.cache.evict_prefix",
+  cacheEvictPreviousPrefix: "workspace.derived.cache.evict_previous_prefix",
   preferencesRead: "plugin.preferences.read",
 } as const;
 

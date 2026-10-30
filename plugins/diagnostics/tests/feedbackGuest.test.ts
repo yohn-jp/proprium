@@ -91,5 +91,50 @@ test("feedback decisions are replay-bound, timestamped and proposed with exact s
   assert.equal(secondEntry.updatedAt, "2026-10-26T00:00:02Z");
   const secondChange = proposals[1];
   assert.equal(((secondChange.units as Array<Record<string, unknown>>)[0].operations as Array<Record<string, unknown>>)[0].expected_revision, secondExpectedRevision);
+
+  const readDecisions = (currentScope: typeof scope, currentSnapshot: typeof snapshot, currentFinding: Record<string, unknown>, currentText: string) => {
+    let read = JSON.parse(guest.invoke(JSON.stringify({
+      schema_version: 1, request_id: `feedback-read-${currentSnapshot.id}`, plugin_id: "proprium.diagnostics", action_id: "proprium.diagnostics.feedback.read.v1",
+      scope: currentScope, snapshot: currentSnapshot,
+      input: { sceneId: "sc-1", documentPath: "manuscript/scene.md", documentRevision: sha256(currentText), findingFingerprints: [currentFinding.fingerprint] },
+      deadline_ms: 30_000,
+    })));
+    while (read.kind === "host_call") {
+      const payload = read.payload as Record<string, unknown>;
+      if (read.operation === "workspace.file.read" && payload.path === "meta/proprium/plugins/proprium.diagnostics/feedback.yaml" && feedbackBytes) {
+        read = respond(read, { ok: true, value: { revision: feedbackRevision, total_bytes: feedbackBytes.length, offset: 0, bytes: [...feedbackBytes], next_offset: null } });
+      } else read = respond(read, { ok: false, error: { code: "file_not_found", message: "No source", retryable: false } });
+    }
+    return read;
+  };
+  const nextScope = { ...scope, generation: "g-feedback-after-reload" };
+  const nextSnapshot = { ...snapshot, id: "s-feedback-after-reload", worktree_generation: "tree-feedback-after-reload" };
+  let reload = JSON.parse(guest.invoke(JSON.stringify({
+    schema_version: 1, request_id: "feedback-reload-lint", plugin_id: "proprium.diagnostics", action_id: "proprium.diagnostics.lint.run.v1",
+    scope: nextScope, snapshot: nextSnapshot, input: { text, documentPath: "manuscript/scene.md", documentRevision: revision }, deadline_ms: 30_000,
+  })));
+  while (reload.kind === "host_call") reload = respond(reload, { ok: false, error: { code: "file_not_found", message: "No custom rules", retryable: false } });
+  const reloadedFinding = reload.value.findings[0] as Record<string, unknown>;
+  assert.equal(reloadedFinding.fingerprint, finding.fingerprint, "stable finding identity survives a workspace snapshot reload");
+  const reloadedDecision = readDecisions(nextScope, nextSnapshot, reloadedFinding, text);
+  assert.equal(reloadedDecision.ok, true);
+  assert.deepEqual(reloadedDecision.value.decisions.map((row: Record<string, unknown>) => row.decision), ["false_positive"]);
+  assert.deepEqual(reloadedDecision.value.staleDecisions, []);
+
+  const editedText = "彼は…と話した。別。別。別。";
+  const editedRevision = sha256(editedText);
+  const editedScope = { ...nextScope, generation: "g-feedback-edited" };
+  const editedSnapshot = { ...nextSnapshot, id: "s-feedback-edited", worktree_generation: "tree-feedback-edited" };
+  let edited = JSON.parse(guest.invoke(JSON.stringify({
+    schema_version: 1, request_id: "feedback-edited-lint", plugin_id: "proprium.diagnostics", action_id: "proprium.diagnostics.lint.run.v1",
+    scope: editedScope, snapshot: editedSnapshot, input: { text: editedText, documentPath: "manuscript/scene.md", documentRevision: editedRevision }, deadline_ms: 30_000,
+  })));
+  while (edited.kind === "host_call") edited = respond(edited, { ok: false, error: { code: "file_not_found", message: "No custom rules", retryable: false } });
+  const editedFinding = edited.value.findings[0] as Record<string, unknown>;
+  assert.notEqual(editedFinding.fingerprint, finding.fingerprint, "changed source text gets a new finding identity");
+  const editedDecision = readDecisions(editedScope, editedSnapshot, editedFinding, editedText);
+  assert.equal(editedDecision.ok, true);
+  assert.deepEqual(editedDecision.value.decisions, [], "old feedback does not suppress the changed source");
+  assert.equal(editedDecision.value.staleDecisions.length, 1, "the prior decision remains visible as stale");
   guest.dispose();
 });

@@ -1,0 +1,1335 @@
+{
+  "schema": "proprium.authoring.feature-audit/v1",
+  "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+  "features": [
+    {
+      "feature_id": "KNO-01",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Bible inventory/materialization, type/tag filter, entity detail and source revisions",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/snapshot.ts",
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/knowledge/plugin.json#knowledge.bible (Bible), #knowledge.selected-record; Host AuthoringSurface",
+      "existing_tests": [
+        "plugins/knowledge/src/snapshot.test.ts",
+        "plugins/knowledge/src/actions.test.ts",
+        "tests/browser/authoring-knowledge.acceptance.ts"
+      ],
+      "gaps": [
+        "The signed browser gate KNO-A01 has not exercised malformed YAML, duplicate IDs, all entity categories, filters and empty states on the current artifact."
+      ],
+      "required_fixes": [
+        "Run KNO-A01 against the signed artifact on desktop Chromium and mobile WebKit; address any path-specific failures."
+      ],
+      "dependencies": [
+        "Host pinned workspace.file.list/read",
+        "WASM guest lifecycle"
+      ],
+      "priority": "P0",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-02",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Bible entity create/update and field/reference validation",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/knowledge/plugin.json#knowledge.create-record, #knowledge.edit-record; Host Review panel",
+      "existing_tests": [
+        "plugins/knowledge/src/actions.test.ts",
+        "tests/browser/authoring-knowledge.acceptance.ts"
+      ],
+      "gaps": [
+        "Host-reviewed proposals and unknown-field retention have unit coverage, but approval/reject/stale behavior has no current signed browser proof."
+      ],
+      "required_fixes": [
+        "Run KNO-A02 with approved, rejected and stale proposals; verify unknown YAML and unrelated files survive."
+      ],
+      "dependencies": [
+        "Host Writer read-set/revision guards",
+        "Git-backed workspace"
+      ],
+      "priority": "P0",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-03",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Scene POV/location/appears/mentions and relation edits",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/src/snapshot.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/knowledge/plugin.json#knowledge.scene-context (Scene context and references); Host scene navigation",
+      "existing_tests": [
+        "plugins/knowledge/src/actions.test.ts",
+        "plugins/knowledge/src/domain/graph.test.ts"
+      ],
+      "gaps": [
+        "Reference proposal is implemented with pinned reads, but two-reference edit, stale rejection and editor return state remain unverified in a browser."
+      ],
+      "required_fixes": [
+        "Run KNO-A03 and KNO-A12; use Host editor return proof for caret/IME/scroll restoration."
+      ],
+      "dependencies": [
+        "Narrative scene identity",
+        "Host proposal apply and navigation"
+      ],
+      "priority": "P0",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-04",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Nested/legacy notes display and note append while retaining unrelated fields",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/notes.ts",
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/knowledge/plugin.json#knowledge.edit-record and #knowledge.proposals (Knowledge proposals)",
+      "existing_tests": [
+        "plugins/knowledge/src/actions.test.ts",
+        "plugins/knowledge/src/changeProposal.test.ts"
+      ],
+      "gaps": [
+        "Nested note normalization and proposal behavior exist; browser preservation of unrelated note sections and rejected drafts is not checked."
+      ],
+      "required_fixes": [
+        "Run the note-edit branch of KNO-A02 and suggestion/rejection branches of KNO-A08 in the signed UI."
+      ],
+      "dependencies": [
+        "KNO-02 entity proposal flow",
+        "Host Writer"
+      ],
+      "priority": "P1",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-05",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Source-backed Bible mention candidates, ignore/create interaction and Zukan suggestion review",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/src/changeProposal.test.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/knowledge/plugin.json#knowledge.proposals (Knowledge proposals); Knowledge actions accept exact source evidence and create reviewable suggestions",
+      "existing_tests": [
+        "plugins/knowledge/src/actions.test.ts",
+        "plugins/knowledge/src/changeProposal.test.ts"
+      ],
+      "gaps": [
+        "Shared source-bound suggestion create/review stays active; no current signed browser proof covers retries, stale quotes, approve/reject or persisted provenance. Optional Paired provider generation is excluded under KNO-24 FROZEN."
+      ],
+      "required_fixes": [
+        "Run KNO-A08 with exact retry, idempotency conflict, stale evidence, approve/reject and reload."
+      ],
+      "dependencies": [
+        "Research candidates (optional)",
+        "Host Writer/idempotency",
+        "Git metadata"
+      ],
+      "priority": "P0",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-06",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Backlinks, appearances, declared voice data and freshness",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/src/domain/graph.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/knowledge/plugin.json#knowledge.selected-record; Character/entity detail tabs",
+      "existing_tests": [
+        "plugins/knowledge/src/actions.test.ts",
+        "plugins/knowledge/src/domain/graph.test.ts"
+      ],
+      "gaps": [
+        "Read projections and graph unit cases exist, but real UI navigation and stale source behavior are unchecked."
+      ],
+      "required_fixes": [
+        "Run selected-record browser coverage and KNO-A03/A12."
+      ],
+      "dependencies": [
+        "Host file navigation",
+        "WASM guest read calls"
+      ],
+      "priority": "P1",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-07",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Tag registry and suggested tags with optional Research tokenizer behavior",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/knowledge/plugin.json#knowledge.bible; tag filters and selected entity surface",
+      "existing_tests": [
+        "plugins/knowledge/src/actions.test.ts"
+      ],
+      "gaps": [
+        "Absence of optional tokenizer is unit tested; approved local tokenizer and editable tag suggestion flow have no signed browser proof."
+      ],
+      "required_fixes": [
+        "Run KNO-A10 with Research absent, disabled, admitted and failing; keep manual tag edits available."
+      ],
+      "dependencies": [
+        "Research optional tokenizer action",
+        "Explicit Host capability grants"
+      ],
+      "priority": "P1",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-08",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Scene context and selected-scene entity references",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/domain/graph.ts",
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/knowledge/plugin.json#knowledge.scene-context (Inspect, References, Context tabs)",
+      "existing_tests": [
+        "plugins/knowledge/src/domain/graph.test.ts",
+        "plugins/knowledge/src/actions.test.ts"
+      ],
+      "gaps": [
+        "Pinned action projection exists; selected scene identity and return navigation have not been verified in the signed Host UI."
+      ],
+      "required_fixes": [
+        "Run KNO-A03 and KNO-A12."
+      ],
+      "dependencies": [
+        "Narrative scene source metadata",
+        "Host scene navigation"
+      ],
+      "priority": "P1",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-09",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Volume tree and structural ordering; structural writes remain Narrative-owned",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/domain/graph.ts",
+        "plugins/narrative/src/actions.ts",
+        "plugins/narrative/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "Narrative-owned outline/scene UI; Knowledge intentionally exposes no duplicate volume/reorder panel.",
+      "existing_tests": [
+        "plugins/knowledge/src/domain/graph.test.ts",
+        "plugins/narrative/src/actions.test.ts"
+      ],
+      "gaps": [
+        "Knowledge has no volume-tree/reorder action in its official manifest; this row depends on Narrative’s canonical Host-rendered outline and handoff."
+      ],
+      "required_fixes": [
+        "Verify Narrative volume ordering and Knowledge-to-Narrative scene handoff in the integrated browser gates; do not add duplicate Knowledge structural writes."
+      ],
+      "dependencies": [
+        "Narrative hierarchy and writer actions",
+        "Host navigation"
+      ],
+      "priority": "P1",
+      "verification": [
+        "Knowledge graph unit tests cover legacy tree ordering; current integrated Narrative browser proof is not present in this audit."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-10",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Thread links, overview and point-in-time status",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/domain/graph.ts",
+        "plugins/knowledge/src/domain/threadStatus.ts",
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/knowledge/plugin.json#knowledge.threads (Overview and At scene tabs)",
+      "existing_tests": [
+        "plugins/knowledge/src/domain/graph.test.ts",
+        "plugins/knowledge/src/domain/threadLifecycle.test.ts",
+        "plugins/knowledge/src/actions.test.ts"
+      ],
+      "gaps": [
+        "Point-in-time status is unit-tested; actual selected-scene operation and source citations are not browser-verified."
+      ],
+      "required_fixes": [
+        "Run KNO-A04 in signed desktop/mobile UI."
+      ],
+      "dependencies": [
+        "Narrative scene order",
+        "Host scene selection"
+      ],
+      "priority": "P1",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-11",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Keyword mention lifecycle, stale/forget-risk warnings and abandonment handling",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/domain/threadLifecycle.ts",
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/knowledge/plugin.json#knowledge.threads (Lifecycle tab)",
+      "existing_tests": [
+        "plugins/knowledge/src/domain/threadLifecycle.test.ts",
+        "plugins/knowledge/src/actions.test.ts"
+      ],
+      "gaps": [
+        "Lifecycle rules and partial states have unit tests; five-scene/final-volume warnings and scene navigation need signed browser evidence."
+      ],
+      "required_fixes": [
+        "Run KNO-A04 and verify warning source links and disabled/missing data states."
+      ],
+      "dependencies": [
+        "Narrative story order",
+        "Host navigation"
+      ],
+      "priority": "P1",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-12",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Optional embedding mention utility; no Knowledge action currently wires the helper",
+      "status": "PARTIAL",
+      "implementation_files": [
+        "plugins/knowledge/src/domain/threadLifecycle.ts"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "No user-visible action in plugins/knowledge/plugin.json; Semantic owns optional provider UI.",
+      "existing_tests": [
+        "plugins/knowledge/src/domain/threadLifecycle.test.ts"
+      ],
+      "gaps": [
+        "findThreadMentionsByEmbedding exists as a domain utility but story.threads.lifecycle does not invoke it; optional semantic candidate extension remains unwired. This is not a required Knowledge capability."
+      ],
+      "required_fixes": [
+        "Only if the integrated Semantic UI needs this extension: expose a cited candidate action through the Host broker; never create a confirmed relation automatically."
+      ],
+      "dependencies": [
+        "Semantic optional provider",
+        "Host-signed plugin invocation"
+      ],
+      "priority": "P2",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-13",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Graph links, relation gaps and filtered/focused entity graph",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/domain/graph.ts",
+        "plugins/knowledge/src/domain/cooccurrence.ts",
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/knowledge/plugin.json#knowledge.lenses (Graph tab)",
+      "existing_tests": [
+        "plugins/knowledge/src/domain/graph.test.ts",
+        "plugins/knowledge/src/domain/cooccurrence.test.ts",
+        "plugins/knowledge/src/actions.test.ts"
+      ],
+      "gaps": [
+        "Core graphs/gap scores are unit-tested; 300-node desktop/mobile list behavior and broken reference visibility are not browser-checked."
+      ],
+      "required_fixes": [
+        "Run KNO-A05 on the synthetic 300-node graph and mobile list controls."
+      ],
+      "dependencies": [
+        "Host authoring renderer",
+        "Knowledge snapshot"
+      ],
+      "priority": "P1",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-14",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Location travel map with reciprocal edge deduplication",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/domain/locationMap.ts",
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/knowledge/plugin.json#knowledge.lenses (Map tab)",
+      "existing_tests": [
+        "plugins/knowledge/src/domain/graph.test.ts",
+        "plugins/knowledge/src/actions.test.ts"
+      ],
+      "gaps": [
+        "Map projection unit test exists; actual selecting/opening a node and mobile summary are unverified."
+      ],
+      "required_fixes": [
+        "Run KNO-A05 on desktop and mobile; verify reciprocal travel edges and source navigation."
+      ],
+      "dependencies": [
+        "KNO-13 graph inventory",
+        "Host scene/source navigation"
+      ],
+      "priority": "P1",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-15",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Japanese relative-date timeline with explicit confidence and source offsets",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/domain/timeline.ts",
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/knowledge/plugin.json#knowledge.lenses (Timeline tab)",
+      "existing_tests": [
+        "plugins/knowledge/src/domain/timeline.test.ts",
+        "plugins/knowledge/src/actions.test.ts"
+      ],
+      "gaps": [
+        "Japanese extraction/confidence is covered by unit tests; ordered multi-scene UI, filters and stale snapshot invalidation are not signed-browser tested."
+      ],
+      "required_fixes": [
+        "Run KNO-A06 and KNO-A12."
+      ],
+      "dependencies": [
+        "Narrative scene ordering",
+        "Optional tokenizer capability"
+      ],
+      "priority": "P1",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-16",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Objective world-state projection and entity history from confirmed events only",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/domain/worldState.ts",
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/knowledge/plugin.json#knowledge.world-state (State at scene and Entity history tabs)",
+      "existing_tests": [
+        "plugins/knowledge/src/domain/worldState.test.ts",
+        "plugins/knowledge/src/actions.test.ts"
+      ],
+      "gaps": [
+        "Projection and confirmed-event exclusion are unit-tested; user-visible before/at/after source-driven folds are not browser-verified."
+      ],
+      "required_fixes": [
+        "Run KNO-A06 with all event kinds, changed order and proposed/rejected events."
+      ],
+      "dependencies": [
+        "Narrative scene order",
+        "Git source event files"
+      ],
+      "priority": "P0",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-17",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Reader disclosure and character-knowledge evidence; belief records stay explicitly unavailable",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/domain/readerKnowledge.ts",
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/knowledge/plugin.json#knowledge.world-state (Reader model tab)",
+      "existing_tests": [
+        "plugins/knowledge/src/domain/worldState.test.ts",
+        "plugins/knowledge/src/actions.test.ts"
+      ],
+      "gaps": [
+        "First-disclosure, conflict and forget-risk calculations are unit-tested; signed UI and explicit unavailable belief wording are not browser-tested."
+      ],
+      "required_fixes": [
+        "Run KNO-A07 and verify no empty belief list is presented as proof that no beliefs exist."
+      ],
+      "dependencies": [
+        "Knowledge source snapshots",
+        "Host authoring renderer"
+      ],
+      "priority": "P1",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-18",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Host-reviewed world-state proposal lifecycle and confirmed-event history",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/src/domain/worldState.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/knowledge/plugin.json#knowledge.proposals (State events and Selected proposal tabs)",
+      "existing_tests": [
+        "plugins/knowledge/src/actions.test.ts",
+        "plugins/knowledge/src/domain/worldState.test.ts"
+      ],
+      "gaps": [
+        "Source-bound create/update/decision actions are tested; Host approval, retries, stale manuscript and reload branches need browser proof."
+      ],
+      "required_fixes": [
+        "Run KNO-A09 across candidate/confirm/reject/stale/lost-response branches."
+      ],
+      "dependencies": [
+        "Host Writer proposal receipts",
+        "Git metadata and confirmed event JSONL"
+      ],
+      "priority": "P0",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-19",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Series registry, stable repository binding, local overlay and provenance",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/domain/seriesOverlay.ts",
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/src/seriesBindingFingerprint.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/knowledge/plugin.json#knowledge.series (Series registry tabs); Host local binding preference and repository lease APIs",
+      "existing_tests": [
+        "plugins/knowledge/src/domain/seriesOverlay.test.ts",
+        "plugins/knowledge/src/actions.test.ts",
+        "plugins/knowledge/src/seriesBindingFingerprint.test.ts"
+      ],
+      "gaps": [
+        "Stable identity, no fake empty overlay and unknown-field retention are unit-tested; dual-repository/offline/reload UX is unverified."
+      ],
+      "required_fixes": [
+        "Run KNO-A11 and KNO-A14 with local-only and remote repository identity cases."
+      ],
+      "dependencies": [
+        "Host stable repository ID and snapshot lease",
+        "Host local preferences",
+        "Git"
+      ],
+      "priority": "P0",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-20",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Story Lens shared scene cursor composing location/events/appearances/threads/timeline/reader evidence",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/plugin.json",
+        "plugins/knowledge/src/actions.test.ts"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/knowledge/plugin.json#knowledge.lenses (Scene cursor, Scene lens and Timeline at cursor tabs); Host AuthoringSurface.",
+      "existing_tests": [
+        "plugins/knowledge/src/actions.test.ts",
+        "tests/browser/authoring-knowledge.acceptance.ts"
+      ],
+      "gaps": [
+        "Unified cursor and one-snapshot projections are implemented and unit-tested; KNO-A15 signed-browser operation has not run. The selected scene timeline is exposed in the Timeline at cursor detail tab. Character belief records are explicitly unavailable."
+      ],
+      "required_fixes": [
+        "Run KNO-A15 on a multi-scene fixture in signed desktop and mobile UI; verify all views move together on the pinned snapshot."
+      ],
+      "dependencies": [
+        "KNO-13 Graph",
+        "KNO-14 Map",
+        "KNO-15 Timeline",
+        "Host pinned snapshot"
+      ],
+      "priority": "P0",
+      "verification": [
+        "Knowledge suite: 55 passed including shared-scene-cursor projection test.",
+        "Scene Lens UI assertion added to tests/browser/authoring-knowledge.acceptance.ts; signed browser execution not checked."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-21",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Single Host-rendered Knowledge UI contribution across Bible, threads, lenses, world state and series",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/plugin.json",
+        "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "Official Knowledge manifest panels rendered by Host WorkspaceAuthoringPanels/AuthoringSurface.",
+      "existing_tests": [
+        "plugins/knowledge/src/actions.test.ts",
+        "tests/browser/authoring-knowledge.acceptance.ts"
+      ],
+      "gaps": [
+        "Manifest declarations validate, but all panel controls, mobile return-state and disabled/failure lifecycle gates have not been exercised against the signed artifact."
+      ],
+      "required_fixes": [
+        "Run KNO-A12 and KNO-A16 on desktop/mobile with plugin absent/disabled/invalid-signature/trap cases."
+      ],
+      "dependencies": [
+        "Host UI continuity",
+        "Signed plugin registry and lifecycle"
+      ],
+      "priority": "P0",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-22",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Generic ChangeSet proposal submission remains a shared Host/Paired boundary",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/changeCompiler.ts",
+        "plugins/knowledge/src/actions.ts",
+        "app/src/browser/proprium/authoring/actions.ts",
+        "app/src/browser/proprium/authoring/service.ts"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "Host Review owns the single generic proposal surface; Knowledge does not register or apply a second proposal.",
+      "existing_tests": [
+        "plugins/knowledge/src/actions.test.ts",
+        "app/src/browser/proprium/authoring/actions.test.ts"
+      ],
+      "gaps": [
+        "Generic proposal and idempotency contracts exist; end-to-end staging/mixed-owner/review behavior has not been verified on the integrated Host. This shared boundary remains active even where Paired is its current caller."
+      ],
+      "required_fixes": [
+        "Verify generic Host staging/read-set/apply/recovery behavior in integrated R gates; keep this requirement active."
+      ],
+      "dependencies": [
+        "Host Writer and workspace.change.stage",
+        "KNO-25 compiler",
+        "Paired mixed-owner orchestration"
+      ],
+      "priority": "P0",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-23",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Manual dialogue-sketch asset list/create/edit/save workbench",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/src/snapshot.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/knowledge/plugin.json#knowledge.dialogue-sketches, #knowledge.create-record, #knowledge.edit-record; Host Review workflow",
+      "existing_tests": [
+        "plugins/knowledge/src/actions.test.ts",
+        "tests/browser/authoring-knowledge.acceptance.ts"
+      ],
+      "gaps": [
+        "Manual asset UI reuses Knowledge entity CRUD; asset-specific unknown-field, stale form, Japanese IME, mobile and reload scenarios have no current signed browser proof."
+      ],
+      "required_fixes": [
+        "Run KNO-A17 with create/edit/reject/stale/unknown-fields/mobile and no optional provider."
+      ],
+      "dependencies": [
+        "KNO-02 entity CRUD",
+        "Host Writer review",
+        "Narrative hierarchy"
+      ],
+      "priority": "P0",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-24",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Optional dialogue line/topic generation is Paired-owned and FROZEN; shared source-revision-bound Dialogue Sketch suggestion ingestion and review remain active.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "Knowledge proposal/suggestion surfaces in plugins/knowledge/plugin.json; manual Dialogue Sketch CRUD and source-bound suggestion review remain active under KNO-05/KNO-23.",
+      "existing_tests": [
+        "plugins/knowledge/src/actions.test.ts"
+      ],
+      "gaps": [
+        "Shared saved-sketch suggestion ingestion/review exists but has not been proved against the current signed Browser Host artifact. Paired-only generation stays FROZEN."
+      ],
+      "required_fixes": [
+        "Run signed Browser source-bound Dialogue Sketch suggestion preview, review/apply, stale evidence rejection and reload; keep Paired-only generation frozen."
+      ],
+      "dependencies": [
+        "KNO-05 shared suggestion review",
+        "KNO-23 manual Dialogue Sketch assets",
+        "Host source-revision and ChangeSet review"
+      ],
+      "priority": "P2",
+      "verification": [
+        "Status is FROZEN for Paired provider generation only; shared suggestion ingestion/review is active and separately audited.",
+        "No frozen state is used to change another feature status or hide failed/unverified shared evidence."
+      ],
+      "assessment_history": [
+        {
+          "audit_revision": "829c69e19aa504cccb1622cdbaa832b963ea99a7",
+          "status": "FROZEN",
+          "requirement": "Paired Writing optional dialogue line/topic provider generation route only; shared source-bound suggestion ingestion/review remains active under KNO-05/KNO-23",
+          "reason": "KNO-24 is mixed scope: only Paired generation is frozen; shared Knowledge ingestion remains active."
+        }
+      ],
+      "subrequirements": [
+        {
+          "scope": "Paired provider-backed generation",
+          "status": "FROZEN"
+        },
+        {
+          "scope": "Knowledge source-bound suggestion ingestion and review",
+          "status": "UNVERIFIED"
+        }
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "KNO-25",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Pure Knowledge ChangeSet compiler for Knowledge-owned operations; Host/Paired owns ordering and single proposal",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/knowledge/src/changeCompiler.ts",
+        "plugins/knowledge/src/actions.ts",
+        "plugins/knowledge/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "No independent apply UI; compiler action is invoked by the shared Host/Paired review flow.",
+      "existing_tests": [
+        "plugins/knowledge/src/actions.test.ts",
+        "app/src/browser/proprium/authoring/actions.test.ts"
+      ],
+      "gaps": [
+        "Compiler emits revision-guarded generic units and has staging tests; full mixed-owner Host integration is not browser-verified. Keep active despite Paired being current sole caller."
+      ],
+      "required_fixes": [
+        "Run KNO-A19 in integration; preserve shared compiler safety and unavailable behavior when Knowledge is disabled."
+      ],
+      "dependencies": [
+        "KNO-22 shared submission",
+        "Host staged view and source-ordered merge"
+      ],
+      "priority": "P0",
+      "verification": [
+        "Current branch: pnpm --dir plugins/knowledge test — 55 passed.",
+        "Current branch: pnpm --dir plugins/knowledge typecheck — passed.",
+        "Signed browser acceptance was discovered but not run in this audit; source tests do not certify KNO-A01…KNO-A19."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "RES-001",
+      "plugin_id": "proprium.research",
+      "requirement": "Search Markdown/text/YAML/JSON with lexical/exact/prefix modes, path scope and bounded pagination; UI-only deterministic RRF fusion with Semantic and tokenizer-backed expression ranking",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/research/core.ts",
+        "plugins/research/guest.ts",
+        "plugins/research/plugin.json",
+        "plugins/semantic/guest.ts",
+        "app/src/browser/proprium/host/authoring/ResearchSemanticSearch.tsx"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "app/src/browser/proprium/host/authoring/ResearchSemanticSearch.tsx (integrated Host search surface) plus plugins/research/plugin.json#search; Host owns search controls, freshness/cancel display and result navigation.",
+      "existing_tests": [
+        "plugins/research/core.test.ts",
+        "plugins/research/guest.test.ts",
+        "plugins/research/manifest.test.ts",
+        "tests/browser/authoring-knowledge.acceptance.ts",
+        "app/src/browser/proprium/host/authoring/ResearchSemanticSearch.test.tsx"
+      ],
+      "gaps": [
+        "Research fusion and the Host semantic search surface are implemented in the parent integration; signed desktop/mobile browser verification of hybrid/semantic/expression and stale-snapshot handling is still outstanding."
+      ],
+      "required_fixes": [
+        "Run RES-A001 against the integrated signed artifact with 300+ fixtures, Semantic enabled and absent, tokenizer admitted/denied, and stale result switching."
+      ],
+      "dependencies": [
+        "Host-owned search component",
+        "Semantic sentence search action",
+        "workspace.derived.cache",
+        "Research current snapshot index"
+      ],
+      "priority": "P0",
+      "verification": [
+        "Research suite: 30 passed including UI-only fusion envelope/source-span checks.",
+        "Host component and unit test exist in parent integration commit 6aa641b; current signed browser acceptance is not checked."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "RES-002",
+      "plugin_id": "proprium.research",
+      "requirement": "Open a current hit at exact visible match/sentence and return editor path, selection, caret and scroll",
+      "status": "PARTIAL",
+      "implementation_files": [
+        "plugins/research/guest.ts",
+        "plugins/research/plugin.json",
+        "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx",
+        "app/src/browser/proprium/host/authoring/ResearchSemanticSearch.tsx"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "app/src/browser/proprium/host/authoring/ResearchSemanticSearch.tsx result navigation passes revision-bound SourceSpan to Host; return-state restoration remains Host-owned.",
+      "existing_tests": [
+        "plugins/research/core.test.ts",
+        "plugins/research/guest.test.ts",
+        "tests/browser/authoring-knowledge.acceptance.ts",
+        "app/src/browser/proprium/host/authoring/ResearchSemanticSearch.test.tsx"
+      ],
+      "gaps": [
+        "Exact current match span is passed to Host navigation; return-to-origin caret/selection/scroll and dirty/IME state restoration are not demonstrated."
+      ],
+      "required_fixes": [
+        "Run RES-A002 and complete Host origin-state restoration and stale revision handling."
+      ],
+      "dependencies": [
+        "Host CodeMirror navigation/history",
+        "Research revision-bound SourceSpan"
+      ],
+      "priority": "P0",
+      "verification": [
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
+        "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
+        "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "RES-003",
+      "plugin_id": "proprium.research",
+      "requirement": "Read/create/update/remove canonical terms, aliases and targets only through reviewed proposals; show missing/ambiguous targets",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/research/guest.ts",
+        "plugins/research/core.ts",
+        "plugins/research/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/research/plugin.json#terms (用語 tabs: list/detail/register/update/remove); Host Review.",
+      "existing_tests": [
+        "plugins/research/core.test.ts",
+        "plugins/research/guest.test.ts"
+      ],
+      "gaps": [
+        "Unknown registry fields/comments and exact target states have unit coverage; signed browser review and two competing stale proposals have not been exercised."
+      ],
+      "required_fixes": [
+        "Run RES-A003 against valid/invalid schema, missing/ambiguous targets, unknown fields and competing proposals."
+      ],
+      "dependencies": [
+        "Host Writer/idempotency",
+        "Git-backed term registry"
+      ],
+      "priority": "P1",
+      "verification": [
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
+        "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
+        "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "RES-004",
+      "plugin_id": "proprium.research",
+      "requirement": "Non-editing term decorations with exact UTF-16 spans; longest unique match wins and aliases remain ambiguous",
+      "status": "PARTIAL",
+      "implementation_files": [
+        "plugins/research/core.ts",
+        "plugins/research/guest.ts",
+        "plugins/research/plugin.json",
+        "plugins/research/nlp.ts"
+      ],
+      "host_path": "Research.terms.resolve returns exact revision-bound ranges. A generic termAdornmentsExtension exists in ManuscriptInput, but current HostApp/RestoredEditor does not provide this Research resolver/navigator to that extension.",
+      "ui_path": "Research exposes research.terms.resolve and candidate/term panels. Research-specific CodeMirror adornments and navigation are not connected to the active Host editor.",
+      "existing_tests": [
+        "plugins/research/core.test.ts",
+        "plugins/research/guest.test.ts",
+        "app/src/editor/terms.test.ts"
+      ],
+      "gaps": [
+        "The generic editor adornment module is source-present; no current Host path supplies Research term resolutions and exact navigation callbacks, so Research highlighting is not user-visible."
+      ],
+      "required_fixes": [
+        "Pass the Research resolver and guarded navigator through HostApp to the retained editor extension; verify normalization collisions, Japanese/emoji offsets, IME, undo and stale revisions on browser."
+      ],
+      "dependencies": [
+        "Host CodeMirror term-decorations lifecycle",
+        "Term registry read"
+      ],
+      "priority": "P0",
+      "verification": [
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
+        "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
+        "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "RES-005",
+      "plugin_id": "proprium.research",
+      "requirement": "Bounded sentence/token analysis with surface/base/reading/POS and exact local tokenizer provenance when admitted",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/research/guest.ts",
+        "plugins/research/nlp.ts",
+        "plugins/research/morphology.ts",
+        "plugins/research/plugin.json",
+        "plugins/research/asset-group.ts"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/research/plugin.json#nlp.analyzer (文章分析); Host explicit asset permission.",
+      "existing_tests": [
+        "plugins/research/manifest.test.ts",
+        "plugins/research/guest.test.ts",
+        "plugins/research/guest.test.ts"
+      ],
+      "gaps": [
+        "Local tokenizer loading is lazy and actions carry source revision; real signed dictionary admission, denial/cancel and Japanese browser ranges are not verified."
+      ],
+      "required_fixes": [
+        "Run RES-A005 with asset missing/denied/cancelled and admitted; prove lexical search and typing remain usable."
+      ],
+      "dependencies": [
+        "Explicit workspace.asset.read grant",
+        "Signed local dictionary asset",
+        "Host cancellation"
+      ],
+      "priority": "P1",
+      "verification": [
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
+        "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
+        "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "RES-006",
+      "plugin_id": "proprium.research",
+      "requirement": "Revision-pinned compound candidate discovery with readings/occurrences/evidence, ignore and explicit handoff to Knowledge review",
+      "status": "PARTIAL",
+      "implementation_files": [
+        "plugins/research/guest.ts",
+        "plugins/research/nlp.ts",
+        "plugins/research/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/research/plugin.json#candidates (用語候補); Knowledge review panel is separate.",
+      "existing_tests": [
+        "plugins/research/guest.test.ts",
+        "plugins/research/guest.test.ts"
+      ],
+      "gaps": [
+        "Research can discover/ignore evidence-backed candidates, but no verified Host button opens a source-bound Knowledge entity-review proposal; cross-plugin handoff is not an internal plugin import."
+      ],
+      "required_fixes": [
+        "Implement/verify Host-mediated candidate-to-Knowledge review handoff with exact source revision and no direct entity write."
+      ],
+      "dependencies": [
+        "Knowledge entity review action",
+        "Host mediated cross-plugin action",
+        "Research tokenizer"
+      ],
+      "priority": "P1",
+      "verification": [
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
+        "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
+        "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "RES-007",
+      "plugin_id": "proprium.research",
+      "requirement": "Deterministic spelling-variant hypotheses with corpus counts; no automatic alias or prose edits",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/research/nlp.ts",
+        "plugins/research/guest.ts",
+        "plugins/research/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/research/plugin.json#terms (search expansion/detail); Research.terms.variants action.",
+      "existing_tests": [
+        "plugins/research/guest.test.ts"
+      ],
+      "gaps": [
+        "Deterministic utility is implemented; variant result provenance and explicit author registration/ignore flow lack signed browser proof."
+      ],
+      "required_fixes": [
+        "Run RES-A007 twice with stable known terms and verify no automatic registry/prose changes."
+      ],
+      "dependencies": [
+        "RES-003 term proposal review",
+        "Optional Semantic candidate labels"
+      ],
+      "priority": "P2",
+      "verification": [
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
+        "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
+        "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "RES-008",
+      "plugin_id": "proprium.research",
+      "requirement": "Read synonym groups and review user-authored add/merge with positive/negative context",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/research/guest.ts",
+        "plugins/research/nlp.ts",
+        "plugins/research/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/research/plugin.json#synonyms (同義語 tabs); Host Review.",
+      "existing_tests": [
+        "plugins/research/guest.test.ts",
+        "plugins/research/manifest.test.ts"
+      ],
+      "gaps": [
+        "Empty-group lookup output and new-group proposal input now pass manifest/guest schema tests; stale revision conflict and browser review/cancel flows remain unchecked."
+      ],
+      "required_fixes": [
+        "Run RES-A008 with unknown YAML, append/merge, cancel and stale revision cases."
+      ],
+      "dependencies": [
+        "Host Writer",
+        "Git-backed synonyms YAML"
+      ],
+      "priority": "P2",
+      "verification": [
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
+        "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
+        "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "RES-009",
+      "plugin_id": "proprium.research",
+      "requirement": "Japanese sentence splitting and stable source offsets for search landing/downstream analyses",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/research/nlp.ts",
+        "plugins/research/guest.ts",
+        "plugins/research/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/research/plugin.json#nlp.analyzer results; Host search landing consumes typed spans.",
+      "existing_tests": [
+        "plugins/research/guest.test.ts",
+        "plugins/research/guest.test.ts"
+      ],
+      "gaps": [
+        "Sentence offset helpers exist and feed analysis; the nested quote/bracket/surrogate-pair browser landing and stale revision path are not checked."
+      ],
+      "required_fixes": [
+        "Run RES-A009 after Host landing integration."
+      ],
+      "dependencies": [
+        "Host SourceSpan navigation",
+        "RES-002"
+      ],
+      "priority": "P1",
+      "verification": [
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
+        "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
+        "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "RES-010",
+      "plugin_id": "proprium.research",
+      "requirement": "Bounded batch token counting with exact local identity or labeled user-selected approximation",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/research/guest.ts",
+        "plugins/research/nlp.ts",
+        "plugins/research/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/research/plugin.json#nlp.analyzer (Token count tabs).",
+      "existing_tests": [
+        "plugins/research/guest.test.ts",
+        "plugins/research/guest.test.ts"
+      ],
+      "gaps": [
+        "Approximation labels and unsafe model rejection are unit-tested; real model identity/asset denial/oversized batch UI is not browser-verified."
+      ],
+      "required_fixes": [
+        "Run RES-A010 offline with admitted tokenizer, explicit approximation and over-limit cases."
+      ],
+      "dependencies": [
+        "Explicit local model selection",
+        "workspace.asset.read grant"
+      ],
+      "priority": "P2",
+      "verification": [
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
+        "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
+        "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "RES-011",
+      "plugin_id": "proprium.research",
+      "requirement": "Persist author candidate exclusions with undo/unignore and Host-reviewed application",
+      "status": "PARTIAL",
+      "implementation_files": [
+        "plugins/research/guest.ts",
+        "plugins/research/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/research/plugin.json#candidates (用語候補); candidate ignore action; Host Review.",
+      "existing_tests": [
+        "plugins/research/guest.test.ts"
+      ],
+      "gaps": [
+        "Ignore proposal action exists; the full apply/reload/unignore and reject-with-unknown-YAML browser flow is not demonstrated."
+      ],
+      "required_fixes": [
+        "Complete and run RES-A011 ignore/unignore/reload/reject flows; retain proposal state and unknown fields."
+      ],
+      "dependencies": [
+        "Host Writer",
+        "Git-backed candidate-ignore list",
+        "RES-006"
+      ],
+      "priority": "P1",
+      "verification": [
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
+        "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
+        "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "RES-012",
+      "plugin_id": "proprium.research",
+      "requirement": "Show legacy NLP feature/locality choices while keeping them separate from explicit Host plugin grants",
+      "status": "PARTIAL",
+      "implementation_files": [
+        "plugins/research/guest.ts",
+        "plugins/research/plugin.json"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/research/plugin.json#legacy-settings (旧 NLP 設定); Host Plugin Manager owns explicit grants.",
+      "existing_tests": [
+        "plugins/research/guest.test.ts"
+      ],
+      "gaps": [
+        "Legacy choices are read and displayed; no complete mapped grant-review/revoke affordance is connected. Legacy Git settings must never mint Host grants."
+      ],
+      "required_fixes": [
+        "Add or verify Host link to Plugin Manager grant review; preserve source settings byte-identically and keep unknown flags visible/denied."
+      ],
+      "dependencies": [
+        "Host Plugin Manager",
+        "Explicit per-plugin capability grants"
+      ],
+      "priority": "P1",
+      "verification": [
+        "Current branch: node --import tsx --test plugins/research/*.test.ts — 30 passed.",
+        "Current branch: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck plugins/research/guest.ts plugins/research/core.ts — passed.",
+        "Current branch: pnpm exec playwright test --config tests/browser/authoring-knowledge.playwright.config.ts --list — four desktop/mobile cases discovered; browser cases were not run."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "RES-013",
+      "plugin_id": "proprium.research",
+      "requirement": "Exact snapshot/config cache invalidation, delta rebuild, progress/cancel/failure with no typing impact",
+      "status": "PARTIAL",
+      "implementation_files": [
+        "plugins/research/core.ts",
+        "plugins/research/guest.ts",
+        "plugins/research/plugin.json",
+        "plugins/shared/guest.ts"
+      ],
+      "host_path": "Signed action descriptor → app/src/browser/proprium/authoring/actions.ts (scope/snapshot/capability checks) → app/src/browser/proprium/authoring/service.ts (Host dispatch) → plugins/shared/guest.ts (WASM continuation); workspace reads/proposals use plugins/shared/operations.ts and Host Writer.",
+      "ui_path": "plugins/research/plugin.json#search (索引状態/索引を再構築); Host action lifecycle/status surface.",
+      "existing_tests": [
+        "plugins/research/core.test.ts",
+        "plugins/research/guest.test.ts",
+        "plugins/research/manifest.test.ts"
+      ],
+      "gaps": [
+        "Exact snapshot persistent cache and in-memory changed-file reuse are tested; explicit rebuild only returns final progress, CPU indexing is synchronous, and user-visible mid-run cancel/progress/lifecycle invalidation are absent."
+      ],
+      "required_fixes": [
+        "Add Host-visible progress/cancel state or bounded worker execution; run RES-A013 for branch/snapshot switch, cache eviction/corruption, plugin disable and mobile suspension."
+      ],
+      "dependencies": [
+        "Host action progress/cancel continuation",
+        "workspace.derived.cache",
+        "Semantic index lifecycle (separate plugin)"
+      ],
+      "priority": "P0",
+      "verification": [
+        "Current branch: changed/added files alone are reread; unchanged document records are reused and deleted records dropped.",
+        "Progress/cancel acceptance RES-A013 remains unverified."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    }
+  ],
+  "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
+  "assessed_at": "2026-10-29",
+  "assessment_scope": "Reconciled against this source snapshot. Prior base_sha is retained as the original audit anchor. Implementation status does not substitute for the current R01–R14 acceptance result. Browser failures and unsupported coverage remain explicit."
+}

@@ -1,5 +1,5 @@
 {
-  "schema": "proprium.authoring.evidence/v1",
+  "schema": "proprium.authoring.evidence/v2",
   "release_sha": "a6526697a39a50e0f896bed83f19a1f680613ec5",
   "registry_digest": "99ef5ff51195c7b426e71e8050c14ca959b56b277d9986b36719559a7120c60c",
   "generated_from": {
@@ -32,7 +32,8 @@
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": null
+      "blocker": null,
+      "lifecycle": "ACTIVE"
     },
     {
       "id": "R02",
@@ -48,7 +49,8 @@
       "receipt": null,
       "artifact": "evidence/authoring/validation/components.json",
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": null
+      "blocker": null,
+      "lifecycle": "ACTIVE"
     },
     {
       "id": "R03",
@@ -64,7 +66,8 @@
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": null
+      "blocker": null,
+      "lifecycle": "ACTIVE"
     },
     {
       "id": "R04",
@@ -80,7 +83,8 @@
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": null
+      "blocker": null,
+      "lifecycle": "ACTIVE"
     },
     {
       "id": "R05",
@@ -96,7 +100,8 @@
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": null
+      "blocker": null,
+      "lifecycle": "ACTIVE"
     },
     {
       "id": "R06",
@@ -112,7 +117,8 @@
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": null
+      "blocker": null,
+      "lifecycle": "ACTIVE"
     },
     {
       "id": "R07",
@@ -128,7 +134,8 @@
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": null
+      "blocker": null,
+      "lifecycle": "ACTIVE"
     },
     {
       "id": "R08",
@@ -144,13 +151,14 @@
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": null
+      "blocker": null,
+      "lifecycle": "ACTIVE"
     },
     {
       "id": "R09",
       "canon_title": "MCP-first paired writing",
       "required_proof": "Explicit repository ID -> context/manifest -> typed proposal -> diff/evidence -> selective author approval -> apply -> same editing location, no external self-approval",
-      "status": "FAIL",
+      "status": "FROZEN",
       "fixture": null,
       "command": null,
       "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -160,7 +168,9 @@
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": null
+      "blocker": null,
+      "lifecycle": "FROZEN",
+      "pre_freeze_status": "FAIL"
     },
     {
       "id": "R10",
@@ -176,7 +186,8 @@
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": null
+      "blocker": null,
+      "lifecycle": "ACTIVE"
     },
     {
       "id": "R11",
@@ -192,7 +203,8 @@
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": null
+      "blocker": null,
+      "lifecycle": "ACTIVE"
     },
     {
       "id": "R12",
@@ -208,7 +220,8 @@
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": null
+      "blocker": null,
+      "lifecycle": "ACTIVE"
     },
     {
       "id": "R13",
@@ -224,7 +237,8 @@
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": null
+      "blocker": null,
+      "lifecycle": "ACTIVE"
     },
     {
       "id": "R14",
@@ -240,7 +254,8 @@
       "receipt": null,
       "artifact": null,
       "evidence_ref": "evidence/authoring/validation/results.json",
-      "blocker": null
+      "blocker": null,
+      "lifecycle": "ACTIVE"
     }
   ],
   "plugins": [
@@ -291,7 +306,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-nar-a02",
@@ -355,7 +371,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-nar-a03",
@@ -381,7 +398,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-nar-a04",
@@ -417,7 +435,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-nar-a05",
@@ -453,7 +472,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-nar-a06",
@@ -503,7 +523,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-nar-a07",
@@ -529,7 +550,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-nar-a08",
@@ -555,7 +577,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-nar-a09",
@@ -581,13 +604,14 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-nar-a10",
           "canon_title": "Pure mixed-domain compiler",
           "canon_reference": "#accept-nar-a10",
-          "canon_requirement": "Pass the exact pinned NarrativeChangeSet v1 fixtures through `changes.compile` and verify strict key/type/bound validation, original-base `read_set` including absent paths, stable source-operation mapping and generic output units. Compile `entity.create` for a volume/chapter, `scene.create` carrying Knowledge fields plus matching `scene.insert`, structural title/manuscript-link/order edits, and a scene update containing Narrative `readingMarks` and Knowledge semantic fields. A mark addition must reference manuscript evidence at the exact original file revision; the compiler verifies the UTF-16 slice and reports that body revision in its read set. The split compilers receive one source operation ID; Paired Writing produces one inseparable final unit after Host staging and shows the intermediate semantic intents with the final byte diff. A missing required prior stage returns `dependency_unavailable`; an expired or wrong-scope stage returns `snapshot_stale`; invalid source operation, unresolved forward reference, stale source revision, path overlap without a valid dependency, cancellation or Worker trap fails visibly with no proposal/worktree mutation. The resulting proposal is submitted once by Paired Writing, reviewed by the Host, and is idempotent across an unknown response.",
+          "canon_requirement": "**Lifecycle:** FROZEN as Paired Writing-specific work under the [acceptance freeze policy](../ACCEPTANCE.md#freeze-and-implementation-branches). FROZEN is not PASS. Keep any implementation gaps and verification results visible in the feature audit; this gate does not freeze shared Narrative navigation, metadata editing, Host review, or recovery requirements. Resumption requires an explicit product decision. Pass the exact pinned NarrativeChangeSet v1 fixtures through `changes.compile` and verify strict key/type/bound validation, original-base `read_set` including absent paths, stable source-operation mapping and generic output units. Compile `entity.create` for a volume/chapter, `scene.create` carrying Knowledge fields plus matching `scene.insert`, structural title/manuscript-link/order edits, and a scene update containing Narrative `readingMarks` and Knowledge semantic fields. A mark addition must reference manuscript evidence at the exact original file revision; the compiler verifies the UTF-16 slice and reports that body revision in its read set. The split compilers receive one source operation ID; Paired Writing produces one inseparable final unit after Host staging and shows the intermediate semantic intents with the final byte diff. A missing required prior stage returns `dependency_unavailable`; an expired or wrong-scope stage returns `snapshot_stale`; invalid source operation, unresolved forward reference, stale source revision, path overlap without a valid dependency, cancellation or Worker trap fails visibly with no proposal/worktree mutation. The resulting proposal is submitted once by Paired Writing, reviewed by the Host, and is idempotent across an unknown response.",
           "feature_ids": [
             "NAR-10"
           ],
@@ -597,7 +621,7 @@
           ],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "NOT_CHECKED",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -607,7 +631,17 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "NOT_CHECKED",
+          "canon_metadata_history": [
+            {
+              "ledger_revision": "7858ea5fcbc010c78e7126f840c056243ebd69c9",
+              "fields": {
+                "canon_requirement": "Pass the exact pinned NarrativeChangeSet v1 fixtures through `changes.compile` and verify strict key/type/bound validation, original-base `read_set` including absent paths, stable source-operation mapping and generic output units. Compile `entity.create` for a volume/chapter, `scene.create` carrying Knowledge fields plus matching `scene.insert`, structural title/manuscript-link/order edits, and a scene update containing Narrative `readingMarks` and Knowledge semantic fields. A mark addition must reference manuscript evidence at the exact original file revision; the compiler verifies the UTF-16 slice and reports that body revision in its read set. The split compilers receive one source operation ID; Paired Writing produces one inseparable final unit after Host staging and shows the intermediate semantic intents with the final byte diff. A missing required prior stage returns `dependency_unavailable`; an expired or wrong-scope stage returns `snapshot_stale`; invalid source operation, unresolved forward reference, stale source revision, path overlap without a valid dependency, cancellation or Worker trap fails visibly with no proposal/worktree mutation. The resulting proposal is submitted once by Paired Writing, reviewed by the Host, and is idempotent across an unknown response."
+              }
+            }
+          ]
         },
         {
           "id": "accept-nar-a11",
@@ -633,7 +667,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-nar-a12",
@@ -659,7 +694,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         }
       ],
       "features": [
@@ -689,7 +725,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "NAR-02",
@@ -762,7 +799,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "NAR-03",
@@ -790,7 +828,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "NAR-04",
@@ -830,7 +869,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "NAR-05",
@@ -870,7 +910,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "NAR-06",
@@ -926,7 +967,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "NAR-07",
@@ -954,7 +996,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "NAR-08",
@@ -982,7 +1025,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "NAR-09",
@@ -1010,7 +1054,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "NAR-10",
@@ -1028,7 +1073,7 @@
           "source_ui_contributions": [],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "NOT_CHECKED",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -1038,7 +1083,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "NOT_CHECKED"
         },
         {
           "feature_id": "NAR-11",
@@ -1066,7 +1113,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "NAR-12",
@@ -1094,9 +1142,11 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         }
-      ]
+      ],
+      "lifecycle": "ACTIVE"
     },
     {
       "plugin_id": "proprium.knowledge",
@@ -1190,7 +1240,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-kno-a02",
@@ -1270,7 +1321,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-kno-a03",
@@ -1344,7 +1396,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-kno-a04",
@@ -1402,7 +1455,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-kno-a05",
@@ -1453,7 +1507,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-kno-a06",
@@ -1561,7 +1616,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-kno-a07",
@@ -1597,7 +1653,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-kno-a08",
@@ -1662,7 +1719,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-kno-a09",
@@ -1748,7 +1806,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-kno-a10",
@@ -1791,7 +1850,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-kno-a11",
@@ -1890,7 +1950,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-kno-a12",
@@ -1995,7 +2056,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-kno-a13",
@@ -2075,7 +2137,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-kno-a14",
@@ -2174,13 +2237,14 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-kno-a15",
-          "canon_title": "Lens design target",
+          "canon_title": "Shared scene cursor",
           "canon_reference": "#accept-kno-a15",
-          "canon_requirement": "After graph/map/timeline gates independently pass, move one shared scene cursor through a synthetic multi-scene work. Location, event, appearances, thread state and reader disclosure all update from the same pinned snapshot; unresolved/unknown fields remain labeled. This case certifies the DESIGN_TARGET only and does not reclassify a historical feature as recovered.",
+          "canon_requirement": "After graph/map/timeline gates independently pass, move one shared scene cursor through a synthetic multi-scene work on signed desktop and mobile artifacts. Location, event, appearances, thread state, timeline and reader disclosure all update from the same pinned snapshot; unresolved/unknown fields remain labeled. This gate verifies the current Proprium implementation; it does not reclassify the historical source feature from DESIGN_TARGET to RECOVERY.",
           "feature_ids": [
             "KNO-20"
           ],
@@ -2200,7 +2264,17 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE",
+          "canon_metadata_history": [
+            {
+              "ledger_revision": "829c69e19aa504cccb1622cdbaa832b963ea99a7",
+              "fields": {
+                "canon_title": "Lens design target",
+                "canon_requirement": "After graph/map/timeline gates independently pass, move one shared scene cursor through a synthetic multi-scene work. Location, event, appearances, thread state and reader disclosure all update from the same pinned snapshot; unresolved/unknown fields remain labeled. This case certifies the DESIGN_TARGET only and does not reclassify a historical feature as recovered."
+              }
+            }
+          ]
         },
         {
           "id": "accept-kno-a16",
@@ -2226,7 +2300,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-kno-a17",
@@ -2252,7 +2327,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-kno-a18",
@@ -2278,7 +2354,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-kno-a19",
@@ -2305,7 +2382,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         }
       ],
       "features": [
@@ -2381,7 +2459,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-02",
@@ -2429,7 +2508,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-03",
@@ -2470,7 +2550,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-04",
@@ -2499,7 +2580,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-05",
@@ -2573,7 +2655,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-06",
@@ -2638,7 +2721,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-07",
@@ -2687,7 +2771,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-08",
@@ -2728,7 +2813,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-09",
@@ -2756,7 +2842,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-10",
@@ -2804,7 +2891,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-11",
@@ -2853,7 +2941,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-12",
@@ -2881,7 +2970,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-13",
@@ -2930,7 +3020,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-14",
@@ -2971,7 +3062,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-15",
@@ -3012,7 +3104,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-16",
@@ -3060,7 +3153,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-17",
@@ -3100,7 +3194,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-18",
@@ -3198,7 +3293,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-19",
@@ -3312,7 +3408,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-20",
@@ -3340,7 +3437,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-21",
@@ -3369,7 +3467,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-22",
@@ -3398,7 +3497,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-23",
@@ -3426,7 +3526,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-24",
@@ -3454,7 +3555,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "KNO-25",
@@ -3482,9 +3584,11 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         }
-      ]
+      ],
+      "lifecycle": "ACTIVE"
     },
     {
       "plugin_id": "proprium.research",
@@ -3514,7 +3618,7 @@
           "id": "accept-res-a001",
           "canon_title": null,
           "canon_reference": "#accept-res-a001",
-          "canon_requirement": "In an offline local repository with no plugins beyond Research, create 300+ Markdown/text/YAML fixtures under supported roots plus excluded hidden/binary/out-of-scope files. Search lexical, exact phrase/title and prefix, scope, next page; repeat after file change/delete. | Expected hits appear in deterministic order with correct revisions/ranges/snippets; hidden and out-of-scope paths are absent; pagination has no gaps/duplicates; current coverage is shown; explicit index rebuild status/progress is observable; deletion/revision invalidates only affected derived data; editor remains writable throughout.",
+          "canon_requirement": "In an offline local repository with no plugins beyond Research, create 300+ Markdown/text/YAML fixtures under supported roots plus excluded hidden/binary/out-of-scope files. Search lexical, exact phrase/title and prefix, scope, next page; repeat after file change/delete. In a second run, explicitly install and enable Semantic with an admitted local embedding model, then search the same query in semantic, hybrid and expression modes; change the Host snapshot between provider calls in one run. | Expected lexical hits appear in deterministic order with correct revisions/ranges/snippets; hidden and out-of-scope paths are absent; pagination has no gaps/duplicates; current coverage is shown; explicit index rebuild status/progress is observable; deletion/revision invalidates only affected derived data; editor remains writable throughout. Semantic and hybrid results use exact-snapshot source spans and deterministic RRF provenance; mismatched Host scope/snapshot/query results are rejected. Expression mode uses the admitted Research tokenizer; when its asset is missing or denied, the UI states that expression ranking is unavailable and preserves the standard results.",
           "feature_ids": [
             "RES-001"
           ],
@@ -3551,7 +3655,16 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE",
+          "canon_metadata_history": [
+            {
+              "ledger_revision": "829c69e19aa504cccb1622cdbaa832b963ea99a7",
+              "fields": {
+                "canon_requirement": "In an offline local repository with no plugins beyond Research, create 300+ Markdown/text/YAML fixtures under supported roots plus excluded hidden/binary/out-of-scope files. Search lexical, exact phrase/title and prefix, scope, next page; repeat after file change/delete. | Expected hits appear in deterministic order with correct revisions/ranges/snippets; hidden and out-of-scope paths are absent; pagination has no gaps/duplicates; current coverage is shown; explicit index rebuild status/progress is observable; deletion/revision invalidates only affected derived data; editor remains writable throughout."
+              }
+            }
+          ]
         },
         {
           "id": "accept-res-a002",
@@ -3577,7 +3690,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-res-a003",
@@ -3634,7 +3748,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-res-a004",
@@ -3677,7 +3792,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-res-a005",
@@ -3720,7 +3836,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-res-a006",
@@ -3763,7 +3880,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-res-a007",
@@ -3799,7 +3917,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-res-a008",
@@ -3849,7 +3968,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-res-a009",
@@ -3885,7 +4005,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-res-a010",
@@ -3911,7 +4032,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-res-a011",
@@ -3947,7 +4069,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-res-a012",
@@ -3997,13 +4120,14 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-res-a013",
           "canon_title": null,
           "canon_reference": "#accept-res-a013",
-          "canon_requirement": "Switch repository, branch, overlay and active text revision during concurrent index/analysis; cancel one of two identical searches; disable/re-enable Research; evict/corrupt cache; interrupt the network during optional artifact/model transfer; suspend mobile tab. | No old result is displayed as current or repopulated after disable; one caller's cancel does not cancel another; corrupt cache rebuilds only from current snapshot; interrupted transfer leaves no active partial artifact and cached verified bytes still work offline; missing cache/Worker status is truthful; editor and local draft remain intact.",
+          "canon_requirement": "Switch repository, branch, overlay and active text revision during concurrent index/analysis; cancel and explicitly resume an index task mid-scan, mid-build and mid-publication; recreate the Guest and resume the same pinned task; cancel one of two identical searches; disable/re-enable Research; evict/corrupt cache; interrupt the network during optional artifact/model transfer; suspend mobile tab. | Each task step lists at most one 256-entry page, reads at most one source file, or publishes at most 64 records / 256 KiB; source-scan progress remains indeterminate until listing completes. Same-session resume continues its cursor. Guest reload truthfully restarts from the same pinned Git snapshot, discards only partial staged chunks, and never exposes a partial manifest. No old result is displayed as current or repopulated after disable; one search caller's cancel does not cancel another; corrupt cache rebuilds only from current snapshot; interrupted transfer leaves no active partial artifact and cached verified bytes still work offline; missing cache/Worker status is truthful; editor and local draft remain intact.",
           "feature_ids": [
             "RES-013"
           ],
@@ -4023,14 +4147,23 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE",
+          "canon_metadata_history": [
+            {
+              "ledger_revision": "8a8748257f46f6907d7a5400dfbc9f22c281381d",
+              "fields": {
+                "canon_requirement": "Switch repository, branch, overlay and active text revision during concurrent index/analysis; cancel one of two identical searches; disable/re-enable Research; evict/corrupt cache; interrupt the network during optional artifact/model transfer; suspend mobile tab. | No old result is displayed as current or repopulated after disable; one caller's cancel does not cancel another; corrupt cache rebuilds only from current snapshot; interrupted transfer leaves no active partial artifact and cached verified bytes still work offline; missing cache/Worker status is truthful; editor and local draft remain intact."
+              }
+            }
+          ]
         }
       ],
       "features": [
         {
           "feature_id": "RES-001",
           "source_anchor_state": "TRACEABILITY_MAPPED",
-          "author_visible_result": "Search Markdown/text and supported YAML/JSON workspace documents by full text, exact phrase/title and prefix; scope by repository-relative path; deterministic ranking and bounded pagination.",
+          "author_visible_result": "Search Markdown/text and supported YAML/JSON workspace documents by full text, exact phrase/title and prefix; scope by repository-relative path; deterministic ranking and bounded pagination. When Semantic is explicitly available, Host may submit its sentence results with canonical Research results to the UI-only `research.search.fuse` action, which revalidates exact Host scope/snapshot and source spans and fuses document/passage ranks with deterministic reciprocal-rank fusion. Expression ranking uses the admitted Research tokenizer over candidate sentences; if unavailable, report that state and preserve the standard search results.",
           "source_disposition": "RECOVERY + DESIGN_TARGET pagination and phrase semantics",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -4074,7 +4207,16 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE",
+          "canon_metadata_history": [
+            {
+              "ledger_revision": "829c69e19aa504cccb1622cdbaa832b963ea99a7",
+              "fields": {
+                "author_visible_result": "Search Markdown/text and supported YAML/JSON workspace documents by full text, exact phrase/title and prefix; scope by repository-relative path; deterministic ranking and bounded pagination."
+              }
+            }
+          ]
         },
         {
           "feature_id": "RES-002",
@@ -4102,7 +4244,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "RES-003",
@@ -4167,7 +4310,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "RES-004",
@@ -4216,7 +4360,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "RES-005",
@@ -4265,7 +4410,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "RES-006",
@@ -4314,7 +4460,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "RES-007",
@@ -4354,7 +4501,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "RES-008",
@@ -4411,7 +4559,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "RES-009",
@@ -4451,7 +4600,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "RES-010",
@@ -4479,7 +4629,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "RES-011",
@@ -4519,7 +4670,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "RES-012",
@@ -4576,12 +4728,13 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "RES-013",
           "source_anchor_state": "UNMAPPED",
-          "author_visible_result": "Cache index and NLP results by exact workspace snapshot/config; invalidate on revision, branch, overlay, deletion, provider or plugin lifecycle change. Report progress/cancel/failure without affecting typing.",
+          "author_visible_result": "Cache index and NLP results by exact workspace snapshot/config; invalidate on revision, branch, overlay, deletion, provider or plugin lifecycle change. Build tasks page source metadata and publish cache data in bounded Host steps, report progress/cancel/failure, and never affect typing.",
           "source_disposition": "RECOVERY cache; explicit status/rebuild actions and persistent Host cache/lifecycle are DESIGN_TARGET",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -4604,9 +4757,19 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE",
+          "canon_metadata_history": [
+            {
+              "ledger_revision": "8a8748257f46f6907d7a5400dfbc9f22c281381d",
+              "fields": {
+                "author_visible_result": "Cache index and NLP results by exact workspace snapshot/config; invalidate on revision, branch, overlay, deletion, provider or plugin lifecycle change. Report progress/cancel/failure without affecting typing."
+              }
+            }
+          ]
         }
-      ]
+      ],
+      "lifecycle": "ACTIVE"
     },
     {
       "plugin_id": "proprium.paired-writing",
@@ -4691,7 +4854,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -4701,7 +4864,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "id": "accept-pw-02",
@@ -4743,7 +4908,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -4753,7 +4918,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "id": "accept-pw-03",
@@ -4794,7 +4961,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -4804,7 +4971,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "id": "accept-pw-04",
@@ -4845,7 +5014,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -4855,7 +5024,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "id": "accept-pw-05",
@@ -4930,7 +5101,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -4940,7 +5111,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "id": "accept-pw-06",
@@ -5003,7 +5176,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -5013,7 +5186,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "id": "accept-pw-07",
@@ -5101,7 +5276,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -5111,7 +5286,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "id": "accept-pw-08",
@@ -5129,7 +5306,7 @@
           ],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -5139,7 +5316,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "id": "accept-pw-09",
@@ -5155,7 +5334,7 @@
           ],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -5165,7 +5344,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "id": "accept-pw-10",
@@ -5194,7 +5375,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -5204,7 +5385,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "id": "accept-pw-11",
@@ -5266,7 +5449,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -5276,7 +5459,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "id": "accept-pw-21",
@@ -5302,7 +5487,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -5312,7 +5497,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "NOT_CHECKED"
         }
       ],
       "features": [
@@ -5386,7 +5573,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -5396,7 +5583,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "feature_id": "PW-02",
@@ -5443,7 +5632,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -5453,7 +5642,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "NOT_CHECKED"
         },
         {
           "feature_id": "PW-03",
@@ -5500,7 +5691,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -5510,7 +5701,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "feature_id": "PW-04",
@@ -5557,7 +5750,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -5567,7 +5760,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "feature_id": "PW-05",
@@ -5654,7 +5849,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -5664,7 +5859,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "feature_id": "PW-06",
@@ -5735,7 +5932,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -5745,7 +5942,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "feature_id": "PW-07",
@@ -5775,7 +5974,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -5785,7 +5984,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "feature_id": "PW-08",
@@ -5823,7 +6024,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -5833,7 +6034,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "feature_id": "PW-09",
@@ -5863,7 +6066,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -5873,7 +6076,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "feature_id": "PW-10",
@@ -5903,7 +6108,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -5913,7 +6118,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "feature_id": "PW-11",
@@ -5968,7 +6175,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -5978,7 +6185,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "feature_id": "PW-12",
@@ -6000,7 +6209,7 @@
           "source_ui_contributions": [],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -6010,7 +6219,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "feature_id": "PW-13",
@@ -6028,7 +6239,7 @@
           "source_ui_contributions": [],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -6038,7 +6249,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "feature_id": "PW-14",
@@ -6056,7 +6269,7 @@
           "source_ui_contributions": [],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -6066,7 +6279,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "feature_id": "PW-15",
@@ -6084,7 +6299,7 @@
           "source_ui_contributions": [],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "NOT_CHECKED",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -6094,7 +6309,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "NOT_CHECKED"
         },
         {
           "feature_id": "PW-16",
@@ -6113,7 +6330,7 @@
           "source_ui_contributions": [],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -6123,7 +6340,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "feature_id": "PW-17",
@@ -6142,7 +6361,7 @@
           "source_ui_contributions": [],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -6152,7 +6371,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "feature_id": "PW-18",
@@ -6171,7 +6392,7 @@
           "source_ui_contributions": [],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -6181,7 +6402,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "feature_id": "PW-19",
@@ -6199,7 +6422,7 @@
           "source_ui_contributions": [],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "FAIL",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -6209,7 +6432,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "FAIL"
         },
         {
           "feature_id": "PW-20",
@@ -6228,7 +6453,7 @@
           "source_ui_contributions": [],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "NOT_CHECKED",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -6238,7 +6463,9 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "NOT_CHECKED"
         },
         {
           "feature_id": "PW-21",
@@ -6269,7 +6496,7 @@
           "source_revisions": [
             "1a05a0f10b33acca3fcfc544a5a6a2592f1c3865"
           ],
-          "status": "NOT_CHECKED",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -6279,9 +6506,12 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "NOT_CHECKED"
         }
-      ]
+      ],
+      "lifecycle": "FROZEN"
     },
     {
       "plugin_id": "proprium.diagnostics",
@@ -6351,13 +6581,14 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-dia-a10",
           "canon_title": "finding interaction/feedback",
           "canon_reference": "#accept-dia-a10",
-          "canon_requirement": "Desktop margin marker and panel filters select a finding; mark-intentional and false-positive are distinct explicit decisions. Host shows a reviewable feedback file proposal; after approval/reload, only the exact matching finding is annotated. A new source/config fingerprint reappears. Resolved animation never changes finding truth or severity.",
+          "canon_requirement": "Desktop margin marker and panel kind/severity/state filters select a finding and display quoted evidence; mark-intentional, false-positive and deferred are distinct explicit decisions. Host shows a reviewable feedback file proposal; after approval/reload, the stable fingerprint is active only while exact source/config/model identity still matches. A changed source/config fingerprint reappears and its prior decision is shown as stale. Resolved presentation never changes finding truth or severity.",
           "feature_ids": [
             "DIA-09",
             "DIA-12"
@@ -6378,7 +6609,14 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE",
+          "superseded_canon_metadata": {
+            "ledger_revision": "e02394d8754098df4d0619ff2ba82e017108c47f",
+            "fields": {
+              "canon_requirement": "Desktop margin marker and panel filters select a finding; mark-intentional and false-positive are distinct explicit decisions. Host shows a reviewable feedback file proposal; after approval/reload, only the exact matching finding is annotated. A new source/config fingerprint reappears. Resolved animation never changes finding truth or severity."
+            }
+          }
         },
         {
           "id": "accept-dia-a11",
@@ -6405,13 +6643,14 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-dia-a12",
           "canon_title": "first-read",
           "canon_reference": "#accept-dia-a12",
-          "canon_requirement": "Only an explicit user-run request with consented Paired Writing provider receives manuscript context. Result identifies the exact chapter and model/provider, labels questions/expectations/confusion as an interpretation, and cites bounded source context. Network/model unavailable returns a recoverable error while ordinary diagnostics remains available; no report is silently persisted.",
+          "canon_requirement": "FROZEN — This is Paired Writing-owned and excluded from the active Diagnostics completion gate while Paired Writing is frozen. Preserve its prior requirement: only an explicit user-run request with consented Paired Writing provider receives manuscript context; result identifies the exact chapter and model/provider, labels questions/expectations/confusion as an interpretation, and cites bounded source context. Network/model unavailable returns a recoverable error while ordinary diagnostics remains available; no report is silently persisted. `FROZEN` is not `PASS` and does not describe implementation evidence.",
           "feature_ids": [
             "DIA-10"
           ],
@@ -6421,7 +6660,7 @@
           ],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "NOT_CHECKED",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -6431,13 +6670,23 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "NOT_CHECKED",
+          "superseded_canon_metadata": {
+            "ledger_revision": "c247023424a537c87477c07724ad0f0052c3ccc9",
+            "fields": {
+              "canon_title": "first-read",
+              "canon_reference": "#accept-dia-a12",
+              "canon_requirement": "Only an explicit user-run request with consented Paired Writing provider receives manuscript context. Result identifies the exact chapter and model/provider, labels questions/expectations/confusion as an interpretation, and cites bounded source context. Network/model unavailable returns a recoverable error while ordinary diagnostics remains available; no report is silently persisted."
+            }
+          }
         },
         {
           "id": "accept-dia-a13",
           "canon_title": "contradiction candidates",
           "canon_reference": "#accept-dia-a13",
-          "canon_requirement": "Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale; optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction` remain distinguishable. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact.",
+          "canon_requirement": "Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact. Inspect legacy dismissal JSONL at its exact revision, retain raw/unknown fields, show unresolved and colliding rows, and propose only explicitly selected unique candidates as `legacy_dismissed`; never alter the JSONL source. **FROZEN subrequirement:** optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction`; this is excluded from the active Diagnostics completion gate while Paired Writing is frozen. `FROZEN` is not `PASS`.",
           "feature_ids": [
             "DIA-11"
           ],
@@ -6467,7 +6716,24 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE",
+          "superseded_canon_metadata": {
+            "ledger_revision": "e02394d8754098df4d0619ff2ba82e017108c47f",
+            "fields": {
+              "canon_requirement": "Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact. **FROZEN subrequirement:** optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction`; this is excluded from the active Diagnostics completion gate while Paired Writing is frozen. `FROZEN` is not `PASS`."
+            }
+          },
+          "superseded_canon_metadata_history": [
+            {
+              "ledger_revision": "c247023424a537c87477c07724ad0f0052c3ccc9",
+              "fields": {
+                "canon_title": "contradiction candidates",
+                "canon_reference": "#accept-dia-a13",
+                "canon_requirement": "Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale; optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction` remain distinguishable. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact."
+              }
+            }
+          ]
         },
         {
           "id": "accept-dia-a14",
@@ -6510,7 +6776,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-dia-a15",
@@ -6553,7 +6820,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-dia-a16",
@@ -6596,7 +6864,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-dia-a2",
@@ -6654,7 +6923,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-dia-a3",
@@ -6697,7 +6967,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-dia-a4",
@@ -6740,7 +7011,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-dia-a5",
@@ -6783,7 +7055,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-dia-a6",
@@ -6826,7 +7099,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-dia-a7",
@@ -6869,7 +7143,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-dia-a8",
@@ -6905,7 +7180,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-dia-a9",
@@ -6957,7 +7233,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         }
       ],
       "features": [
@@ -7012,7 +7289,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "DIA-02",
@@ -7061,7 +7339,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "DIA-03",
@@ -7110,7 +7389,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "DIA-04",
@@ -7159,7 +7439,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "DIA-05",
@@ -7207,7 +7488,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "DIA-06",
@@ -7257,7 +7539,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "DIA-07",
@@ -7297,7 +7580,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "DIA-08",
@@ -7337,13 +7621,14 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "DIA-09",
           "source_anchor_state": "UNMAPPED",
           "author_visible_result": "RECOVERY — Merge analyzer output to stable finding identities, kind/severity filters, sentence ordering, stale/loading state and resolved-item feedback.",
-          "source_disposition": "`scene.run.v1`, `project.consistency.run.v1`, `project.continuity.run.v1`, `feedback.propose.v1`.",
+          "source_disposition": "`scene.run.v1`, `project.consistency.run.v1`, `project.continuity.run.v1`, `feedback.read.v1`, `feedback.propose.v1`; Host `DiagnosticsFindings` filters current and decided findings and displays stale decisions without applying them to changed sources.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
             "edc033c2c9466274a334299dadfa426661d957d9"
@@ -7366,12 +7651,19 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE",
+          "superseded_canon_metadata": {
+            "ledger_revision": "e02394d8754098df4d0619ff2ba82e017108c47f",
+            "fields": {
+              "source_disposition": "`scene.run.v1`, `project.consistency.run.v1`, `project.continuity.run.v1`, `feedback.propose.v1`."
+            }
+          }
         },
         {
           "feature_id": "DIA-10",
           "source_anchor_state": "UNMAPPED",
-          "author_visible_result": "RECOVERY — Preserve a cross-plugin chapter-level first-read feature that offers questions, expectations and confusion as an interpretive report.",
+          "author_visible_result": "**FROZEN — Paired Writing-owned cross-plugin chapter first-read report.** Preserve the questions, expectations and confusion report as an interpretive feature; this feature is excluded from the active seven-plugin completion gate while Paired Writing is frozen. `FROZEN` is not `PASS`.",
           "source_disposition": "The recovered first-read feature is assigned to `proprium.paired-writing`, which owns the model action and chapter context. Diagnostics has no reader-reaction action or dependency; the result remains in Paired Writing's chapter report.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -7384,7 +7676,7 @@
           "source_ui_contributions": [],
           "source_anchors": [],
           "source_revisions": [],
-          "status": "NOT_CHECKED",
+          "status": "FROZEN",
           "fixture": null,
           "command": null,
           "git_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
@@ -7394,13 +7686,21 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "FROZEN",
+          "pre_freeze_status": "NOT_CHECKED",
+          "superseded_canon_metadata": {
+            "ledger_revision": "c247023424a537c87477c07724ad0f0052c3ccc9",
+            "fields": {
+              "author_visible_result": "RECOVERY — Preserve a cross-plugin chapter-level first-read feature that offers questions, expectations and confusion as an interpretive report."
+            }
+          }
         },
         {
           "feature_id": "DIA-11",
           "source_anchor_state": "TRACEABILITY_MAPPED",
-          "author_visible_result": "RECOVERY — Build evidence-paired contradiction candidates, let an author request optional interpretation, distinguish compatible/insufficient/contradiction and review dismissal against its source scope.",
-          "source_disposition": "Diagnostics owns deterministic declared-state findings and persisted human decisions; Semantic supplies optional embedding candidates; Paired Writing supplies the explicit model verdict. The same finding is normalized once by Diagnostics.",
+          "author_visible_result": "RECOVERY — Build evidence-paired contradiction candidates and review dismissal against its source scope; the optional Paired Writing interpretation is separately frozen.",
+          "source_disposition": "Diagnostics owns deterministic declared-state findings and persisted human decisions; Semantic supplies optional embedding candidates; `feedback.read.v1` attaches only exact current source/config decisions. Legacy inspect/propose actions preserve raw JSONL fields and propose only to Diagnostics feedback. The Paired Writing model-verdict subrequirement is **FROZEN** while Paired Writing is frozen.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
             "edc033c2c9466274a334299dadfa426661d957d9"
@@ -7434,7 +7734,23 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE",
+          "superseded_canon_metadata": {
+            "ledger_revision": "e02394d8754098df4d0619ff2ba82e017108c47f",
+            "fields": {
+              "source_disposition": "Diagnostics owns deterministic declared-state findings and persisted human decisions; Semantic supplies optional embedding candidates; the Paired Writing model-verdict subrequirement is **FROZEN** while Paired Writing is frozen. The same finding is normalized once by Diagnostics."
+            }
+          },
+          "superseded_canon_metadata_history": [
+            {
+              "ledger_revision": "c247023424a537c87477c07724ad0f0052c3ccc9",
+              "fields": {
+                "author_visible_result": "RECOVERY — Build evidence-paired contradiction candidates, let an author request optional interpretation, distinguish compatible/insufficient/contradiction and review dismissal against its source scope.",
+                "source_disposition": "Diagnostics owns deterministic declared-state findings and persisted human decisions; Semantic supplies optional embedding candidates; Paired Writing supplies the explicit model verdict. The same finding is normalized once by Diagnostics."
+              }
+            }
+          ]
         },
         {
           "feature_id": "DIA-12",
@@ -7463,7 +7779,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "DIA-13",
@@ -7491,12 +7808,13 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "DIA-14",
           "source_anchor_state": "TRACEABILITY_MAPPED",
-          "author_visible_result": "`RECOVERY`: Scriptorium `modules/assistant/src/aspect-review.ts:runDeterministicAspectReview`, `normalizeAspectIds`; `actions.ts:runAspectReview`, `previewAspectPrompt`; `actions.test.ts` “aspect review runs the deterministic local source implementation without consent or model access” and preview matrix. This deterministic Assistant feature is relocated here to keep one analysis implementation.",
+          "author_visible_result": "`RECOVERY`: Scriptorium `modules/assistant/src/aspect-review.ts:runDeterministicAspectReview`, `normalizeAspectIds`; `actions.ts:runAspectReview`, `previewAspectPrompt`; `actions.test.ts` “aspect review runs the deterministic local source implementation without consent or model access” and preview matrix. Current implementation: `plugins/diagnostics/guest.ts`, `plugins/diagnostics/plugin.json` surface `diagnostics.chapter-aspects`, and `plugins/diagnostics/tests/aspectGuest.test.ts`; browser acceptance remains unverified. This deterministic Assistant feature is relocated here to keep one analysis implementation.",
           "source_disposition": "`proprium.diagnostics.chapter.aspects.review.v1` / `proprium.diagnostics.chapter.aspects.preview.v1`; [DIA-A16](#accept-dia-a16). Paired retains explicit adapters for `assistant.aspect.review` and `assistant.aspect.review.preview`.",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -7539,9 +7857,17 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE",
+          "superseded_canon_metadata": {
+            "ledger_revision": "c247023424a537c87477c07724ad0f0052c3ccc9",
+            "fields": {
+              "author_visible_result": "`RECOVERY`: Scriptorium `modules/assistant/src/aspect-review.ts:runDeterministicAspectReview`, `normalizeAspectIds`; `actions.ts:runAspectReview`, `previewAspectPrompt`; `actions.test.ts` “aspect review runs the deterministic local source implementation without consent or model access” and preview matrix. This deterministic Assistant feature is relocated here to keep one analysis implementation."
+            }
+          }
         }
-      ]
+      ],
+      "lifecycle": "ACTIVE"
     },
     {
       "plugin_id": "proprium.speaker",
@@ -7600,7 +7926,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-spk-a02",
@@ -7643,7 +7970,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-spk-a03",
@@ -7669,7 +7997,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-spk-a04",
@@ -7705,7 +8034,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-spk-a05",
@@ -7755,7 +8085,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-spk-a06",
@@ -7798,7 +8129,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-spk-a07",
@@ -7848,7 +8180,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-spk-a08",
@@ -7905,7 +8238,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-spk-a09",
@@ -7962,7 +8296,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-spk-a10",
@@ -7998,13 +8333,14 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-spk-a11",
           "canon_title": null,
           "canon_reference": "#accept-spk-a11",
-          "canon_requirement": "Restore legacy corrections and model using explicit migration. Identical target reports unchanged; conflicting target remains untouched and is reviewable; disabled Speaker makes no proposal. Preserve unknown YAML keys, unknown correction JSON fields, malformed lines, and all original legacy bytes.",
+          "canon_requirement": "From the `speaker.recovery` panel, inspect the legacy correction/model files, then request migration with an idempotency key. Verify only absent targets are proposed through Host review and that proposal operations contain the exact original bytes and source/target revisions. Identical target reports unchanged; conflicting target remains untouched and reviewable; disabled Speaker makes no proposal. Preserve unknown JSON fields, malformed lines and original bytes; reject/stale review leaves all source and target files unchanged.",
           "feature_ids": [
             "SPK-11"
           ],
@@ -8024,7 +8360,16 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE",
+          "superseded_canon_metadata": {
+            "ledger_revision": "c247023424a537c87477c07724ad0f0052c3ccc9",
+            "fields": {
+              "canon_title": null,
+              "canon_reference": "#accept-spk-a11",
+              "canon_requirement": "Restore legacy corrections and model using explicit migration. Identical target reports unchanged; conflicting target remains untouched and is reviewable; disabled Speaker makes no proposal. Preserve unknown YAML keys, unknown correction JSON fields, malformed lines, and all original legacy bytes."
+            }
+          }
         },
         {
           "id": "accept-spk-a12",
@@ -8050,7 +8395,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         }
       ],
       "features": [
@@ -8092,7 +8438,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "SPK-02",
@@ -8141,7 +8488,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "SPK-03",
@@ -8169,7 +8517,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "SPK-04",
@@ -8209,7 +8558,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "SPK-05",
@@ -8266,7 +8616,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "SPK-06",
@@ -8315,7 +8666,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "SPK-07",
@@ -8372,7 +8724,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "SPK-08",
@@ -8436,7 +8789,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "SPK-09",
@@ -8501,7 +8855,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "SPK-10",
@@ -8541,13 +8896,14 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "SPK-11",
           "source_anchor_state": "UNMAPPED",
-          "author_visible_result": "`modules/speaker/src/migration.ts`: `createSpeakerMigrationProducer`; `migration.test.ts` covers byte-for-byte, absent-only restoration and conflict/disabled behavior.",
-          "source_disposition": "Read legacy state without rewriting it; migration is an explicit Host-reviewed operation and retains conflicting or unknown bytes; see [data contract](#data-contract) and [SPK-A11](#accept-spk-a11).",
+          "author_visible_result": "`plugins/speaker/src/migration.ts`: `prepareSpeakerRecovery`; `plugins/speaker/src/guest.ts`: `speaker.recovery.inspect` and `speaker.recovery.propose`; `plugins/speaker/plugin.json`: `speaker.recovery` Host-rendered panel; `plugins/speaker/src/guest.test.ts` covers exact-byte copy, absent-only creation and conflict/identical no-op behavior.",
+          "source_disposition": "Inspect canonical legacy/current paths read-only. Explicit proposal copies original bytes only into absent targets; identical targets are unchanged, conflicting targets are preserved. Host approval and revision compare-and-swap remain required; see [typed actions](#typed-action-contract), [data contract](#data-contract) and [SPK-A11](#accept-spk-a11).",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
             "edc033c2c9466274a334299dadfa426661d957d9"
@@ -8569,7 +8925,15 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE",
+          "superseded_canon_metadata": {
+            "ledger_revision": "c247023424a537c87477c07724ad0f0052c3ccc9",
+            "fields": {
+              "author_visible_result": "`modules/speaker/src/migration.ts`: `createSpeakerMigrationProducer`; `migration.test.ts` covers byte-for-byte, absent-only restoration and conflict/disabled behavior.",
+              "source_disposition": "Read legacy state without rewriting it; migration is an explicit Host-reviewed operation and retains conflicting or unknown bytes; see [data contract](#data-contract) and [SPK-A11](#accept-spk-a11)."
+            }
+          }
         },
         {
           "feature_id": "SPK-12",
@@ -8597,9 +8961,11 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         }
-      ]
+      ],
+      "lifecycle": "ACTIVE"
     },
     {
       "plugin_id": "proprium.semantic",
@@ -8625,7 +8991,7 @@
           "id": "accept-sem-a1",
           "canon_title": "Index lifecycle and data isolation",
           "canon_reference": "#accept-sem-a1",
-          "canon_requirement": "With a synthetic work containing 120 passages across story and manuscript files, status initially reports missing without loading the model. The author explicitly starts indexing; progress reaches 120 and final status is ready for the selected snapshot. A second build reuses unchanged vectors and replaces only the edited passage. A changed branch/worktree generation returns no old hit as current; a stale/missing/corrupt cache rebuilds from Git source. Cancel mid-batch, Worker termination, tab reload, storage quota failure, offline missing model, plugin disable and re-enable each preserve the previous complete generation and source files; tasks stop and leases release. Repository A's cache never appears in repository B.",
+          "canon_requirement": "With a synthetic work containing 120 passages across story and manuscript files, status initially reports missing without loading the model. The author explicitly starts indexing; progress reaches 120 and final status is ready for the selected snapshot. A second build reuses unchanged vectors and replaces only the edited passage. A changed branch/worktree generation returns no old hit as current; a stale/missing/corrupt cache rebuilds from Git source. Cancel mid-batch, Worker termination, tab reload, storage quota failure, offline missing model, plugin disable and re-enable each preserve the previous complete generation and source files; same-snapshot staged vectors are resumed only after their source/model/config hashes are revalidated, otherwise discarded. A current index with an unloaded model starts a warm-only job and does not re-embed passages. Tasks stop and leases release. Repository A's cache never appears in repository B.",
           "feature_ids": [
             "SEM-01"
           ],
@@ -8685,13 +9051,22 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE",
+          "canon_metadata_history": [
+            {
+              "ledger_revision": "829c69e19aa504cccb1622cdbaa832b963ea99a7",
+              "fields": {
+                "canon_requirement": "With a synthetic work containing 120 passages across story and manuscript files, status initially reports missing without loading the model. The author explicitly starts indexing; progress reaches 120 and final status is ready for the selected snapshot. A second build reuses unchanged vectors and replaces only the edited passage. A changed branch/worktree generation returns no old hit as current; a stale/missing/corrupt cache rebuilds from Git source. Cancel mid-batch, Worker termination, tab reload, storage quota failure, offline missing model, plugin disable and re-enable each preserve the previous complete generation and source files; tasks stop and leases release. Repository A's cache never appears in repository B."
+              }
+            }
+          ]
         },
         {
           "id": "accept-sem-a2",
           "canon_title": "Search and reranking",
           "canon_reference": "#accept-sem-a2",
-          "canon_requirement": "From Research, run a Japanese lexical query while Semantic is absent/disabled/offline; lexical result appears immediately with no model request. Enable hybrid mode and query a known fixture; Research combines lexical and vector ranks by RRF with component scores, cites exact current revision and opens the exact sentence. An outdated response after editing or switching branch is marked stale and cannot navigate. Request reranking only after explicit opt-in; a valid local run returns finite model-tagged scores, while unavailable artifact/device/cancellation returns original order plus a visible warning and preserves editing. Repeat the same query/snapshot/model produces same ordering and does not leak across repositories.",
+          "canon_requirement": "From Research, run a Japanese lexical query while Semantic is absent/disabled/offline; lexical result appears immediately with no model request. Enable hybrid mode and query a known fixture; Research combines lexical and vector ranks by RRF with component scores, cites exact current revision and opens the exact sentence. An outdated response after editing or switching branch is marked stale and cannot navigate. Request reranking only after explicit opt-in; a valid local run returns finite model-tagged scores, while unavailable artifact/device/cancellation returns original order plus a visible warning and preserves editing. Repeat the same query/snapshot/model produces same ordering and does not leak across repositories. The pinned BGE model must complete an exact-byte local runtime test before this gate is considered passed. A fail-fast unavailable response is safe behavior but does not satisfy the reranking requirement.",
           "feature_ids": [
             "SEM-02"
           ],
@@ -8730,7 +9105,16 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE",
+          "canon_metadata_history": [
+            {
+              "ledger_revision": "829c69e19aa504cccb1622cdbaa832b963ea99a7",
+              "fields": {
+                "canon_requirement": "From Research, run a Japanese lexical query while Semantic is absent/disabled/offline; lexical result appears immediately with no model request. Enable hybrid mode and query a known fixture; Research combines lexical and vector ranks by RRF with component scores, cites exact current revision and opens the exact sentence. An outdated response after editing or switching branch is marked stale and cannot navigate. Request reranking only after explicit opt-in; a valid local run returns finite model-tagged scores, while unavailable artifact/device/cancellation returns original order plus a visible warning and preserves editing. Repeat the same query/snapshot/model produces same ordering and does not leak across repositories."
+              }
+            }
+          ]
         },
         {
           "id": "accept-sem-a3",
@@ -8775,7 +9159,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-sem-a4",
@@ -8814,7 +9199,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-sem-a5",
@@ -8861,7 +9247,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-sem-a6",
@@ -8906,7 +9293,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-sem-a7",
@@ -8934,15 +9322,16 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         }
       ],
       "features": [
         {
           "feature_id": "SEM-01",
           "source_anchor_state": "TRACEABILITY_MAPPED",
-          "author_visible_result": "Build, inspect and cancel the snapshot index (`semantic.index.rebuild`, `.status`, `semantic.task.status`, `.cancel`)",
-          "source_disposition": "Semantic provider; Research shows current model, snapshot, indexed passage count and progress; author can start, cancel and retry indexing",
+          "author_visible_result": "Build, inspect, cancel and resume the snapshot index (`semantic.index.rebuild`, `.step`, `.status`, `semantic.task.status`, `.cancel`)",
+          "source_disposition": "Semantic provider; Research shows current model, snapshot, indexed passage count and durable progress; author can start, cancel and retry indexing",
           "canon_source_revisions": [
             "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -9011,7 +9400,17 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE",
+          "canon_metadata_history": [
+            {
+              "ledger_revision": "829c69e19aa504cccb1622cdbaa832b963ea99a7",
+              "fields": {
+                "author_visible_result": "Build, inspect and cancel the snapshot index (`semantic.index.rebuild`, `.status`, `semantic.task.status`, `.cancel`)",
+                "source_disposition": "Semantic provider; Research shows current model, snapshot, indexed passage count and progress; author can start, cancel and retry indexing"
+              }
+            }
+          ]
         },
         {
           "feature_id": "SEM-02",
@@ -9062,7 +9461,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "SEM-03",
@@ -9113,7 +9513,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "SEM-04",
@@ -9155,7 +9556,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "SEM-05",
@@ -9206,7 +9608,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "SEM-06",
@@ -9256,7 +9659,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "SEM-07",
@@ -9286,7 +9690,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "SEM-08",
@@ -9316,7 +9721,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "SEM-09",
@@ -9347,9 +9753,11 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         }
-      ]
+      ],
+      "lifecycle": "ACTIVE"
     },
     {
       "plugin_id": "proprium.publishing",
@@ -9409,7 +9817,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-pub-ac02",
@@ -9445,7 +9854,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-pub-ac03",
@@ -9488,7 +9898,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-pub-ac04",
@@ -9531,7 +9942,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-pub-ac05",
@@ -9574,7 +9986,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-pub-ac06",
@@ -9617,7 +10030,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-pub-ac07",
@@ -9643,7 +10057,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-pub-ac08",
@@ -9693,7 +10108,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-pub-ac09",
@@ -9750,7 +10166,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-pub-ac10",
@@ -9807,7 +10224,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-pub-ac11",
@@ -9833,7 +10251,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-pub-ac12",
@@ -9859,7 +10278,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "id": "accept-pub-ac13",
@@ -9885,7 +10305,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         }
       ],
       "features": [
@@ -9928,7 +10349,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "PUB-02",
@@ -9977,7 +10399,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "PUB-03",
@@ -10027,7 +10450,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "PUB-04",
@@ -10076,7 +10500,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "PUB-05",
@@ -10104,7 +10529,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "PUB-06",
@@ -10161,7 +10587,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "PUB-07",
@@ -10227,7 +10654,8 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         },
         {
           "feature_id": "PUB-08",
@@ -10257,9 +10685,11 @@
           "receipt": null,
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
-          "blocker": null
+          "blocker": null,
+          "lifecycle": "ACTIVE"
         }
-      ]
+      ],
+      "lifecycle": "ACTIVE"
     }
   ],
   "recovered_source": {

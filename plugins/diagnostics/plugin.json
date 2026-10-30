@@ -4232,6 +4232,11 @@
                 "semanticHypotheses"
               ]
             }
+          },
+          "semanticCursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
           }
         }
       },
@@ -7283,7 +7288,8 @@
                       "status",
                       "candidates",
                       "model",
-                      "complete"
+                      "complete",
+                      "nextCursor"
                     ],
                     "properties": {
                       "status": {
@@ -7335,12 +7341,9 @@
                               "additionalProperties": false,
                               "required": [
                                 "sceneId",
-                                "sentenceIndex",
                                 "quote",
                                 "path",
-                                "revision",
-                                "start",
-                                "end"
+                                "revision"
                               ],
                               "properties": {
                                 "sceneId": {
@@ -7355,28 +7358,27 @@
                                 },
                                 "quote": {
                                   "type": "string",
-                                  "minLength": 0,
-                                  "maxLength": 32768
+                                  "minLength": 1,
+                                  "maxLength": 4000
                                 },
                                 "path": {
                                   "type": "string",
                                   "minLength": 1,
-                                  "maxLength": 4096
+                                  "maxLength": 1024
                                 },
                                 "revision": {
                                   "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 256
+                                  "pattern": "^[a-f0-9]{64}$",
+                                  "minLength": 64,
+                                  "maxLength": 64
                                 },
                                 "start": {
                                   "type": "integer",
-                                  "minimum": 0,
-                                  "maximum": 2147483647
+                                  "minimum": 0
                                 },
                                 "end": {
                                   "type": "integer",
-                                  "minimum": 0,
-                                  "maximum": 2147483647
+                                  "minimum": 0
                                 }
                               }
                             },
@@ -7385,12 +7387,9 @@
                               "additionalProperties": false,
                               "required": [
                                 "sceneId",
-                                "sentenceIndex",
                                 "quote",
                                 "path",
-                                "revision",
-                                "start",
-                                "end"
+                                "revision"
                               ],
                               "properties": {
                                 "sceneId": {
@@ -7405,28 +7404,27 @@
                                 },
                                 "quote": {
                                   "type": "string",
-                                  "minLength": 0,
-                                  "maxLength": 32768
+                                  "minLength": 1,
+                                  "maxLength": 4000
                                 },
                                 "path": {
                                   "type": "string",
                                   "minLength": 1,
-                                  "maxLength": 4096
+                                  "maxLength": 1024
                                 },
                                 "revision": {
                                   "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 256
+                                  "pattern": "^[a-f0-9]{64}$",
+                                  "minLength": 64,
+                                  "maxLength": 64
                                 },
                                 "start": {
                                   "type": "integer",
-                                  "minimum": 0,
-                                  "maximum": 2147483647
+                                  "minimum": 0
                                 },
                                 "end": {
                                   "type": "integer",
-                                  "minimum": 0,
-                                  "maximum": 2147483647
+                                  "minimum": 0
                                 }
                               }
                             }
@@ -7498,6 +7496,18 @@
                       },
                       "complete": {
                         "type": "boolean"
+                      },
+                      "nextCursor": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       }
                     }
                   }
@@ -7534,7 +7544,8 @@
                     "format",
                     "statistical",
                     "structural",
-                    "declared_continuity"
+                    "declared_continuity",
+                    "semantic_hypothesis"
                   ]
                 },
                 "kind": {
@@ -7549,7 +7560,10 @@
                   ]
                 },
                 "basis": {
-                  "const": "deterministic"
+                  "enum": [
+                    "deterministic",
+                    "hypothesis"
+                  ]
                 },
                 "message": {
                   "type": "string",
@@ -7595,6 +7609,15 @@
                       "quote": {
                         "type": "string",
                         "maxLength": 4000
+                      },
+                      "sceneId": {
+                        "type": "string",
+                        "maxLength": 256
+                      },
+                      "sentenceIndex": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 2147483647
                       }
                     }
                   }
@@ -7903,6 +7926,45 @@
                           }
                         }
                       ]
+                    },
+                    "modelIdentity": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "revision",
+                        "digest"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "maxLength": 256
+                        },
+                        "revision": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 128
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "digest": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$",
+                              "minLength": 64,
+                              "maxLength": 64
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
                     }
                   }
                 }
@@ -7942,6 +8004,10 @@
                     "minimum": 0
                   },
                   "declared_continuity": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "semantic_hypothesis": {
                     "type": "integer",
                     "minimum": 0
                   }
@@ -8844,12 +8910,7 @@
               "configRevisions": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "lint",
-                  "terms",
-                  "toneLexicon",
-                  "plotLexicon"
-                ],
+                "required": [],
                 "properties": {
                   "lint": {
                     "type": "string",
@@ -8995,6 +9056,47 @@
                     "type": "null"
                   }
                 ]
+              },
+              "modelIdentity": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "revision",
+                  "digest"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "revision": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "digest": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$",
+                        "minLength": 64,
+                        "maxLength": 64
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
               }
             }
           },
@@ -9102,6 +9204,624 @@
                 ]
               },
               "remote_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.change.propose",
+        "workspace.change.timestamp",
+        "artifact.create",
+        "artifact.append",
+        "artifact.seal",
+        "artifact.discard"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": true
+    },
+    {
+      "plugin_id": "proprium.diagnostics",
+      "action_id": "proprium.diagnostics.feedback.read.v1",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sceneId",
+          "documentPath",
+          "documentRevision",
+          "findingFingerprints"
+        ],
+        "properties": {
+          "sceneId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "documentPath": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^manuscript/.+\\.md$"
+          },
+          "documentRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "findingFingerprints": {
+            "type": "array",
+            "maxItems": 100000,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$",
+              "minLength": 64,
+              "maxLength": 64
+            }
+          }
+        }
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "feedbackPath",
+          "feedbackRevision",
+          "decisions",
+          "staleDecisions",
+          "snapshot"
+        ],
+        "properties": {
+          "feedbackPath": {
+            "const": "meta/proprium/plugins/proprium.diagnostics/feedback.yaml"
+          },
+          "feedbackRevision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "minLength": 64,
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decisions": {
+            "type": "array",
+            "maxItems": 100000,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "findingFingerprint",
+                "decision",
+                "updatedAt"
+              ],
+              "properties": {
+                "findingFingerprint": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$",
+                  "minLength": 64,
+                  "maxLength": 64
+                },
+                "decision": {
+                  "enum": [
+                    "false_positive",
+                    "intentional",
+                    "deferred",
+                    "legacy_dismissed"
+                  ]
+                },
+                "annotation": {
+                  "type": "string",
+                  "maxLength": 1000
+                },
+                "updatedAt": {
+                  "type": "string",
+                  "maxLength": 128
+                }
+              }
+            }
+          },
+          "staleDecisions": {
+            "type": "array",
+            "maxItems": 100000,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "findingFingerprint",
+                "decision",
+                "updatedAt",
+                "sourcePaths"
+              ],
+              "properties": {
+                "findingFingerprint": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$",
+                  "minLength": 64,
+                  "maxLength": 64
+                },
+                "decision": {
+                  "enum": [
+                    "false_positive",
+                    "intentional",
+                    "deferred",
+                    "legacy_dismissed"
+                  ]
+                },
+                "updatedAt": {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                "sourcePaths": {
+                  "type": "array",
+                  "maxItems": 100,
+                  "items": {
+                    "type": "string",
+                    "maxLength": 1024
+                  }
+                }
+              }
+            }
+          },
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "worktree_generation": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.file.read"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.diagnostics",
+      "action_id": "proprium.diagnostics.legacy-dismissals.inspect.v1",
+      "schema_version": 1,
+      "effect": "read",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {}
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "feedbackPath",
+          "feedbackRevision",
+          "sources",
+          "rows",
+          "complete",
+          "snapshot"
+        ],
+        "properties": {
+          "feedbackPath": {
+            "const": "meta/proprium/plugins/proprium.diagnostics/feedback.yaml"
+          },
+          "feedbackRevision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "minLength": 64,
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sources": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "revision",
+                "rows"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "maxLength": 1024
+                },
+                "revision": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$",
+                  "minLength": 64,
+                  "maxLength": 64
+                },
+                "rows": {
+                  "type": "array",
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "rowId",
+                      "sourcePath",
+                      "sourceRevision",
+                      "disposition",
+                      "detail",
+                      "rawLine",
+                      "sourcePaths"
+                    ],
+                    "properties": {
+                      "rowId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$",
+                        "minLength": 64,
+                        "maxLength": 64
+                      },
+                      "sourcePath": {
+                        "type": "string",
+                        "maxLength": 1024
+                      },
+                      "sourceRevision": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$",
+                        "minLength": 64,
+                        "maxLength": 64
+                      },
+                      "candidateId": {
+                        "type": "string",
+                        "maxLength": 1024
+                      },
+                      "timestamp": {
+                        "type": "string",
+                        "maxLength": 1024
+                      },
+                      "disposition": {
+                        "enum": [
+                          "importable",
+                          "already_imported",
+                          "unresolved",
+                          "conflict",
+                          "invalid"
+                        ]
+                      },
+                      "detail": {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      "rawLine": {
+                        "type": "string",
+                        "maxLength": 1048576
+                      },
+                      "targetFingerprint": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$",
+                        "minLength": 64,
+                        "maxLength": 64
+                      },
+                      "sourcePaths": {
+                        "type": "array",
+                        "maxItems": 20,
+                        "items": {
+                          "type": "string",
+                          "maxLength": 1024
+                        }
+                      }
+                    }
+                  }
+                },
+                "error": {
+                  "type": "string",
+                  "maxLength": 4096
+                }
+              }
+            }
+          },
+          "rows": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "rowId",
+                "sourcePath",
+                "sourceRevision",
+                "disposition",
+                "detail",
+                "rawLine",
+                "sourcePaths"
+              ],
+              "properties": {
+                "rowId": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$",
+                  "minLength": 64,
+                  "maxLength": 64
+                },
+                "sourcePath": {
+                  "type": "string",
+                  "maxLength": 1024
+                },
+                "sourceRevision": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$",
+                  "minLength": 64,
+                  "maxLength": 64
+                },
+                "candidateId": {
+                  "type": "string",
+                  "maxLength": 1024
+                },
+                "timestamp": {
+                  "type": "string",
+                  "maxLength": 1024
+                },
+                "disposition": {
+                  "enum": [
+                    "importable",
+                    "already_imported",
+                    "unresolved",
+                    "conflict",
+                    "invalid"
+                  ]
+                },
+                "detail": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "rawLine": {
+                  "type": "string",
+                  "maxLength": 1048576
+                },
+                "targetFingerprint": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$",
+                  "minLength": 64,
+                  "maxLength": 64
+                },
+                "sourcePaths": {
+                  "type": "array",
+                  "maxItems": 20,
+                  "items": {
+                    "type": "string",
+                    "maxLength": 1024
+                  }
+                }
+              }
+            }
+          },
+          "complete": {
+            "type": "boolean"
+          },
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "worktree_generation": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "draft_generation": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "required_capabilities": [
+        "workspace.file.read",
+        "workspace.plugin.invoke"
+      ],
+      "callers": [
+        "ui"
+      ],
+      "requires_user_gesture": false
+    },
+    {
+      "plugin_id": "proprium.diagnostics",
+      "action_id": "proprium.diagnostics.legacy-dismissals.propose.v1",
+      "schema_version": 1,
+      "effect": "propose",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rows",
+          "expectedFeedbackRevision"
+        ],
+        "properties": {
+          "rows": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sourcePath",
+                "sourceRevision",
+                "rowId"
+              ],
+              "properties": {
+                "sourcePath": {
+                  "type": "string",
+                  "maxLength": 1024
+                },
+                "sourceRevision": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$",
+                  "minLength": 64,
+                  "maxLength": 64
+                },
+                "rowId": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$",
+                  "minLength": 64,
+                  "maxLength": 64
+                }
+              }
+            }
+          },
+          "expectedFeedbackRevision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "minLength": 64,
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "proposalId",
+          "feedbackPath",
+          "expectedRevision",
+          "importedRowIds",
+          "snapshot"
+        ],
+        "properties": {
+          "proposalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "feedbackPath": {
+            "const": "meta/proprium/plugins/proprium.diagnostics/feedback.yaml"
+          },
+          "expectedRevision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "minLength": 64,
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "importedRowIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$",
+              "minLength": 64,
+              "maxLength": 64
+            }
+          },
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "local_commit",
+              "worktree_generation",
+              "draft_generation"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "local_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "worktree_generation": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "draft_generation": {
                 "type": [
                   "string",
                   "null"
@@ -9434,6 +10154,85 @@
                     "primary": "evidenceA.quote",
                     "secondary": "evidenceB.quote"
                   }
+                },
+                {
+                  "id": "lint-proposal",
+                  "title": "整形を提案",
+                  "body": {
+                    "id": "diagnostics-lint-proposal-form",
+                    "type": "form",
+                    "title": "診断済み原稿の整形を提案",
+                    "description": "先に保存済み場面を診断してください。現在のスナップショットと診断済みの原稿・規則を再確認してから、Hostのレビューへ送ります。",
+                    "fields": [
+                      {
+                        "id": "idempotency_key",
+                        "label": "レビューキー",
+                        "type": "string",
+                        "required": true,
+                        "min_length": 1,
+                        "max_length": 256
+                      }
+                    ],
+                    "submit_when": {
+                      "data_key": "last_action_result.identity.documentRevision"
+                    },
+                    "unavailable_message": "先に保存済み場面レポートを実行してください。",
+                    "submit": {
+                      "action_id": "proprium.diagnostics.lint.propose.v1",
+                      "input_template": {
+                        "documentPath": {
+                          "data_key": "last_action_result.identity.documentPath"
+                        },
+                        "expectedRevision": {
+                          "data_key": "last_action_result.identity.documentRevision"
+                        },
+                        "textHash": {
+                          "data_key": "last_action_result.identity.textHash"
+                        },
+                        "idempotencyKey": {
+                          "data_key": "form.idempotency_key"
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "format-proposal",
+                  "title": "原稿全体の整形",
+                  "body": {
+                    "id": "diagnostics-format-proposal-form",
+                    "type": "form",
+                    "title": "保存済み場面の整形を提案",
+                    "description": "先に場面レポートを実行すると、その保存済み原稿のRevisionに結び付いた提案を作成します。",
+                    "fields": [
+                      {
+                        "id": "idempotency_key",
+                        "label": "レビューキー",
+                        "type": "string",
+                        "required": true,
+                        "min_length": 1,
+                        "max_length": 256
+                      }
+                    ],
+                    "submit_when": {
+                      "data_key": "last_action_result.identity.documentRevision"
+                    },
+                    "unavailable_message": "先に保存済み場面レポートを実行してください。",
+                    "submit": {
+                      "action_id": "proprium.diagnostics.manuscript.format.propose.v1",
+                      "input_template": {
+                        "sceneId": {
+                          "data_key": "last_action_result.identity.sceneId"
+                        },
+                        "expectedRevision": {
+                          "data_key": "last_action_result.identity.documentRevision"
+                        },
+                        "idempotencyKey": {
+                          "data_key": "form.idempotency_key"
+                        }
+                      }
+                    }
+                  }
                 }
               ]
             }
@@ -9585,6 +10384,223 @@
               "value": {
                 "data_key": "last_action_result.sections.speaker.providerIdentity"
               }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "diagnostics.chapter-aspects",
+      "kind": "panel",
+      "title": "章の観点レビュー",
+      "context": {},
+      "body": {
+        "id": "chapter-aspects-root",
+        "type": "tabs",
+        "title": "決定論的な章レビュー",
+        "tabs": [
+          {
+            "id": "preview",
+            "title": "対象プレビュー",
+            "body": {
+              "id": "chapter-aspects-preview",
+              "type": "tabs",
+              "tabs": [
+                {
+                  "id": "preview-request",
+                  "title": "対象を選択",
+                  "body": {
+                    "id": "chapter-aspects-preview-form",
+                    "type": "form",
+                    "title": "読み取り対象を確認",
+                    "description": "本文と同一スナップショットの章メタデータから、選択した観点のローカルレビューを準備します。外部モデルは呼び出しません。",
+                    "fields": [
+                      {
+                        "id": "chapter_id",
+                        "label": "章ID",
+                        "type": "string",
+                        "required": true,
+                        "min_length": 1,
+                        "max_length": 128
+                      },
+                      {
+                        "id": "aspects",
+                        "label": "確認項目",
+                        "type": "multi-reference",
+                        "required": true,
+                        "options": [
+                          {
+                            "value": "tempo",
+                            "label": "場面のテンポ"
+                          },
+                          {
+                            "value": "pov-shift",
+                            "label": "視点の変化"
+                          },
+                          {
+                            "value": "over-explain",
+                            "label": "説明の重複"
+                          }
+                        ]
+                      }
+                    ],
+                    "submit": {
+                      "action_id": "proprium.diagnostics.chapter.aspects.preview.v1",
+                      "input_template": {
+                        "chapterId": {
+                          "data_key": "form.chapter_id"
+                        },
+                        "aspects": {
+                          "data_key": "form.aspects"
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "prompt",
+                  "title": "プレビュー",
+                  "body": {
+                    "id": "chapter-aspects-preview-result",
+                    "type": "detail",
+                    "title": "準備されたローカルレビュー",
+                    "value": {
+                      "data_key": "last_action_result"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "review",
+            "title": "結果を確認",
+            "body": {
+              "id": "chapter-aspects-review",
+              "type": "tabs",
+              "tabs": [
+                {
+                  "id": "review-request",
+                  "title": "対象を選択",
+                  "body": {
+                    "id": "chapter-aspects-review-form",
+                    "type": "form",
+                    "title": "章の決定論的レビュー",
+                    "description": "選択した項目を処理し、続きをページ単位で確認できます。",
+                    "fields": [
+                      {
+                        "id": "chapter_id",
+                        "label": "章ID",
+                        "type": "string",
+                        "required": true,
+                        "min_length": 1,
+                        "max_length": 128
+                      },
+                      {
+                        "id": "aspects",
+                        "label": "確認項目",
+                        "type": "multi-reference",
+                        "required": true,
+                        "options": [
+                          {
+                            "value": "tempo",
+                            "label": "場面のテンポ"
+                          },
+                          {
+                            "value": "pov-shift",
+                            "label": "視点の変化"
+                          },
+                          {
+                            "value": "over-explain",
+                            "label": "説明の重複"
+                          }
+                        ]
+                      }
+                    ],
+                    "submit": {
+                      "action_id": "proprium.diagnostics.chapter.aspects.review.v1",
+                      "input_template": {
+                        "chapterId": {
+                          "data_key": "form.chapter_id"
+                        },
+                        "aspects": {
+                          "data_key": "form.aspects"
+                        },
+                        "limit": 100
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "findings",
+                  "title": "所見",
+                  "body": {
+                    "id": "chapter-aspects-findings",
+                    "type": "list",
+                    "title": "根拠付き所見",
+                    "items": {
+                      "data_key": "last_action_result.findings"
+                    },
+                    "primary": "finding",
+                    "secondary": "aspectLabel",
+                    "next_action": {
+                      "action_id": "proprium.diagnostics.chapter.aspects.review.v1",
+                      "input_template": {
+                        "chapterId": {
+                          "data_key": "last_action_result.chapterId"
+                        },
+                        "aspects": {
+                          "data_key": "last_action_result.aspects"
+                        },
+                        "cursor": {
+                          "data_key": "last_action_result.nextCursor"
+                        },
+                        "limit": 100
+                      }
+                    },
+                    "next_action_when": {
+                      "data_key": "last_action_result.nextCursor"
+                    },
+                    "item_navigation": {
+                      "intent": "open",
+                      "target": {
+                        "path": {
+                          "data_key": "item.evidence.0.path"
+                        },
+                        "span": {
+                          "path": {
+                            "data_key": "item.evidence.0.path"
+                          },
+                          "revision": {
+                            "data_key": "item.evidence.0.revision"
+                          },
+                          "start": {
+                            "data_key": "item.evidence.0.start"
+                          },
+                          "end": {
+                            "data_key": "item.evidence.0.end"
+                          },
+                          "quote": {
+                            "data_key": "item.evidence.0.quote"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "status",
+                  "title": "状態",
+                  "body": {
+                    "id": "chapter-aspects-status",
+                    "type": "detail",
+                    "title": "レビュー範囲と完了状態",
+                    "value": {
+                      "data_key": "last_action_result"
+                    }
+                  }
+                }
+              ]
             }
           }
         ]

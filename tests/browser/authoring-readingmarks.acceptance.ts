@@ -36,7 +36,8 @@ async function setup(page: Page) {
   });
   await page.goto('/');
   await page.waitForFunction(() => typeof window.propriumHostTest?.openWorkspace === 'function');
-  await page.evaluate(async files => window.propriumHostTest!.openWorkspace({ origin: 'https://github.com', repositoryId: 301, owner: 'proprium-test', repository: 'navigation', branch: 'main', localWorkspaceId: `navigation-${crypto.randomUUID()}` }, files), fixture);
+  const identity = { origin: 'https://github.com' as const, repositoryId: 301, owner: 'proprium-test', repository: 'navigation', branch: 'main', localWorkspaceId: `navigation-${crypto.randomUUID()}` };
+  await page.evaluate(async ({ identity, files }) => window.propriumHostTest!.openWorkspace(identity, files), { identity, files: fixture });
   await showPanel(page, 'review');
   const manager = page.locator('details.plugin-manager-panel');
   await manager.locator('summary').click();
@@ -48,6 +49,7 @@ async function setup(page: Page) {
   for (const capability of ['workspace.change.propose', 'workspace.change.timestamp', 'workspace.file.read', 'workspace.identity.read']) await plugin.getByRole('checkbox', { name: capability, exact: true }).check();
   await plugin.getByRole('button', { name: '有効化' }).click();
   await expect(manager.getByRole('status')).toContainText('proprium.narrative@0.1.0 is enabled');
+  return identity;
 }
 async function openSceneA(page: Page) {
   if (await page.locator(".mobile-shell").count()) await showPanel(page, "review");
@@ -61,6 +63,9 @@ async function openSceneA(page: Page) {
   if (await outlineTab.isVisible()) await outlineTab.click();
   const outline = page.getByRole('tabpanel', { name: 'Work outline', exact: true }).first();
   await outline.getByRole('button', { name: '読み込む', exact: true }).click();
+  await expect(outline.getByRole('button', { name: '更新', exact: true })).toBeVisible({ timeout: 60_000 });
+  await expect(outline.locator('.authoring-surface-body')).toHaveAttribute('aria-busy', 'false', { timeout: 60_000 });
+  await outline.getByRole('tab', { name: '構成', exact: true }).click();
   await outline.getByText('第一巻', { exact: true }).click();
   await outline.getByText('始まり', { exact: true }).click();
   await outline.getByText('雨の夜', { exact: true }).click();
@@ -69,7 +74,7 @@ async function openSceneA(page: Page) {
 }
 
 test('two reviewed reading marks open their saved source ranges', async ({ page }) => {
-  await setup(page); await openSceneA(page);
+  const identity = await setup(page); await openSceneA(page);
   const capture = page.getByRole('region', { name: '選択範囲に読書マーク' });
   for (const [offset, length] of [[0, 3], [5, 2]]) {
     const editor = page.getByRole('textbox', { name: '原稿 Markdown' });
@@ -106,4 +111,29 @@ test('two reviewed reading marks open their saved source ranges', async ({ page 
   await expect.poll(() => page.evaluate(() => window.propriumHostEditorText?.() ?? '')).toBe(bodyA);
   await expect.poll(() => page.evaluate(() => { const view = (document.querySelector('.cm-content') as any)?.cmTile?.root?.view; if (!view) return null; const selection = view.state.selection.main; return { from: selection.from, to: selection.to, text: view.state.doc.sliceString(selection.from, selection.to) }; })).toEqual({ from: 0, to: 3, text: '雨の夜' });
   await expect(page.getByText(/選択 3 字/u)).toBeVisible();
+  await capture.getByRole('button', { name: '選択した読書マークの削除を提案' }).click();
+  await expect(capture.getByRole('status')).toContainText('削除提案を作成しました。');
+  await showPanel(page, 'review');
+  const review = page.getByRole('region', { name: 'Authoring proposals' });
+  await review.getByRole('button', { name: /proprium.narrative · proposed/ }).last().click();
+  await expect(review).toContainText('readingMarks');
+  await review.getByRole('checkbox').last().check();
+  await review.getByRole('button', { name: '選択した単位をローカルへ適用' }).last().click();
+  await expect(review.getByRole('button', { name: /proprium.narrative · applied/ })).toHaveCount(3, { timeout: 60000 });
+  const saved = await page.evaluate(async identity => {
+    const { BrowserLocalGit } = await import(/* @vite-ignore */ new URL('/src/browser/proprium/git/index.ts', location.origin).href);
+    const git = new BrowserLocalGit(identity); await git.init();
+    const metadata = await git.read('plot/volumes/v/chapters/c/scenes/a.yaml');
+    const manuscript = await git.read('manuscript/custom/a.md');
+    git.close();
+    if (!metadata.data || !manuscript.data) throw new Error('Saved Narrative source files are missing');
+    return { metadata: new TextDecoder().decode(metadata.data), manuscript: new TextDecoder().decode(manuscript.data) };
+  }, identity);
+  const savedMarks = saved.metadata.slice(saved.metadata.indexOf('readingMarks:'));
+  expect(savedMarks).toContain('台が');
+  expect(savedMarks).not.toContain('雨の夜');
+  expect(saved.manuscript).toBe(bodyA);
+  await showPanel(page, 'editor');
+  await expect.poll(() => page.evaluate(() => document.querySelector('.cm-content')?.textContent ?? '')).toContain('雨の夜。灯台が光る。');
+  await expect.poll(() => page.evaluate(() => { const view = (document.querySelector('.cm-content') as any)?.cmTile?.root?.view; if (!view) return null; const selection = view.state.selection.main; return { from: selection.from, to: selection.to, text: view.state.doc.sliceString(selection.from, selection.to) }; })).toEqual({ from: 0, to: 3, text: '雨の夜' });
 });

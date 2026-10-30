@@ -6,6 +6,7 @@ import { parse } from "yaml";
 import type { ActionRequest, ActionResult, ChangeSet, Snapshot } from "../../../app/src/browser/proprium/authoring/types.js";
 import { guest } from "./guest.js";
 import { hashDialogueText, splitIntoSentenceOffsets } from "./index.js";
+import { SPEAKER_RECOVERY_FILES } from "./migration.js";
 
 const sceneId = "scene-1";
 const scenePath = "plot/volumes/v1/chapters/c1/scenes/scene-1.yaml";
@@ -205,7 +206,7 @@ async function invoke(actionId: string, input: Record<string, unknown>, options:
 }
 
 test("all Speaker action descriptors pass the adopted bounded-schema validator", () => {
-  assert.equal(speakerManifest.actions.length, 13);
+  assert.equal(speakerManifest.actions.length, 15);
   for (const descriptor of speakerManifest.actions) hostSchema.assertDescriptor(descriptor as never);
 });
 
@@ -328,6 +329,10 @@ test("Speaker manifest passes the release registry declaration validator", async
   const { assertAuthoringDeclarations } = await import(validatorPath);
   const manifest = JSON.parse(readFileSync(new URL("../plugin.json", import.meta.url), "utf8"));
   await assertAuthoringDeclarations(manifest.id, manifest.capabilities, manifest.actions, manifest.ui ?? []);
+  const recovery = manifest.ui.find((surface: { id: string }) => surface.id === "speaker.recovery");
+  assert.ok(recovery);
+  assert.equal(recovery.body.tabs.find((tab: { id: string }) => tab.id === "inventory").body.load_action.action_id, "speaker.recovery.inspect");
+  assert.equal(recovery.body.tabs.find((tab: { id: string }) => tab.id === "restore").body.submit.action_id, "speaker.recovery.propose");
 });
 
 test("direct correction derives prediction and refuses stale selected text", async () => {
@@ -345,4 +350,70 @@ test("direct correction derives prediction and refuses stale selected text", asy
   assert.equal((value.affected_lines as Array<Record<string, unknown>>)[0]!.dialogue_text, line.text);
   const { value: unknown } = await invoke("speaker.override.direct", { scene_id: sceneId, sentence_index: line.sentence_index, dialogue_text: line.text }, { setup: state, idempotencyKey: "direct-unknown-1" });
   assert.equal((unknown.affected_lines as Array<Record<string, unknown>>)[0]!.speaker_entity_id, null);
+});
+
+test("recovery inspection and proposal preserve legacy bytes and create only absent Host-reviewed targets", async () => {
+  const setup = fixture();
+  const [corrections, model] = SPEAKER_RECOVERY_FILES;
+  const legacyCorrections = new Uint8Array([0x7b, 0x22, 0x75, 0x6e, 0x6b, 0x6e, 0x6f, 0x77, 0x6e, 0x22, 0x3a, 0x31, 0x7d, 0x0d, 0x0a, 0xff]);
+  const legacyModel = new Uint8Array([0x7b, 0x22, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x22, 0x3a, 0x39, 0x7d]);
+  files.delete(corrections.target_path);
+  files.delete(model.target_path);
+  files.set(corrections.source_path, { bytes: legacyCorrections, revision: revision("legacy-corrections") });
+  files.set(model.source_path, { bytes: legacyModel, revision: revision("legacy-model") });
+
+  const { value: inventory } = await invoke("speaker.recovery.inspect", {}, { setup });
+  const rows = inventory.inventory as Array<Record<string, unknown>>;
+  assert.deepEqual(rows.map((row) => row.disposition), ["restore", "restore"]);
+  assert.deepEqual(rows.map((row) => row.source_path), [corrections.source_path, model.source_path]);
+  assert.equal(inventory.proposal_id, null);
+  assert.equal(setup.proposals.length, 0);
+
+  const key = "speaker-recovery-acceptance-1";
+  const { value, state } = await invoke("speaker.recovery.propose", { idempotency_key: key }, { idempotencyKey: key, setup });
+  assert.equal(value.status, "proposal_created");
+  assert.equal(value.proposal_id, "proposal-1");
+  assert.deepEqual((value.inventory as Array<Record<string, unknown>>).map((row) => row.disposition), ["restore", "restore"]);
+  assert.equal(state.proposals.length, 1);
+  assert.equal(state.calls.includes("workspace.change.propose"), true);
+  const change = state.proposals[0]!;
+  assert.deepEqual(change.units[0]!.operations.map((operation) => operation.path), [corrections.target_path, model.target_path]);
+  assert.deepEqual(change.units[0]!.operations.map((operation) => operation.kind), ["create", "create"]);
+  assert.deepEqual(change.units[0]!.operations.map((operation) => operation.content), [[...legacyCorrections], [...legacyModel]]);
+  assert.equal(change.read_set.find((row) => row.path === corrections.target_path)?.revision, null);
+  assert.equal(change.read_set.find((row) => row.path === model.target_path)?.revision, null);
+  assert.deepEqual(files.get(corrections.source_path)?.bytes, legacyCorrections);
+  assert.deepEqual(files.get(model.source_path)?.bytes, legacyModel);
+  assert.equal(files.has(corrections.target_path), false, "proposal creation does not write the workspace");
+  assert.equal(files.has(model.target_path), false, "proposal creation does not write the workspace");
+});
+
+test("Speaker recovery reports unchanged and conflicting targets without proposing over them", async () => {
+  const setup = fixture();
+  const [corrections, model] = SPEAKER_RECOVERY_FILES;
+  const source = bytes("legacy source\r\n");
+  const target = bytes("author-owned target\n");
+  files.set(corrections.source_path, { bytes: source, revision: revision("legacy-source") });
+  files.set(corrections.target_path, { bytes: target, revision: revision("author-target") });
+  files.set(model.source_path, { bytes: source, revision: revision("legacy-model") });
+  files.set(model.target_path, { bytes: source, revision: revision("identical-model") });
+  const { value: inspection } = await invoke("speaker.recovery.inspect", {}, { setup });
+  assert.deepEqual((inspection.inventory as Array<Record<string, unknown>>).map((row) => row.disposition), ["conflict", "unchanged"]);
+  const key = "speaker-recovery-noop-1";
+  const { value, state } = await invoke("speaker.recovery.propose", { idempotency_key: key }, { idempotencyKey: key, setup });
+  assert.equal(value.status, "no_changes");
+  assert.equal(value.proposal_id, null);
+  assert.equal(state.proposals.length, 0);
+  assert.deepEqual(files.get(corrections.target_path)?.bytes, target);
+});
+
+test("Speaker recovery fails closed when the Host omits list pagination state", async () => {
+  const setup = fixture();
+  const originalHost = setup.host;
+  setup.host = (operation, payload) => operation === "workspace.file.list"
+    ? { entries: [] }
+    : originalHost(operation, payload);
+  await assert.rejects(() => invoke("speaker.recovery.inspect", {}, { setup }), { code: "capacity" });
+  assert.equal(setup.calls.includes("workspace.file.read"), false);
+  assert.equal(setup.proposals.length, 0);
 });

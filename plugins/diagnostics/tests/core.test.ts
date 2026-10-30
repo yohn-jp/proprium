@@ -50,6 +50,16 @@ test("text analysis excludes frontmatter offsets and marks Research unavailable"
     documentPath: "manuscript/sample.md", documentRevision: "a".repeat(64),
   });
   assert.notEqual(rhythm?.fingerprint, otherRepository.find((finding) => finding.kind === "rhythm")?.fingerprint);
+  const afterReload = findingsForTextAnalysis(text, result, {
+    workspaceId: "workspace-other", repositoryId: 42, branch: "main", generation: "gen-2", snapshotId: "snap-2",
+    documentPath: "manuscript/sample.md", documentRevision: "a".repeat(64),
+  });
+  assert.equal(rhythm?.fingerprint, afterReload.find((finding) => finding.kind === "rhythm")?.fingerprint, "unrelated snapshot/workspace generations do not orphan decisions");
+  const afterConfigChange = findingsForTextAnalysis(text, result, {
+    workspaceId: "workspace-a", repositoryId: 42, branch: "main", generation: "gen-2", snapshotId: "snap-2",
+    documentPath: "manuscript/sample.md", documentRevision: "a".repeat(64), configRevision: "b".repeat(64),
+  });
+  assert.notEqual(rhythm?.fingerprint, afterConfigChange.find((finding) => finding.kind === "rhythm")?.fingerprint, "a lint config change gets a new decision identity");
 });
 
 test("formatter preserves frontmatter bytes and CRLF while previewing body changes", () => {

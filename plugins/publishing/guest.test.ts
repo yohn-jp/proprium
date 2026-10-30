@@ -394,6 +394,331 @@ test("episode read presents records by episode number then ID", () => {
   }
 });
 
+test("legacy episode recovery proposes exact source bytes with source and absent-target guards", () => {
+  const sourcePath = "meta/publish-episodes.yaml";
+  const source = new TextEncoder().encode(
+    "migrationNote: retain comments and extensions\nepisodes:\n  - id: legacy-e1\n    number: 4\n    title: 第四話\n    scope: chapter\n    scopeId: c1\n    futureField: keep-exactly\n",
+  );
+  const previousTarget = files.get("meta/scriptorium/modules/publishing/episodes.yaml");
+  files.delete("meta/scriptorium/modules/publishing/episodes.yaml");
+  files.set(sourcePath, { bytes: source });
+  try {
+    const sourceRevision = createHash("sha256").update(source).digest("hex");
+    const inspected = invoke("proprium.publishing.recovery.inspect", {});
+    assert.equal(inspected.result.ok, true);
+    const recovery = inspected.result.value as {
+      episode_sources: Array<{ source_path: string; state: string; source_revision: string | null; target_revision: string | null; episode_count: number }>;
+      importable_episode_sources: Array<{ source_path: string; source_revision: string }>;
+      import_available: boolean;
+    };
+    const candidate = recovery.episode_sources.find(item => item.source_path === sourcePath);
+    assert.deepEqual(candidate, {
+      source_path: sourcePath,
+      label: `${sourcePath} — ready (1)`,
+      state: "ready",
+      source_revision: sourceRevision,
+      target_revision: null,
+      episode_count: 1,
+      detail: "",
+    });
+    assert.equal(recovery.importable_episode_sources[0]?.source_revision, sourceRevision);
+    assert.equal(recovery.import_available, true);
+    assert.ok(!inspected.host.calls.some(call => call.operation === "workspace.file.list" &&
+      ["app-state/share-tokens.json", "share-tokens.json"].includes(String(call.payload.prefix))));
+
+    const { result, host } = invoke("proprium.publishing.recovery.propose", { source_path: sourcePath });
+    assert.equal(result.ok, true);
+    const value = result.value as Record<string, unknown>;
+    assert.equal(value.status, "proposed");
+    assert.equal("source" in value || "content" in value, false);
+    const changeset = host.proposals[0] as {
+      read_set: Array<{ path: string; revision: string | null }>;
+      units: Array<{ operations: Array<{ kind: string; path: string; expected_revision: string | null; content: number[] }> }>;
+      domain_evidence: Array<Record<string, unknown>>;
+    };
+    assert.deepEqual(changeset.read_set, [
+      { path: sourcePath, revision: sourceRevision },
+      { path: "meta/scriptorium/modules/publishing/episodes.yaml", revision: null },
+    ]);
+    const [operation] = changeset.units.flatMap(unit => unit.operations);
+    assert.deepEqual(operation, {
+      id: "publishing-recovery-write-operation-1", kind: "create",
+      path: "meta/scriptorium/modules/publishing/episodes.yaml", expected_revision: null, content: [...source],
+    });
+    assert.equal(changeset.domain_evidence[0]?.source_revision, sourceRevision);
+    assert.deepEqual(files.get(sourcePath)?.bytes, source, "the legacy source remains unchanged");
+    assert.equal(files.has("meta/scriptorium/modules/publishing/episodes.yaml"), false, "proposal does not write the target itself");
+  } finally {
+    files.delete(sourcePath);
+    if (previousTarget) files.set("meta/scriptorium/modules/publishing/episodes.yaml", previousTarget);
+  }
+});
+
+test("legacy episode recovery leaves an existing divergent target untouched", () => {
+  const sourcePath = "meta/scriptorium/modules/publishing/legacy/files/meta/publish-episodes.yaml";
+  files.set(sourcePath, { text: "episodes: []\n" });
+  try {
+    const { result, host } = invoke("proprium.publishing.recovery.propose", { source_path: sourcePath });
+    assert.equal(result.ok, false);
+    assert.equal((result.error as Record<string, unknown>).code, "conflict");
+    assert.equal(host.proposals.length, 0);
+    assert.ok(host.calls.some(call => call.operation === "workspace.file.read" && call.payload.path === sourcePath));
+    assert.ok(host.calls.some(call => call.operation === "workspace.file.read" && call.payload.path === "meta/scriptorium/modules/publishing/episodes.yaml"));
+  } finally {
+    files.delete(sourcePath);
+  }
+});
+
+test("legacy episode recovery blocks malformed sources and recognizes an exact prior import", () => {
+  const sourcePath = "meta/publish-episodes.yaml";
+  const targetPath = "meta/scriptorium/modules/publishing/episodes.yaml";
+  const previousTarget = files.get(targetPath);
+  files.set(sourcePath, { text: "episodes:\n  - id: duplicate\n    number: 1\n    title: A\n    scope: chapter\n    scopeId: c1\n  - id: duplicate\n    number: 2\n    title: B\n    scope: chapter\n    scopeId: c1\n" });
+  try {
+    const inspected = invoke("proprium.publishing.recovery.inspect", {});
+    assert.equal(inspected.result.ok, true);
+    const recovery = inspected.result.value as { episode_sources: Array<{ source_path: string; state: string }>; import_available: boolean };
+    assert.equal(recovery.episode_sources.find(item => item.source_path === sourcePath)?.state, "invalid");
+    assert.equal(recovery.import_available, false);
+
+    const rejected = invoke("proprium.publishing.recovery.propose", { source_path: sourcePath });
+    assert.equal(rejected.result.ok, false);
+    assert.equal(rejected.host.proposals.length, 0);
+
+    const exactSource = new TextEncoder().encode("episodes: []\n");
+    files.set(sourcePath, { bytes: exactSource });
+    files.set(targetPath, { bytes: exactSource });
+    const alreadyImported = invoke("proprium.publishing.recovery.propose", { source_path: sourcePath });
+    assert.equal(alreadyImported.result.ok, true);
+    assert.equal((alreadyImported.result.value as Record<string, unknown>).status, "already_imported");
+    assert.equal(alreadyImported.host.proposals.length, 0);
+  } finally {
+    files.delete(sourcePath);
+    if (previousTarget) files.set(targetPath, previousTarget);
+  }
+});
+
+test("retained hashed grants require an explicit repository and branch mapping and use a guarded Host proposal", () => {
+  const sourcePath = "meta/scriptorium/modules/publishing/legacy/share-grants.jsonl";
+  const targetPath = "meta/scriptorium/modules/publishing/share-grants.jsonl";
+  const source = new TextEncoder().encode([
+    JSON.stringify({ id: "legacy-grant-1", projectId: "scriptorium-work-7", scope: { kind: "chapter", id: "c1" }, label: "校正", tokenHash: "a".repeat(64), createdAt: "2025-01-01T00:00:00.000Z", expiresAt: "2030-01-01T00:00:00.000Z", extension: { note: "preserve me" } }),
+    JSON.stringify({ id: "foreign-grant", projectId: "another-work", scope: { kind: "scene", id: "s2" }, label: "別作品", tokenHash: "b".repeat(64), createdAt: "2025-01-02T00:00:00.000Z", expiresAt: "2030-01-02T00:00:00.000Z" }),
+  ].join("\n") + "\n");
+  const previousTarget = files.get(targetPath);
+  files.delete(targetPath);
+  files.set(sourcePath, { bytes: source });
+  try {
+    const sourceRevision = createHash("sha256").update(source).digest("hex");
+    const inspected = invoke("proprium.publishing.recovery.inspect", {});
+    assert.equal(inspected.result.ok, true);
+    const recovery = inspected.result.value as {
+      grant_sources: Array<{ source_path: string; state: string; source_revision: string; target_revision: string | null; grant_count: number; project_ids: string[]; target_repository_id: number; target_branch: string }>;
+      legacy_project_options: Array<{ value: string; label: string }>;
+      grant_import_available: boolean;
+      mapping_target: { repository_id: number; branch: string };
+    };
+    assert.deepEqual(recovery.grant_sources[0], {
+      source_path: sourcePath, state: "mapping_required", source_revision: sourceRevision, target_revision: null,
+      grant_count: 2, project_ids: ["another-work", "scriptorium-work-7"],
+      target_repository_id: 42, target_branch: "main",
+      detail: "Confirm the legacy project ID and the displayed Host repository ID and branch before proposing.",
+    });
+    assert.deepEqual(recovery.legacy_project_options, [
+      { value: "another-work", label: "another-work (1)" },
+      { value: "scriptorium-work-7", label: "scriptorium-work-7 (1)" },
+    ]);
+    assert.equal(recovery.grant_import_available, true);
+    assert.deepEqual(recovery.mapping_target, { repository_id: 42, branch: "main" });
+
+    const { result, host } = invoke("proprium.publishing.recovery.grants.propose", {
+      source_path: sourcePath, legacy_project_id: "scriptorium-work-7", repository_id_confirmation: 42,
+      branch_confirmation: "main",
+    });
+    assert.equal(result.ok, true);
+    const value = result.value as Record<string, unknown>;
+    assert.equal(value.status, "proposed");
+    assert.equal("token" in value || "tokenHash" in value || "content" in value, false);
+    const changeset = host.proposals[0] as {
+      read_set: Array<{ path: string; revision: string | null }>;
+      units: Array<{ operations: Array<{ kind: string; path: string; expected_revision: string | null; content: number[] }> }>;
+      domain_evidence: Array<Record<string, unknown>>;
+    };
+    assert.deepEqual(changeset.read_set, [
+      { path: sourcePath, revision: sourceRevision },
+      { path: targetPath, revision: null },
+    ]);
+    const [operation] = changeset.units.flatMap(unit => unit.operations);
+    assert.equal(operation?.kind, "create");
+    assert.equal(operation?.path, targetPath);
+    assert.equal(operation?.expected_revision, null);
+    const rows = new TextDecoder().decode(Uint8Array.from(operation!.content)).trim().split("\n").map(line => JSON.parse(line) as Record<string, unknown>);
+    assert.equal(rows.length, 1, "foreign project IDs are not copied");
+    assert.equal(rows[0]?.projectId, "scriptorium-work-7", "the legacy identity is retained as provenance");
+    assert.equal(rows[0]?.repositoryId, 42);
+    assert.equal(rows[0]?.branch, "main");
+    assert.deepEqual(rows[0]?.scope, { kind: "chapter", id: "c1" });
+    assert.deepEqual(rows[0]?.extension, { note: "preserve me" });
+    assert.equal(rows[0]?.tokenHash, "a".repeat(64));
+    assert.equal(changeset.domain_evidence[0]?.legacy_project_id, "scriptorium-work-7");
+    assert.deepEqual(files.get(sourcePath)?.bytes, source, "the original source is not rewritten");
+    assert.equal(files.has(targetPath), false, "the action only proposes the canonical file");
+  } finally {
+    files.delete(sourcePath);
+    files.delete(targetPath);
+    if (previousTarget) files.set(targetPath, previousTarget);
+  }
+});
+
+test("retained grant mapping rejects foreign IDs, raw secrets, and repository or branch ambiguity", () => {
+  const sourcePath = "meta/scriptorium/modules/publishing/legacy/share-grants.jsonl";
+  const targetPath = "meta/scriptorium/modules/publishing/share-grants.jsonl";
+  const previousTarget = files.get(targetPath);
+  files.delete(targetPath);
+  files.set(sourcePath, { text: JSON.stringify({ id: "safe", projectId: "legacy-work", scope: "ch-1", label: "safe", tokenHash: "c".repeat(64), createdAt: "2025-01-01T00:00:00.000Z", expiresAt: "2030-01-01T00:00:00.000Z" }) + "\n" });
+  try {
+    const wrongProject = invoke("proprium.publishing.recovery.grants.propose", {
+      source_path: sourcePath, legacy_project_id: "foreign-work", repository_id_confirmation: 42, branch_confirmation: "main",
+    });
+    assert.equal(wrongProject.result.ok, false);
+    assert.equal((wrongProject.result.error as Record<string, unknown>).code, "ambiguous_identity");
+    assert.equal(wrongProject.host.proposals.length, 0);
+
+    const wrongRepository = invoke("proprium.publishing.recovery.grants.propose", {
+      source_path: sourcePath, legacy_project_id: "legacy-work", repository_id_confirmation: 99, branch_confirmation: "main",
+    });
+    assert.equal(wrongRepository.result.ok, false);
+    assert.equal(wrongRepository.host.proposals.length, 0);
+    const wrongBranch = invoke("proprium.publishing.recovery.grants.propose", {
+      source_path: sourcePath, legacy_project_id: "legacy-work", repository_id_confirmation: 42, branch_confirmation: "release",
+    });
+    assert.equal(wrongBranch.result.ok, false);
+    assert.equal(wrongBranch.host.proposals.length, 0);
+
+    files.set(sourcePath, { text: JSON.stringify({ id: "secret", projectId: "legacy-work", scope: { kind: "chapter", id: "ch-1", token: "raw bearer" }, label: "unsafe", tokenHash: "d".repeat(64), createdAt: "2025-01-01T00:00:00.000Z", expiresAt: "2030-01-01T00:00:00.000Z", ownerId: "account" }) + "\n" });
+    const inspection = invoke("proprium.publishing.recovery.inspect", {});
+    assert.equal((inspection.result.value as { grant_sources: Array<{ state: string }> }).grant_sources[0]?.state, "invalid");
+    const unsafe = invoke("proprium.publishing.recovery.grants.propose", {
+      source_path: sourcePath, legacy_project_id: "legacy-work", repository_id_confirmation: 42, branch_confirmation: "main",
+    });
+    assert.equal(unsafe.result.ok, false);
+    assert.equal(unsafe.host.proposals.length, 0);
+
+    files.set(sourcePath, { text: JSON.stringify({ id: "hidden-secret", projectId: "legacy-work", scope: { kind: "chapter", id: "c1" }, label: "unsafe", tokenHash: "f".repeat(64), createdAt: "2025-01-01T00:00:00.000Z", expiresAt: "2030-01-01T00:00:00.000Z", futureNote: "share_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG" }) + "\n" });
+    const hidden = invoke("proprium.publishing.recovery.grants.propose", {
+      source_path: sourcePath, legacy_project_id: "legacy-work", repository_id_confirmation: 42, branch_confirmation: "main",
+    });
+    assert.equal(hidden.result.ok, false, "bearer-shaped values under extension keys are rejected");
+    assert.equal(hidden.host.proposals.length, 0);
+  } finally {
+    files.delete(sourcePath);
+    files.delete(targetPath);
+    if (previousTarget) files.set(targetPath, previousTarget);
+  }
+});
+
+test("retained grant recovery recognizes an exact mapped target and rejects a divergent target", () => {
+  const sourcePath = "meta/scriptorium/modules/publishing/legacy/share-grants.jsonl";
+  const targetPath = "meta/scriptorium/modules/publishing/share-grants.jsonl";
+  const previousTarget = files.get(targetPath);
+  const sourceGrant = { id: "legacy-grant", projectId: "legacy-work", scope: { kind: "chapter", id: "c1" }, label: "review", tokenHash: "e".repeat(64), createdAt: "2025-01-01T00:00:00.000Z", expiresAt: "2030-01-01T00:00:00.000Z", note: "keep" };
+  const mappedGrant = { ...sourceGrant, version: 1, grantVersion: 1, revocationVersion: 0, scope: { kind: "chapter", id: "c1" }, repositoryId: 42, branch: "main" };
+  files.set(sourcePath, { text: JSON.stringify(sourceGrant) + "\n" });
+  try {
+    files.set(targetPath, { text: JSON.stringify(mappedGrant) + "\n" });
+    const exact = invoke("proprium.publishing.recovery.grants.propose", {
+      source_path: sourcePath, legacy_project_id: "legacy-work", repository_id_confirmation: 42, branch_confirmation: "main",
+    });
+    assert.equal(exact.result.ok, true, JSON.stringify(exact.result));
+    assert.equal((exact.result.value as Record<string, unknown>).status, "already_imported");
+    assert.equal(exact.host.proposals.length, 0);
+
+    files.set(targetPath, { text: JSON.stringify({ ...mappedGrant, note: "different" }) + "\n" });
+    const conflict = invoke("proprium.publishing.recovery.grants.propose", {
+      source_path: sourcePath, legacy_project_id: "legacy-work", repository_id_confirmation: 42, branch_confirmation: "main",
+    });
+    assert.equal(conflict.result.ok, false);
+    assert.equal((conflict.result.error as Record<string, unknown>).code, "conflict");
+    assert.equal(conflict.host.proposals.length, 0);
+  } finally {
+    files.delete(sourcePath);
+    files.delete(targetPath);
+    if (previousTarget) files.set(targetPath, previousTarget);
+  }
+});
+
+test("Host-local grant import accepts hash-only rows, preserves safe extensions and uses the existing broker", () => {
+  const targetPath = "meta/scriptorium/modules/publishing/share-grants.jsonl";
+  const previousTarget = files.get(targetPath);
+  files.delete(targetPath);
+  try {
+    const { result, host } = invoke("proprium.publishing.recovery.hostgrants.propose", {
+      source_name: "app-state/share-tokens.json", source_sha256: "a".repeat(64), legacy_project_id: "legacy-work",
+      repository_id_confirmation: 42, branch_confirmation: "main",
+      grants: [{ id: "host-grant", projectId: "legacy-work", scope: { kind: "chapter", id: "c1" }, label: "old", tokenHash: "b".repeat(64), createdAt: "2025-02-01T00:00:00.000Z", expiresAt: "2030-02-01T00:00:00.000Z", futureField: { keep: "exactly" } }],
+    });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal((result.value as Record<string, unknown>).status, "proposed");
+    const changeset = host.proposals[0] as {
+      read_set: Array<{ path: string; revision: string | null }>;
+      units: Array<{ operations: Array<{ kind: string; path: string; expected_revision: string | null; content: number[] }> }>;
+      domain_evidence: Array<Record<string, unknown>>;
+    };
+    assert.deepEqual(changeset.read_set, [{ path: targetPath, revision: null }]);
+    const [operation] = changeset.units.flatMap(unit => unit.operations);
+    assert.equal(operation?.kind, "create");
+    assert.equal(operation?.expected_revision, null);
+    const proposed = new TextDecoder().decode(Uint8Array.from(operation!.content));
+    const imported = JSON.parse(proposed.trim()) as Record<string, unknown>;
+    assert.equal(imported.repositoryId, 42);
+    assert.equal(imported.branch, "main");
+    assert.equal(imported.projectId, "legacy-work");
+    assert.deepEqual(imported.futureField, { keep: "exactly" });
+    assert.equal(changeset.domain_evidence[0]?.source_sha256, "a".repeat(64));
+    assert.ok(!host.calls.some(call => call.operation === "workspace.file.list" && ["app-state/share-tokens.json", "share-tokens.json"].includes(String(call.payload.prefix))));
+    assert.ok(!JSON.stringify(result).includes("tokenHash"));
+  } finally {
+    files.delete(targetPath);
+    if (previousTarget) files.set(targetPath, previousTarget);
+  }
+});
+
+test("Host-local grant import refuses secrets, foreign mappings and divergent IDs", () => {
+  const source = {
+    source_name: "share-tokens.json", source_sha256: "c".repeat(64), legacy_project_id: "legacy-work",
+    repository_id_confirmation: 42, branch_confirmation: "main",
+  };
+  const rawGrant = { id: "host-grant", projectId: "legacy-work", scope: { kind: "chapter", id: "c1" }, label: "old", tokenHash: "d".repeat(64), createdAt: "2025-02-01T00:00:00.000Z", expiresAt: "2030-02-01T00:00:00.000Z" };
+  const foreign = invoke("proprium.publishing.recovery.hostgrants.propose", { ...source, grants: [{ ...rawGrant, projectId: "another-work" }] });
+  assert.equal(foreign.result.ok, false);
+  assert.equal(foreign.host.proposals.length, 0);
+  const wrongBranch = invoke("proprium.publishing.recovery.hostgrants.propose", { ...source, branch_confirmation: "release", grants: [rawGrant] });
+  assert.equal(wrongBranch.result.ok, false);
+  assert.equal(wrongBranch.host.proposals.length, 0);
+  const secret = invoke("proprium.publishing.recovery.hostgrants.propose", { ...source, grants: [{ ...rawGrant, tokenPrefix: "share_secret", ownerId: "private-account" }] });
+  assert.equal(secret.result.ok, false);
+  assert.equal(secret.host.proposals.length, 0);
+
+  const targetPath = "meta/scriptorium/modules/publishing/share-grants.jsonl";
+  const previousTarget = files.get(targetPath);
+  try {
+    files.set(targetPath, { text: JSON.stringify({ ...rawGrant, version: 1, grantVersion: 1, revocationVersion: 0, repositoryId: 42, branch: "main" }) + "\n" });
+    const exact = invoke("proprium.publishing.recovery.hostgrants.propose", { ...source, grants: [rawGrant] });
+    assert.equal(exact.result.ok, true);
+    assert.equal((exact.result.value as Record<string, unknown>).status, "already_imported");
+    assert.equal(exact.host.proposals.length, 0);
+
+    files.set(targetPath, { text: JSON.stringify({ ...rawGrant, version: 1, grantVersion: 1, revocationVersion: 0, repositoryId: 42, branch: "main", label: "different" }) + "\n" });
+    const conflict = invoke("proprium.publishing.recovery.hostgrants.propose", { ...source, grants: [rawGrant] });
+    assert.equal(conflict.result.ok, false);
+    assert.equal((conflict.result.error as Record<string, unknown>).code, "conflict");
+    assert.equal(conflict.host.proposals.length, 0);
+  } finally {
+    files.delete(targetPath);
+    if (previousTarget) files.set(targetPath, previousTarget);
+  }
+});
+
 test("project tree action forwards one page without eager reordering", () => {
   const { result, host } = invoke("proprium.publishing.project.tree", { parent_id: null, limit: 25 });
   assert.equal(result.ok, true);

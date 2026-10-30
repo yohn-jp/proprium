@@ -1,9 +1,21 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
+import { sourceTextDecoder } from "../../app/src/browser/proprium/authoring/source-text.ts";
 import { guest } from "./guest.ts";
+import { parseSemanticSourceFile } from "./source.ts";
 
 const scope = { workspace_id: "workspace-a", repository_id: 7, branch: "main", generation: "g1" };
 const snapshot = { id: "snapshot-a", local_commit: null, worktree_generation: "w1", draft_generation: null };
+const rerankSourcePath = "bible/scenes/one.yaml";
+const rerankSourceText = "id: scene-a\ntype: scene\nbody: '🌃 旅人は町へ入った。'\n";
+const revisionFor = (text: string) => createHash("sha256").update(new TextEncoder().encode(text)).digest("hex");
+const rerankSourceRevision = revisionFor(rerankSourceText);
+const rerankSourcePassage = parseSemanticSourceFile(rerankSourcePath, rerankSourceRevision, rerankSourceText)!.passages[0]!;
+const validRerankCandidate = {
+  candidateId: "candidate-1", entityId: "scene-a", sourcePath: rerankSourcePath, sourceRevision: rerankSourceRevision,
+  sentenceIndex: rerankSourcePassage.sentenceIndex, text: rerankSourcePassage.text, evidence: [rerankSourcePassage.evidence],
+};
 
 function startInvoke(actionId: string, input: Record<string, unknown>) {
   guest.initialize({ pluginId: "proprium.semantic", version: "0.1.0", workspaceId: scope.workspace_id });
@@ -26,6 +38,36 @@ function invoke(input: Record<string, unknown>) {
   return JSON.parse(response) as Record<string, any>;
 }
 
+function rerankAfterHostReads(candidate: typeof validRerankCandidate, currentText = rerankSourceText,
+  currentRevision = rerankSourceRevision) {
+  const response = JSON.parse(startInvoke("proprium.semantic.rerank", { query: "旅人", limit: 1, candidates: [candidate] })) as Record<string, any>;
+  const operations: string[] = [];
+  let next = response;
+  for (;;) {
+    if (next.kind !== "host_call") {
+      guest.dispose();
+      return { result: next, operations };
+    }
+    operations.push(next.operation);
+    if (next.operation === "plugin.preferences.read") {
+      next = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: next.call_id, ok: true,
+        value: { found: true, value: { rerankerEnabled: true } } })));
+    } else if (next.operation === "workspace.file.list") {
+      assert.equal(next.payload.prefix, rerankSourcePath);
+      assert.equal(next.payload.snapshot.id, snapshot.id);
+      next = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: next.call_id, ok: true,
+        value: { entries: [{ path: rerankSourcePath, revision: currentRevision, byte_length: new TextEncoder().encode(currentText).length,
+          media_type: "text/yaml" }], next_cursor: null } })));
+    } else if (next.operation === "workspace.file.read") {
+      assert.equal(next.payload.path, rerankSourcePath);
+      assert.equal(next.payload.snapshot.id, snapshot.id);
+      const bytes = [...new TextEncoder().encode(currentText)];
+      next = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: next.call_id, ok: true,
+        value: { revision: currentRevision, total_bytes: bytes.length, offset: 0, bytes, next_offset: null } })));
+    } else throw new Error(`Unexpected rerank Host operation: ${next.operation}`);
+  }
+}
+
 test("guest routes term candidates through the canonical snapshot and deterministic clustering", () => {
   const response = invoke({
     candidates: [
@@ -43,6 +85,12 @@ test("index and model actions report their unavailable state without loading or 
   let status = JSON.parse(startInvoke("proprium.semantic.index.status", {})) as Record<string, any>;
   assert.equal(status.operation, "workspace.derived.cache.get");
   status = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: status.call_id, ok: true, value: { found: false } })));
+  assert.equal(status.operation, "workspace.derived.cache.get");
+  status = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: status.call_id, ok: true, value: { found: false } })));
+  assert.equal(status.operation, "workspace.derived.cache.get_previous");
+  status = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: status.call_id, ok: true, value: { found: false } })));
+  assert.equal(status.operation, "workspace.derived.cache.get_previous");
+  status = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: status.call_id, ok: true, value: { found: false } })));
   assert.equal(status.ok, true);
   assert.equal(status.value.index.state, "missing");
   assert.equal(status.value.resources.modelLoaded, false);
@@ -56,20 +104,29 @@ test("index and model actions report their unavailable state without loading or 
 
   let query = JSON.parse(startInvoke("proprium.semantic.passages.query", { query: "旅", granularity: "sentence", limit: 10 })) as Record<string, any>;
   query = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: query.call_id, ok: true, value: { found: false } })));
+  assert.equal(query.operation, "workspace.derived.cache.get");
+  query = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: query.call_id, ok: true, value: { found: false } })));
+  assert.equal(query.operation, "workspace.derived.cache.get_previous");
+  query = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: query.call_id, ok: true, value: { found: false } })));
+  assert.equal(query.operation, "workspace.derived.cache.get_previous");
+  query = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: query.call_id, ok: true, value: { found: false } })));
   assert.equal(query.ok, false);
   assert.equal(query.error.code, "index_missing");
   assert.doesNotMatch(query.error.message, /asset is unavailable/i);
   guest.dispose();
 
   let rebuild = JSON.parse(startInvoke("proprium.semantic.index.rebuild", { taskId: "build-1" })) as Record<string, any>;
-  assert.equal(rebuild.operation, "workspace.derived.cache.put");
-  rebuild = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: rebuild.call_id, ok: true, value: { stored: true } })));
   assert.equal(rebuild.operation, "workspace.derived.cache.get");
   rebuild = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: rebuild.call_id, ok: true, value: { found: false } })));
-  assert.equal(rebuild.operation, "workspace.file.list");
-  rebuild = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: rebuild.call_id, ok: true, value: { entries: [], next_cursor: null } })));
-  assert.equal(rebuild.ok, false);
-  assert.equal(rebuild.error.code, "provider_unavailable");
+  assert.equal(rebuild.operation, "workspace.derived.cache.get");
+  rebuild = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: rebuild.call_id, ok: true, value: { found: false } })));
+  assert.equal(rebuild.operation, "workspace.derived.cache.get_previous");
+  rebuild = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: rebuild.call_id, ok: true, value: { found: false } })));
+  assert.equal(rebuild.operation, "workspace.derived.cache.get_previous");
+  rebuild = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: rebuild.call_id, ok: true, value: { found: false } })));
+  assert.equal(rebuild.ok, true);
+  assert.equal(rebuild.value.state, "running");
+  guest.dispose();
   guest.dispose();
 });
 
@@ -103,6 +160,68 @@ test("settings updates route to the Host preference form and task actions do not
   guest.dispose();
 });
 
+test("BGE preparation and inference require the Host reranker preference, independently of E5 state", () => {
+  let prepare = JSON.parse(startInvoke("proprium.semantic.reranker.prepare", { taskId: "bge-task" })) as Record<string, any>;
+  assert.equal(prepare.operation, "plugin.preferences.read");
+  assert.deepEqual(prepare.payload, { plugin_id: "proprium.semantic", key: "reranker.enabled", schema_version: 1 });
+  prepare = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: prepare.call_id, ok: true, value: { found: false } }))) as Record<string, any>;
+  assert.equal(prepare.ok, false);
+  assert.equal(prepare.error.code, "capability_denied");
+  assert.equal(prepare.snapshot.id, snapshot.id);
+  guest.dispose();
+
+  let rerank = JSON.parse(startInvoke("proprium.semantic.rerank", { query: "旅", limit: 1, candidates: [validRerankCandidate] })) as Record<string, any>;
+  assert.equal(rerank.operation, "plugin.preferences.read");
+  rerank = JSON.parse(guest.invoke(JSON.stringify({ kind: "host_response", call_id: rerank.call_id, ok: true, value: { found: true, value: { rerankerEnabled: false } } }))) as Record<string, any>;
+  assert.equal(rerank.ok, false);
+  assert.equal(rerank.error.code, "capability_denied");
+  guest.dispose();
+});
+
+test("BGE reranking rereads and verifies the exact current UTF-16 source evidence before inference", () => {
+  const valid = rerankAfterHostReads(validRerankCandidate);
+  assert.deepEqual(valid.operations, ["plugin.preferences.read", "workspace.file.list", "workspace.file.read"]);
+  assert.equal(valid.result.ok, false);
+  assert.equal(valid.result.error.code, "provider_unavailable", "valid source must advance to the unavailable, unprepared model");
+
+  const staleRevision = rerankAfterHostReads({ ...validRerankCandidate,
+    sourceRevision: "b".repeat(64), evidence: validRerankCandidate.evidence.map(span => ({ ...span, revision: "b".repeat(64) })) });
+  assert.equal(staleRevision.result.error.code, "snapshot_stale");
+  assert.deepEqual(staleRevision.operations, ["plugin.preferences.read", "workspace.file.list"]);
+
+  const forgedQuote = validRerankCandidate.evidence[0]!.quote.replace("旅人", "旅行");
+  assert.equal(forgedQuote.length, validRerankCandidate.evidence[0]!.quote.length);
+  const mismatchedQuote = rerankAfterHostReads({ ...validRerankCandidate, evidence: [{ ...validRerankCandidate.evidence[0]!, quote: forgedQuote }] });
+  assert.equal(mismatchedQuote.result.error.code, "snapshot_stale");
+  assert.deepEqual(mismatchedQuote.operations, ["plugin.preferences.read", "workspace.file.list", "workspace.file.read"]);
+
+  const forgedText = rerankAfterHostReads({ ...validRerankCandidate, text: validRerankCandidate.text.replace("入", "出") });
+  assert.equal(forgedText.result.error.code, "snapshot_stale");
+  assert.deepEqual(forgedText.operations, ["plugin.preferences.read", "workspace.file.list", "workspace.file.read"]);
+
+  const bomText = `\uFEFF${rerankSourceText}`;
+  const bomRevision = revisionFor(bomText);
+  const bomHostText = sourceTextDecoder().decode(new TextEncoder().encode(bomText));
+  const bomPassage = parseSemanticSourceFile(rerankSourcePath, bomRevision, bomHostText)!.passages[0]!;
+  assert.equal(bomPassage.evidence.quote, bomHostText.slice(bomPassage.evidence.start, bomPassage.evidence.end));
+  assert.equal(bomPassage.evidence.start, bomHostText.indexOf(bomPassage.evidence.quote));
+  const shiftedEvidence = rerankAfterHostReads({ ...validRerankCandidate, sourceRevision: bomRevision,
+    evidence: validRerankCandidate.evidence.map(span => ({ ...span, revision: bomRevision })) }, bomText, bomRevision);
+  assert.equal(shiftedEvidence.result.error.code, "snapshot_stale", "offsets from BOM-stripped text must be rejected against original Host text");
+  const bomEvidence = rerankAfterHostReads({ ...validRerankCandidate, sourceRevision: bomRevision, text: bomPassage.text,
+    sentenceIndex: bomPassage.sentenceIndex, evidence: [bomPassage.evidence] }, bomText, bomRevision);
+  assert.equal(bomEvidence.result.error.code, "provider_unavailable", "correct original UTF-16 offsets must advance to the unavailable model");
+
+  const missingQuote = rerankAfterHostReads({ ...validRerankCandidate, evidence: [{ ...validRerankCandidate.evidence[0]!, quote: undefined as unknown as string }] });
+  assert.equal(missingQuote.result.error.code, "invalid_input");
+  assert.deepEqual(missingQuote.operations, [], "malformed quote shapes must fail before Host access");
+
+  const nulPath = rerankAfterHostReads({ ...validRerankCandidate, sourcePath: "bible/scenes/one.yaml\0evil",
+    evidence: [{ ...validRerankCandidate.evidence[0]!, path: "bible/scenes/one.yaml\0evil" }] });
+  assert.equal(nulPath.result.error.code, "invalid_input");
+  assert.deepEqual(nulPath.operations, [], "malformed paths must fail before Host access or model scoring");
+});
+
 test("guest rejects unknown fields and reports missing admitted model capability explicitly", () => {
   const invalid = invoke({ candidates: [], useEmbedding: false, write: true });
   assert.equal(invalid.ok, false);
@@ -118,6 +237,7 @@ test("Semantic exposes index state and explicit rebuild through a Host panel", a
   const manifest = JSON.parse(await readFile(new URL("./plugin.json", import.meta.url), "utf8"));
   const panel = manifest.ui.find((item: { id: string }) => item.id === "semantic.index");
   assert.equal(panel.body.load_action.action_id, "proprium.semantic.index.status");
+  assert.ok(manifest.actions.some((action: { action_id: string }) => action.action_id === "proprium.semantic.index.step"));
   const rebuild = panel.body.tabs.find((tab: { id: string }) => tab.id === "rebuild");
   assert.equal(rebuild.body.submit.action_id, "proprium.semantic.index.rebuild");
 });

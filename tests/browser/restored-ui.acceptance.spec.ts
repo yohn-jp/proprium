@@ -80,7 +80,9 @@ test("a protected uncommitted draft can be recovered explicitly without replacin
   page.once("dialog", dialog => dialog.accept());
   await openWorkspacePicker(page);
   await page.getByRole("button", { name: /proprium-test\/ui-restoration/u }).click();
-  await chooseFile(page, "chapter.md");
+  // Reopening resumes the previously selected file asynchronously. Verify that
+  // completed editor state before acting on it; an immediate outline switch
+  // races MobileShell's pending resume navigation.
   await expectEditorText(page, "保存済みの本文\n");
   await page.getByRole("button", { name: "この下書きをエディターで開く" }).click();
   await expectEditorText(page, "回復する未保存の本文\n");

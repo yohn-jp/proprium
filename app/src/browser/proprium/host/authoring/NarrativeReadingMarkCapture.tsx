@@ -8,9 +8,33 @@ export interface ReadingMarkSelection {
   expected_metadata_revision: string;
   expected_manuscript_revision: string;
 }
+export interface SavedReadingMark {
+  id: string;
+  offset: number;
+  length: number;
+  snippet: string;
+  position_status: "current" | "stale";
+}
+export interface SavedReadingMarkSnapshot {
+  metadata_revision: string;
+  manuscript_revision: string;
+  marks: readonly SavedReadingMark[];
+}
 export interface NarrativeReadingMarkCaptureProps {
   capture: () => ReadingMarkSelection;
   propose: (event: Event, input: ReadingMarkSelection & { comment: string }) => Promise<void>;
+  removeSelected: (event: Event, input: ReadingMarkSelection) => Promise<void>;
+}
+
+export function findMarkForSelectedRange(snapshot: SavedReadingMarkSnapshot, selection: ReadingMarkSelection): SavedReadingMark {
+  if (snapshot.metadata_revision !== selection.expected_metadata_revision || snapshot.manuscript_revision !== selection.expected_manuscript_revision) {
+    throw new Error("選択した読書マークの本文またはシーン情報が変更されました。読み直してから選択してください。");
+  }
+  const exact = snapshot.marks.filter(mark => mark.position_status === "current" && mark.offset === selection.offset &&
+    mark.length === selection.length && mark.snippet === selection.snippet);
+  if (!exact.length) throw new Error("選択範囲と一致する現在の読書マークがありません。");
+  if (exact.length > 1) throw new Error("同じ選択範囲に複数の読書マークがあります。一覧から削除対象を選んでください。");
+  return exact[0]!;
 }
 
 /** Compute guest offsets against the saved text, including an optional UTF-8 BOM. */
@@ -26,7 +50,7 @@ export function savedSelectionRange(raw: string, visible: string, anchor: number
   return { offset: start + prefix, length: end - start, snippet: visible.slice(start, end) };
 }
 
-export function NarrativeReadingMarkCapture({ capture, propose }: NarrativeReadingMarkCaptureProps) {
+export function NarrativeReadingMarkCapture({ capture, propose, removeSelected }: NarrativeReadingMarkCaptureProps) {
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
@@ -41,6 +65,14 @@ export function NarrativeReadingMarkCapture({ capture, propose }: NarrativeReadi
         void propose(event.nativeEvent, { ...selected, comment }).then(() => setStatus("読書マークの変更提案を作成しました。レビューで確認してください。"), reason => setError(reason instanceof Error ? reason.message : "変更提案を作成できませんでした。")).finally(() => setBusy(false));
       } catch (reason) { setError(reason instanceof Error ? reason.message : "選択範囲を取得できませんでした。"); }
     }}>選択範囲に読書マークを提案</button>
+    <button type="button" disabled={busy} onClick={event => {
+      setError(""); setStatus("");
+      try {
+        const selected = capture();
+        setBusy(true);
+        void removeSelected(event.nativeEvent, selected).then(() => setStatus("選択した読書マークの削除提案を作成しました。レビューで確認してください。"), reason => setError(reason instanceof Error ? reason.message : "読書マークの削除提案を作成できませんでした。")).finally(() => setBusy(false));
+      } catch (reason) { setError(reason instanceof Error ? reason.message : "選択範囲を取得できませんでした。"); }
+    }}>選択した読書マークの削除を提案</button>
     {busy && <span role="status">提案を作成しています…</span>}
     {status && <p role="status">{status}</p>}
     {error && <p role="alert">{error}</p>}

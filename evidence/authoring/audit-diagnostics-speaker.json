@@ -1,0 +1,941 @@
+{
+  "schema": "proprium.authoring.feature-audit/v1",
+  "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+  "features": [
+    {
+      "feature_id": "DIA-01",
+      "plugin_id": "proprium.diagnostics",
+      "requirement": "RECOVERY — Compose one scene report from text analysis, lint, prose balance, plot warnings, vocabulary suggestions, and Speaker evidence; return a text hash and per-stage timing.\naccept-dia-a1 — On a synthetic Japanese scene, run analysis against saved revision R and the active Draft generation D. The panel shows character/sentence counts, lint and rhythm findings, prose balance, configured tone/goal status and provider availability. Returned identity names R or D exactly. Change one character in the editor; old offsets immediately become stale and a new run points to the updated text hash.\naccept-dia-a14 — On supported mobile browser classes, run lint/report from the sheet, navigate to a finding and return with scene, draft text, cursor, selection, scroll position, undo and IME composition intact. Test touch, keyboard, offline and sheet dismissal on real browser automation/device coverage. A responsive screenshot alone is not a pass.\naccept-dia-a15 — Install only a signed, digest-verified, ABI-compatible official artifact with declared read/propose/cache capabilities. Missing/disabled Diagnostics creates no worker or scan. Bad signature, digest, ABI, denied capability, malformed oversized RPC, timeout, trap and disable each show typed status; generic editor, Draft, local Git and publication remain available and all leases are released.\naccept-dia-a2 — A Japanese fixture with repeated sentence endings, nouns, phrases, dialogue and narration yields the expected frequency/rhythm/sentiment/prose metrics, each with stable sentence/span evidence. Open every result in the editor. No result changes Markdown or leaves a decoration after revision change.\naccept-dia-a9 — With Speaker enabled, display registered, learned and statistical evidence as separate categories and navigate to the exact utterance; confirm/correct actions route to Speaker. With Speaker disabled or failed, the base scene report completes with voice provider unavailable and no voice assertion. No correction record is created by Diagnostics.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/diagnostics/guest.ts",
+        "plugins/diagnostics/plugin.json",
+        "plugins/diagnostics/src/core.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx",
+      "ui_path": "plugins/diagnostics/plugin.json#diagnostics.analysis, #diagnostics.voice",
+      "existing_tests": [
+        "plugins/diagnostics/tests/sceneGuest.test.ts",
+        "plugins/diagnostics/tests/speakerGuest.test.ts"
+      ],
+      "gaps": [
+        "Typed report and panel actions exist; no signed-artifact desktop/mobile browser proof confirms saved/Draft invalidation, result category filters, source jumps and editor continuity."
+      ],
+      "required_fixes": [
+        "Run scene report in signed Host on a Japanese saved scene and current Draft; verify stale offsets disappear immediately after edit, exact identity and optional provider states."
+      ],
+      "dependencies": [
+        "proprium.narrative",
+        "proprium.knowledge",
+        "proprium.research",
+        "proprium.speaker",
+        "proprium.semantic"
+      ],
+      "priority": "P1",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "DIA-02",
+      "plugin_id": "proprium.diagnostics",
+      "requirement": "RECOVERY — Check authored YAML/Markdown graph for missing/duplicate IDs, missing manuscript path/target, broken relations and thread plant/payoff gaps; scope the result to a scene, chapter, volume or work.\naccept-dia-a3 — Across a paged fixture with duplicate IDs, absent `id`, missing explicit scene manuscript, broken relation, open thread without plant and planted thread without payoff, return a complete, correctly scoped report with both source paths/revisions. A valid generic repository is not rewritten or labeled invalid as a narrative project.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/diagnostics/guest.ts",
+        "plugins/diagnostics/src/projectConsistency.ts",
+        "plugins/diagnostics/plugin.json"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx",
+      "ui_path": "plugins/diagnostics/plugin.json#diagnostics.consistency",
+      "existing_tests": [
+        "plugins/diagnostics/tests/projectConsistency.test.ts",
+        "plugins/diagnostics/tests/guest.test.ts"
+      ],
+      "gaps": [
+        "Project scan and consistency surface exist with unit coverage; no signed Host/browser scenario verifies scope selection and partial malformed sibling recovery."
+      ],
+      "required_fixes": [
+        "Run DIA-A3 against signed local fixture with scoped scene/chapter/volume/work selection, duplicate IDs, malformed sibling and generic Git repository."
+      ],
+      "dependencies": [],
+      "priority": "P1",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "DIA-03",
+      "plugin_id": "proprium.diagnostics",
+      "requirement": "RECOVERY — Inspect scene-to-scene continuity using explicit locations, shared characters, declared travel edges/durations, timeline text and recorded scene effects. Return the exact prior/current scenes and reason.\naccept-dia-a4 — A fixture records item transfer, location/travel edges, scene order and date phrases. Return correct item-owner, teleport, timeline and route-duration warning with both scenes; with absent time/location/edge, emit unknown/unavailable evidence rather than a contradiction. A changed Knowledge file invalidates the prior result despite unchanged manuscript bytes.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/diagnostics/guest.ts",
+        "plugins/diagnostics/src/projectContinuity.ts",
+        "plugins/diagnostics/plugin.json"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx",
+      "ui_path": "plugins/diagnostics/plugin.json#diagnostics.continuity",
+      "existing_tests": [
+        "plugins/diagnostics/tests/projectContinuity.test.ts",
+        "plugins/diagnostics/tests/continuityGuest.test.ts"
+      ],
+      "gaps": [
+        "Pinned continuity actions and surface exist; no signed Host/browser run proves linked scene order and readable prior/current evidence presentation."
+      ],
+      "required_fixes": [
+        "Run DIA-A4 in browser with declared location, travel, item ownership and timeline evidence plus unknown facts; verify citations and no false warnings."
+      ],
+      "dependencies": [
+        "proprium.narrative",
+        "proprium.knowledge"
+      ],
+      "priority": "P1",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "DIA-04",
+      "plugin_id": "proprium.diagnostics",
+      "requirement": "RECOVERY — Run configured formatting rules on selected text and show rule IDs, UTF-16 offsets, lengths and excerpts.\naccept-dia-a5 — Exercise all six rule kinds using the same configured rule set. Offsets select the exact body UTF-16 range, including Japanese text and surrogate pairs. Missing config uses built-in defaults; malformed YAML names the source field without overwriting it. A text-only lint result is visibly a preview.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/diagnostics/guest.ts",
+        "plugins/diagnostics/src/textMetrics.ts",
+        "plugins/diagnostics/src/config.ts",
+        "plugins/diagnostics/plugin.json"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx",
+      "ui_path": "plugins/diagnostics/plugin.json#diagnostics.analysis (lint tab)",
+      "existing_tests": [
+        "plugins/diagnostics/tests/textMetrics.test.ts",
+        "plugins/diagnostics/tests/config.test.ts"
+      ],
+      "gaps": [
+        "Lint results are user-runnable; browser evidence does not yet verify selected saved/Draft body, readable rule evidence, or accessibility."
+      ],
+      "required_fixes": [
+        "Exercise configured and default lint from the Host UI against exact saved/Draft text, UTF-16 evidence and unavailable configuration."
+      ],
+      "dependencies": [],
+      "priority": "P1",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "DIA-05",
+      "plugin_id": "proprium.diagnostics",
+      "requirement": "RECOVERY — Apply deterministic formatting rules and offer a whole-file or bounded replacement for explicit review; preserve Markdown frontmatter.\naccept-dia-a6 — Formatting preserves byte-identical frontmatter and untouched source fields and previews indentation, ellipsis and dialogue spacing changes. Reject leaves saved file and active Draft unchanged. Approve with current revisions applies only the reviewed change. Stale base or duplicate/changed idempotency payload cannot create a second/unreviewed write; retry returns original proposal status. No-op creates no proposal.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/diagnostics/guest.ts",
+        "plugins/diagnostics/plugin.json",
+        "plugins/diagnostics/tests/proposalGuest.test.ts",
+        "plugins/diagnostics/tests/sceneGuest.test.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx",
+      "ui_path": "plugins/diagnostics/plugin.json#diagnostics.analysis (new pinned lint-proposal and format-proposal forms)",
+      "existing_tests": [
+        "plugins/diagnostics/tests/proposalGuest.test.ts",
+        "plugins/diagnostics/tests/sceneGuest.test.ts"
+      ],
+      "gaps": [
+        "Both proposal actions now have Host-rendered forms gated on a saved scene report, with file path/revision/text hash bound from that report. Browser review/reject/stale/apply and frontmatter preservation are not yet proven."
+      ],
+      "required_fixes": [
+        "In browser, run lint and whole-manuscript format proposals from the new controls; inspect exact diff, reject and apply separately, and verify stale revision prevents apply with no byte loss."
+      ],
+      "dependencies": [
+        "proprium.narrative"
+      ],
+      "priority": "P1",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "DIA-06",
+      "plugin_id": "proprium.diagnostics",
+      "requirement": "RECOVERY — Report character/sentence counts, sentence-ending streaks, sentiment arc, frequent nouns/phrases, candidate unknown terms, spelling variants and contextual habitual phrases.\naccept-dia-a2 — A Japanese fixture with repeated sentence endings, nouns, phrases, dialogue and narration yields the expected frequency/rhythm/sentiment/prose metrics, each with stable sentence/span evidence. Open every result in the editor. No result changes Markdown or leaves a decoration after revision change.\naccept-dia-a7 — Show sentiment arc and frequent/unknown terms from Japanese text, with accessible point-to-sentence navigation and source phrase. A Research registration action opens Research's proposal UI; Diagnostics never writes its synonym dictionary. Missing Research labels term analysis unavailable while baseline editing and lint remain active.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/diagnostics/guest.ts",
+        "plugins/diagnostics/src/textMetrics.ts",
+        "plugins/diagnostics/src/core.ts",
+        "plugins/diagnostics/plugin.json"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx",
+      "ui_path": "plugins/diagnostics/plugin.json#diagnostics.analysis (scene report and lint tabs)",
+      "existing_tests": [
+        "plugins/diagnostics/tests/textMetrics.test.ts",
+        "plugins/diagnostics/tests/guest.test.ts"
+      ],
+      "gaps": [
+        "Counts, rhythm and lexical action output exist; signed browser evidence for chart/list presentation, term ambiguity, provider degradation and exact text selection is missing."
+      ],
+      "required_fixes": [
+        "Run DIA-A2/DIA-A7 in browser with Japanese text, ambiguous variants and Research absent; inspect evidence navigation and truthful provider status."
+      ],
+      "dependencies": [
+        "proprium.research",
+        "proprium.knowledge"
+      ],
+      "priority": "P1",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "DIA-07",
+      "plugin_id": "proprium.diagnostics",
+      "requirement": "RECOVERY — Compare actual text against a scene's declared intended tone and plot goal/conflict; return lexicon/vector evidence as a weak warning.\naccept-dia-a8 — Declared intended tone plus lexicon yields the measured vector and reason; a scene without intended tone reports `not_applicable`. A lexical plot-goal mismatch is labeled a weak signal and has no invented entity contradiction. Altering lexicon/goal revision invalidates the cache.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/diagnostics/guest.ts",
+        "plugins/diagnostics/src/plot.ts",
+        "plugins/diagnostics/plugin.json"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx",
+      "ui_path": "plugins/diagnostics/plugin.json#diagnostics.analysis (scene report)",
+      "existing_tests": [
+        "plugins/diagnostics/tests/plot.test.ts",
+        "plugins/diagnostics/tests/plotGuest.test.ts"
+      ],
+      "gaps": [
+        "Plot/tone warnings use same-snapshot inputs and are source tested; browser evidence of weak-warning wording and paired goal/text citations is absent."
+      ],
+      "required_fixes": [
+        "Run DIA-A8 with explicit goal and tone sources in signed Host; verify weak signals never appear as factual contradictions and citations jump to both sources."
+      ],
+      "dependencies": [
+        "proprium.narrative",
+        "proprium.knowledge",
+        "proprium.research"
+      ],
+      "priority": "P1",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "DIA-08",
+      "plugin_id": "proprium.diagnostics",
+      "requirement": "RECOVERY — Measure dialogue/narration, adjective/adverb/verb proportions, declared voice pattern mismatches, learned style fingerprints and statistical deviations.\naccept-dia-a9 — With Speaker enabled, display registered, learned and statistical evidence as separate categories and navigate to the exact utterance; confirm/correct actions route to Speaker. With Speaker disabled or failed, the base scene report completes with voice provider unavailable and no voice assertion. No correction record is created by Diagnostics.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/diagnostics/guest.ts",
+        "plugins/diagnostics/plugin.json"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx",
+      "ui_path": "plugins/diagnostics/plugin.json#diagnostics.voice",
+      "existing_tests": [
+        "plugins/diagnostics/tests/speakerGuest.test.ts"
+      ],
+      "gaps": [
+        "Diagnostics consumes Speaker read results without owning their writes; no signed browser scenario verifies declared/learned/statistical categories, stale Draft handling and optional provider absence."
+      ],
+      "required_fixes": [
+        "Run DIA-A9 using saved and changing Draft scenes; verify category separation, exact source spans and Speaker-disabled degradation."
+      ],
+      "dependencies": [
+        "proprium.speaker",
+        "proprium.knowledge",
+        "proprium.research"
+      ],
+      "priority": "P1",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "DIA-09",
+      "plugin_id": "proprium.diagnostics",
+      "requirement": "RECOVERY — Merge analyzer output to stable finding identities, kind/severity filters, sentence ordering, stale/loading state and resolved-item feedback.\naccept-dia-a10 — Desktop margin marker and panel filters select a finding; mark-intentional and false-positive are distinct explicit decisions. Host shows a reviewable feedback file proposal; after approval/reload, only the exact matching finding is annotated. A new source/config fingerprint reappears. Resolved animation never changes finding truth or severity.\naccept-dia-a11 — Same scene across different repository, branch, overlay, corpus/config, Speaker revision, analyzer version or provider digest never reuses a prior result. Cancel a multi-page check and terminate a Worker; writing remains usable, result is incomplete/not cached and leases are released. Offline cache loss recomputes from local Git files.",
+      "status": "PARTIAL",
+      "implementation_files": [
+        "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx",
+        "app/src/browser/proprium/host/authoring/DiagnosticsFindings.css",
+        "app/src/browser/proprium/host/authoring/DiagnosticsFindings.test.ts",
+        "app/src/browser/proprium/host/authoring/DiagnosticsFindings.tsx",
+        "app/src/browser/proprium/host/authoring/diagnosticsFindingsModel.ts",
+        "plugins/diagnostics/guest.ts",
+        "plugins/diagnostics/plugin.json",
+        "plugins/diagnostics/src/core.ts"
+      ],
+      "host_path": "Diagnostics guest supplies normalized current findings and feedback.read.v1; the Host-owned DiagnosticsFindings component is implemented but HostApp mounting remains pending.",
+      "ui_path": "Host-owned DiagnosticsFindings component implements kind/severity/state filters, decision freshness and quoted evidence, but is not yet mounted in HostApp.",
+      "existing_tests": [
+        "plugins/diagnostics/tests/feedbackGuest.test.ts",
+        "plugins/diagnostics/tests/sceneGuest.test.ts"
+      ],
+      "gaps": [
+        "Filter logic, stale-decision presentation and feedback.read.v1 have focused coverage. Host integration of DiagnosticsFindings, report normalization, feedback attachment, proposal approval/reload and actual source navigation are pending."
+      ],
+      "required_fixes": [
+        "Mount DiagnosticsFindings in HostApp with Host-validated scene.run and feedback.read data; verify filters, evidence navigation, review/reload, unchanged-source retention and stale decisions on changed sources in signed browser tests."
+      ],
+      "dependencies": [
+        "proprium.knowledge",
+        "proprium.narrative",
+        "proprium.research",
+        "proprium.semantic",
+        "proprium.speaker"
+      ],
+      "priority": "P1",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "DIA-10",
+      "plugin_id": "proprium.diagnostics",
+      "requirement": "**FROZEN — Paired Writing-owned cross-plugin chapter first-read report.** Preserve the questions, expectations and confusion report as an interpretive feature; this feature is excluded from the active seven-plugin completion gate while Paired Writing is frozen. `FROZEN` is not `PASS`.\naccept-dia-a12 — FROZEN — This is Paired Writing-owned and excluded from the active Diagnostics completion gate while Paired Writing is frozen. Preserve its prior requirement: only an explicit user-run request with consented Paired Writing provider receives manuscript context; result identifies the exact chapter and model/provider, labels questions/expectations/confusion as an interpretation, and cites bounded source context. Network/model unavailable returns a recoverable error while ordinary diagnostics remains available; no report is silently persisted. `FROZEN` is not `PASS` and does not describe implementation evidence.",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/guest.ts",
+        "plugins/paired-writing/src/reader-reaction.ts",
+        "plugins/paired-writing/plugin.json"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx",
+      "ui_path": "Paired Writing chapter report surface; excluded from Diagnostics active completion gate",
+      "existing_tests": [
+        "plugins/paired-writing/test/reader-reaction.test.ts"
+      ],
+      "gaps": [
+        "Pre-freeze Proprium bridge/Host disclosure requirement is retained as an explicit gap. FROZEN is not PASS and does not certify the legacy behavior."
+      ],
+      "required_fixes": [],
+      "dependencies": [
+        "proprium.paired-writing"
+      ],
+      "priority": "P1",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "FROZEN mapping recorded in docs/canon/plugins/DIAGNOSTICS.md as DIA-10 / DIA-A12; no active acceptance PASS is claimed.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "superseded_requirements": [
+        {
+          "ledger_revision": "da78cf7df4c5ea78713157ba5aa4b852408a5727",
+          "requirement": "**FROZEN — Paired Writing-owned cross-plugin chapter first-read report.** Preserve the questions, expectations and confusion report as an interpretive feature; this feature is excluded from the active seven-plugin completion gate while Paired Writing is frozen. `FROZEN` is not `PASS`.\naccept-dia-a12 — Only an explicit user-run request with consented Paired Writing provider receives manuscript context. Result identifies the exact chapter and model/provider, labels questions/expectations/confusion as an interpretation, and cites bounded source context. Network/model unavailable returns a recoverable error while ordinary diagnostics remains available; no report is silently persisted."
+        }
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "DIA-11",
+      "plugin_id": "proprium.diagnostics",
+      "requirement": "RECOVERY — Build evidence-paired contradiction candidates and review dismissal against its source scope; the optional Paired Writing interpretation is separately frozen.\naccept-dia-a13 — Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact. **FROZEN subrequirement:** optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction`; this is excluded from the active Diagnostics completion gate while Paired Writing is frozen. `FROZEN` is not `PASS`.",
+      "status": "PARTIAL",
+      "implementation_files": [
+        "app/src/browser/proprium/host/authoring/DiagnosticsFindings.tsx",
+        "app/src/browser/proprium/host/authoring/diagnosticsFindingsModel.ts",
+        "plugins/diagnostics/guest.ts",
+        "plugins/diagnostics/plugin.json",
+        "plugins/diagnostics/tests/feedbackGuest.test.ts",
+        "plugins/diagnostics/tests/legacyDismissalsGuest.test.ts",
+        "plugins/diagnostics/tests/sceneGuest.test.ts",
+        "plugins/paired-writing/guest.ts",
+        "plugins/semantic/guest.ts"
+      ],
+      "host_path": "Diagnostics guest normalizes deterministic and Semantic paired-evidence findings and implements revision-pinned legacy-dismissals.inspect.v1/propose.v1; the Host review component and legacy controls are not yet mounted.",
+      "ui_path": "Host DiagnosticsFindings contains paired evidence and explicit legacy migration controls as a component, awaiting HostApp integration. The optional Paired Writing verdict stays FROZEN.",
+      "existing_tests": [
+        "plugins/diagnostics/tests/sceneGuest.test.ts",
+        "plugins/semantic/guest.test.ts",
+        "plugins/paired-writing/test/guest.test.ts"
+      ],
+      "gaps": [
+        "Guest actions preserve unknown JSONL fields and source bytes and propose only explicitly selected rows to Diagnostics feedback. Signed Host review wiring and browser verification are outstanding; Paired verdict remains FROZEN and is not a PASS."
+      ],
+      "required_fixes": [
+        "Integrate DiagnosticsFindings into HostApp using the Host proposal broker; verify preview, selected-row migration, conflict/stale/reject handling and unchanged legacy JSONL in signed Desktop/Mobile flows."
+      ],
+      "dependencies": [
+        "proprium.paired-writing",
+        "proprium.semantic"
+      ],
+      "priority": "P1",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "superseded_requirements": [
+        {
+          "ledger_revision": "da78cf7df4c5ea78713157ba5aa4b852408a5727",
+          "requirement": "RECOVERY — Build evidence-paired contradiction candidates, let an author request optional interpretation, distinguish compatible/insufficient/contradiction and review dismissal against its source scope.\naccept-dia-a13 — Deterministic item-owner/location conflicts appear once in the Diagnostics continuity report; unknown state does not produce a conflict. A Semantic two-source embedding candidate displays both quoted source revisions, paths/scenes and rationale; optional Paired Writing verdicts `compatible`, `insufficient` and `contradiction` remain distinguishable. False-positive/intentional/deferred dismissal is a Diagnostics proposal bound to both source revisions and analyzer/model identity. Stale source makes it reappear for review; no candidate is applied as a canonical fact.\nFROZEN subrequirement: optional Paired Writing verdicts compatible/insufficient/contradiction; deterministic and Semantic evidence plus Diagnostics dismissal remain active."
+        }
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "DIA-12",
+      "plugin_id": "proprium.diagnostics",
+      "requirement": "RECOVERY — Surface margin signals and jump from one to the affected finding without losing the writing location; mark a signal intentional.\naccept-dia-a10 — Desktop margin marker and panel filters select a finding; mark-intentional and false-positive are distinct explicit decisions. Host shows a reviewable feedback file proposal; after approval/reload, only the exact matching finding is annotated. A new source/config fingerprint reappears. Resolved animation never changes finding truth or severity.\naccept-dia-a11 — Same scene across different repository, branch, overlay, corpus/config, Speaker revision, analyzer version or provider digest never reuses a prior result. Cancel a multi-page check and terminate a Worker; writing remains usable, result is incomplete/not cached and leases are released. Offline cache loss recomputes from local Git files.",
+      "status": "PARTIAL",
+      "implementation_files": [
+        "plugins/diagnostics/plugin.json",
+        "plugins/diagnostics/guest.ts",
+        "app/src/browser/proprium/host/PluginPanel.tsx",
+        "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx"
+      ],
+      "host_path": "A CodeMirror diagnostic margin module exists, but Host editor props and HostApp do not currently supply validated Diagnostics findings or wire its jump handler.",
+      "ui_path": "DiagnosticsFindings has a reviewable list/evidence-navigation component and a separate editor-margin module exists; neither is connected to the current Host editor as one findings flow.",
+      "existing_tests": [
+        "plugins/diagnostics/tests/feedbackGuest.test.ts"
+      ],
+      "gaps": [
+        "The margin module has focused isolated browser coverage, but it is not mounted in HostApp or connected to current source revisions; list-to-source selection and editor-location preservation are incomplete."
+      ],
+      "required_fixes": [
+        "Wire Host-validated findings and navigation to the margin through the retained editor, then verify selection/focus preservation and explicit feedback proposals on signed Desktop/Mobile browsers."
+      ],
+      "dependencies": [
+        "proprium.narrative"
+      ],
+      "priority": "P1",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "DIA-13",
+      "plugin_id": "proprium.diagnostics",
+      "requirement": "RECOVERY — Make speaker hypotheses reviewable with reasons, evidence and confidence, and let the author open the canonical speaker list/line.\naccept-dia-a9 — With Speaker enabled, display registered, learned and statistical evidence as separate categories and navigate to the exact utterance; confirm/correct actions route to Speaker. With Speaker disabled or failed, the base scene report completes with voice provider unavailable and no voice assertion. No correction record is created by Diagnostics.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/diagnostics/guest.ts",
+        "plugins/diagnostics/plugin.json",
+        "plugins/speaker/guest.ts",
+        "plugins/speaker/plugin.json"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx",
+      "ui_path": "plugins/diagnostics/plugin.json#diagnostics.voice",
+      "existing_tests": [
+        "plugins/diagnostics/tests/speakerGuest.test.ts",
+        "plugins/speaker/src/guest.test.ts"
+      ],
+      "gaps": [
+        "Speaker rows/reasons are displayed through the voice panel, but real-browser jump to canonical Speaker review and correction path remains unverified."
+      ],
+      "required_fixes": [
+        "Run DIA-A9 in browser and follow an attribution to Speaker line review; ensure Diagnostics never writes speaker source records."
+      ],
+      "dependencies": [
+        "proprium.speaker"
+      ],
+      "priority": "P1",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "DIA-14",
+      "plugin_id": "proprium.diagnostics",
+      "requirement": "`RECOVERY`: Scriptorium `modules/assistant/src/aspect-review.ts:runDeterministicAspectReview`, `normalizeAspectIds`; `actions.ts:runAspectReview`, `previewAspectPrompt`; `actions.test.ts` “aspect review runs the deterministic local source implementation without consent or model access” and preview matrix. Current implementation: `plugins/diagnostics/guest.ts`, `plugins/diagnostics/plugin.json` surface `diagnostics.chapter-aspects`, and `plugins/diagnostics/tests/aspectGuest.test.ts`; browser acceptance remains unverified. This deterministic Assistant feature is relocated here to keep one analysis implementation.\naccept-dia-a16 — Run a synthetic ordered chapter with unequal scene sizes, multiple declared POVs, mixed person markers and repeated explanation markers. Show the expected three independently selectable aspect categories and exact source citations; boundary fixtures around 200/280/120 characters, 0.55/0.12/1.2 thresholds match the pinned implementation. Preview omits scene bodies and makes zero provider requests. Missing Knowledge leaves prose observations with declared-POV unavailable; missing scene body is explicit partial/error, never no-findings success. Paired's legacy adapters invoke this one action. Run with no model/Gateway, a changed draft during computation, cancel, chapter switch and mobile panel close/return: no stale result, file write or editor-state loss. ## Legacy Scriptorium browser UI registration parity The following exact historical registration IDs are required to map to **functioning Host-rendered controls**, not merely shown as labels. The target feature and its linked Acceptance own the user-visible interaction, cancellation and actual action result. Legacy slots do not mandate an additional top-level tab. | Source UI ID | Target feature | | --- | --- | | `diagnostics.consistency` | [DIA-02](#feature-dia-02) | | `diagnostics.continuity` | [DIA-03](#feature-dia-03) | | `diagnostics.analysis` | [DIA-06](#feature-dia-06) | | `diagnostics.voice` | [DIA-08](#feature-dia-08) | All registrations are checked against the pinned Scriptorium source by `scripts/verify-authoring-canon.mjs --sources`. A missing action, disabled control without explanation or inert panel is not feature parity.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/diagnostics/guest.ts",
+        "plugins/diagnostics/src/aspectReview.ts",
+        "plugins/diagnostics/plugin.json",
+        "plugins/diagnostics/tests/aspectGuest.test.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx",
+      "ui_path": "plugins/diagnostics/plugin.json#diagnostics.chapter-aspects (new bounded preview, review and paging surface)",
+      "existing_tests": [
+        "plugins/diagnostics/tests/aspectGuest.test.ts",
+        "plugins/diagnostics/tests/aspectReview.test.ts"
+      ],
+      "gaps": [
+        "Preview/review actions now have a directly reachable Host surface with selectable aspects, source-span navigation and next-page action. Browser evidence for actual jumps, cancel/stale behavior and mobile return is missing."
+      ],
+      "required_fixes": [
+        "Run DIA-A16 on signed artifact in browser with boundary fixtures, optional Knowledge absence, pagination, cancel, chapter switch and mobile close/return."
+      ],
+      "dependencies": [
+        "proprium.narrative",
+        "proprium.knowledge"
+      ],
+      "priority": "P1",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "SPK-01",
+      "plugin_id": "proprium.speaker",
+      "requirement": "Scene inventory and candidate resolution (`RECOVERY`)\naccept-spk-a01 — Open an Arcadia-format fixture and an unrelated generic repository. Scene list follows Narrative order and explicit paths; Speaker never blocks the unrelated repository. Remove/disable Narrative and verify Speaker clearly reports unavailable while editor and Git still work.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/speaker/src/guest.ts",
+        "plugins/speaker/plugin.json"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx; app/src/browser/proprium/plugins/manager.ts for SPK-12 lifecycle",
+      "ui_path": "plugins/speaker/plugin.json#speaker.attribution (ordered scene chooser)",
+      "existing_tests": [
+        "plugins/speaker/src/guest.test.ts"
+      ],
+      "gaps": [
+        "Narrative-driven scene path and candidate resolution are unit-tested; unrelated generic repository and Speaker-disabled recovery are not browser verified."
+      ],
+      "required_fixes": [
+        "Run SPK-A01 on Arcadia-format and generic repositories, then disable Narrative and prove editor/Git remain available."
+      ],
+      "dependencies": [
+        "proprium.narrative",
+        "proprium.knowledge"
+      ],
+      "priority": "P2",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "SPK-02",
+      "plugin_id": "proprium.speaker",
+      "requirement": "Dialogue detection, Japanese sentence segmentation, rule attribution, reasons and confidence (`RECOVERY`)\naccept-spk-a02 — Analyze Japanese synthetic dialogue covering direct narration attribution, attribution verb, POV reply, vocative, alternating turns, quoted nested text and unknown speaker. Every result has exact source text, one-based line, UTF-16 span, reason, confidence and snapshot; only allowed calibrated evidence is high. Manual/unknown remains distinct from automatic. No result for an old scene/draft generation appears as current.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/speaker/src/guest.ts",
+        "plugins/speaker/src/algorithms/textAnalysis.ts",
+        "plugins/speaker/src/algorithms/speakerAttribution.ts",
+        "plugins/speaker/src/algorithms/pipeline.ts",
+        "plugins/speaker/src/nlp/sentenceSplit.ts",
+        "plugins/speaker/plugin.json"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx; app/src/browser/proprium/plugins/manager.ts for SPK-12 lifecycle",
+      "ui_path": "plugins/speaker/plugin.json#speaker.attribution and #speaker.review",
+      "existing_tests": [
+        "plugins/speaker/src/algorithms.test.ts",
+        "plugins/speaker/src/nlp/sentenceSplit.test.ts",
+        "plugins/speaker/src/guest.test.ts"
+      ],
+      "gaps": [
+        "Japanese UTF-16 attribution paths have unit coverage; signed browser evidence for all required cases and stale saved/Draft replacement is absent."
+      ],
+      "required_fixes": [
+        "Run SPK-A02 in browser on the listed Japanese dialogue cases and update text during a run to prove stale output cannot replace current state."
+      ],
+      "dependencies": [
+        "proprium.narrative",
+        "proprium.knowledge",
+        "proprium.research"
+      ],
+      "priority": "P2",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "SPK-03",
+      "plugin_id": "proprium.speaker",
+      "requirement": "Scene-local dialogue clusters, group IDs, grouping trail, voiceprint grouping (`RECOVERY`)\naccept-spk-a03 — Analyze a scene with named hard anchors and multiple unnamed clusters. Show stable group IDs and per-line grouping evidence; applying a count change cannot merge two anchored characters or assign an unnamed group to a character. A repeat on the same snapshot returns the same groups.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/speaker/src/algorithms/speakerClustering.ts",
+        "plugins/speaker/src/algorithms/clusterAssignmentTrail.ts",
+        "plugins/speaker/src/algorithms/speakerGroupLabeling.ts",
+        "plugins/speaker/src/guest.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx; app/src/browser/proprium/plugins/manager.ts for SPK-12 lifecycle",
+      "ui_path": "plugins/speaker/plugin.json#speaker.attribution and #speaker.review",
+      "existing_tests": [
+        "plugins/speaker/src/algorithms.test.ts",
+        "plugins/speaker/src/guest.test.ts"
+      ],
+      "gaps": [
+        "Stable deterministic clusters and named anchors are unit tested; browser evidence of grouping trail, count proposal effects and distinct unnamed groups is missing."
+      ],
+      "required_fixes": [
+        "Run SPK-A03 with multiple unnamed groups and hard anchors; verify a count proposal cannot merge anchors or invent a character assignment."
+      ],
+      "dependencies": [
+        "proprium.narrative",
+        "proprium.knowledge"
+      ],
+      "priority": "P2",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "SPK-04",
+      "plugin_id": "proprium.speaker",
+      "requirement": "Estimated and explicitly chosen speaker count, scene-break hints (`RECOVERY`)\naccept-spk-a04 — Run an unconfigured count estimate and show evidence (`known floor`, vocative census, dialogue count); change count and clear it through Host proposal. Before approval YAML is unchanged; after approval only intended `speakerCount` changes and every other known/unknown scene field survives. Reject and stale revision preserve bytes.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/speaker/src/algorithms/speakerCount.ts",
+        "plugins/speaker/src/guest.ts",
+        "plugins/speaker/plugin.json"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx; app/src/browser/proprium/plugins/manager.ts for SPK-12 lifecycle",
+      "ui_path": "plugins/speaker/plugin.json#speaker.attribution (speaker count and clear forms)",
+      "existing_tests": [
+        "plugins/speaker/src/algorithms.test.ts",
+        "plugins/speaker/src/guest.test.ts"
+      ],
+      "gaps": [
+        "Estimate/update/clear action paths and YAML preservation are unit tested; browser review/reject/stale apply evidence is absent."
+      ],
+      "required_fixes": [
+        "Run SPK-A04 in browser and compare exact metadata diff before approval, after rejection and after stale revision."
+      ],
+      "dependencies": [
+        "proprium.narrative"
+      ],
+      "priority": "P2",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "SPK-05",
+      "plugin_id": "proprium.speaker",
+      "requirement": "Direct corrections, propagated weak labels, legacy override matching and group alignment (`RECOVERY`)\naccept-spk-a05 — Review none/low rows, jump to a sentence and confirm a Knowledge character, unknown, or an explicitly selected group subset. Preview enumerates every affected line; direct corrections are never propagated over. Edit the dialogue, insert a preceding sentence, and create duplicate identical dialogue to prove unique-hash reanchor works while absent/ambiguous hashes are marked stale. Review/apply/reload preserves the decision and append-only history; duplicate request with same idempotency key creates one proposal.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/speaker/src/algorithms/speakerOverrides.ts",
+        "plugins/speaker/src/algorithms/speakerCorrectionLog.ts",
+        "plugins/speaker/src/guest.ts",
+        "plugins/speaker/plugin.json"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx; app/src/browser/proprium/plugins/manager.ts for SPK-12 lifecycle",
+      "ui_path": "plugins/speaker/plugin.json#speaker.review (queue and correction forms)",
+      "existing_tests": [
+        "plugins/speaker/src/algorithms.test.ts",
+        "plugins/speaker/src/guest.test.ts"
+      ],
+      "gaps": [
+        "Review, direct correction and byte-preserving audit proposal are unit tested; editor sentence jump, propagation preview, stale reanchor and apply/reload are not signed-browser verified."
+      ],
+      "required_fixes": [
+        "Run SPK-A05 end to end, including duplicate hashes, changed source, explicit propagation selection, proposal rejection and reload."
+      ],
+      "dependencies": [
+        "proprium.narrative",
+        "proprium.knowledge"
+      ],
+      "priority": "P2",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "SPK-06",
+      "plugin_id": "proprium.speaker",
+      "requirement": "Character dialogue list (`RECOVERY`)\naccept-spk-a06 — Filter character dialogue by scene and confidence, paginate, navigate to each excerpt, and return with editor selection, scroll, undo and Japanese draft unchanged. Missing character returns `scene_not_found` (missing scene) or `file_not_found` (missing entity record); stale result is not shown as current.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/speaker/src/guest.ts",
+        "plugins/speaker/plugin.json"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx; app/src/browser/proprium/plugins/manager.ts for SPK-12 lifecycle",
+      "ui_path": "plugins/speaker/plugin.json#speaker.dialogue",
+      "existing_tests": [
+        "plugins/speaker/src/guest.test.ts"
+      ],
+      "gaps": [
+        "Dialogue list action and panel exist; browser filtering, pagination, navigation return and missing-character errors remain unverified."
+      ],
+      "required_fixes": [
+        "Run SPK-A06 from Host UI with character/scene/confidence filters and page navigation; verify editor state survives return."
+      ],
+      "dependencies": [
+        "proprium.narrative",
+        "proprium.knowledge"
+      ],
+      "priority": "P2",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "SPK-07",
+      "plugin_id": "proprium.speaker",
+      "requirement": "Character voice profiles and pairwise voice-separation matrix (`RECOVERY`)\naccept-spk-a07 — Build voice fingerprints/matrix from confirmed or high-confidence lines. Show sample counts and distance provenance. A small corpus reports insufficient evidence instead of asserting identity; missing Diagnostics leaves other Speaker functions enabled. Character `voice_profiles` with unknown fields round-trips byte/semantically unchanged.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/speaker/src/algorithms/styleFingerprint.ts",
+        "plugins/speaker/src/algorithms/voice/profileLoader.ts",
+        "plugins/speaker/src/algorithms/voiceStyle.ts",
+        "plugins/speaker/src/guest.ts",
+        "plugins/speaker/plugin.json"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx; app/src/browser/proprium/plugins/manager.ts for SPK-12 lifecycle",
+      "ui_path": "plugins/speaker/plugin.json#speaker.voice.profiles",
+      "existing_tests": [
+        "plugins/speaker/src/guest.test.ts",
+        "plugins/speaker/src/algorithms.test.ts"
+      ],
+      "gaps": [
+        "Voice fingerprints, matrix and profile reads exist; browser evidence for sample sufficiency, provenance, unknown-field round trip and Diagnostics-independent operation is absent."
+      ],
+      "required_fixes": [
+        "Run SPK-A07 with small/large corpora and missing Diagnostics; verify sample thresholds, source identities and unchanged Knowledge profile data."
+      ],
+      "dependencies": [
+        "proprium.knowledge",
+        "proprium.research"
+      ],
+      "priority": "P2",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "SPK-08",
+      "plugin_id": "proprium.speaker",
+      "requirement": "Declared, learned and stylometric voice deviations for a scene or unsaved draft (`RECOVERY`)\naccept-spk-a08 — Compare declared voice, learned fingerprint and stylometric warnings in a saved scene and unsaved draft. Each warning cites exact span, rule and source revision/draft generation. Change draft during analysis and prove old output cannot replace or decorate the new input. Missing provider reports unavailable only for its warning family.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/speaker/src/algorithms/declaredVoice.ts",
+        "plugins/speaker/src/algorithms/voiceStyle.ts",
+        "plugins/speaker/src/algorithms/stylometry/profile.ts",
+        "plugins/speaker/src/guest.ts",
+        "plugins/speaker/plugin.json"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx; app/src/browser/proprium/plugins/manager.ts for SPK-12 lifecycle",
+      "ui_path": "plugins/speaker/plugin.json#speaker.voice.profiles and plugins/diagnostics/plugin.json#diagnostics.voice",
+      "existing_tests": [
+        "plugins/speaker/src/guest.test.ts"
+      ],
+      "gaps": [
+        "Saved and supplied text paths are unit tested; Draft-generation change, warning family degradation and stale display are not browser verified."
+      ],
+      "required_fixes": [
+        "Run SPK-A08 in saved and active Draft modes, mutate Draft during analysis and verify evidence/source generation and provider status."
+      ],
+      "dependencies": [
+        "proprium.knowledge",
+        "proprium.diagnostics",
+        "proprium.research"
+      ],
+      "priority": "P2",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "SPK-09",
+      "plugin_id": "proprium.speaker",
+      "requirement": "Quality evaluation, gold-text matching, rule precision and gates (`RECOVERY`)\naccept-spk-a09 — Evaluate known gold fixtures and check all six metrics, per-rule fired/correct denominator, scene detail and hash mismatch exclusion. Verify v1 thresholds at 19/20 samples and around 0.30/0.60 boundaries; manual override is not gated. Re-run with cache corruption, other branch, changed model identity and stale snapshot; cache is ignored/rebuilt, source files remain unchanged.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/speaker/src/algorithms/speakerEval.ts",
+        "plugins/speaker/src/algorithms/speakerRuleStats.ts",
+        "plugins/speaker/src/guest.ts",
+        "plugins/speaker/plugin.json"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx; app/src/browser/proprium/plugins/manager.ts for SPK-12 lifecycle",
+      "ui_path": "plugins/speaker/plugin.json#speaker.evaluation",
+      "existing_tests": [
+        "plugins/speaker/src/guest.test.ts",
+        "plugins/speaker/src/algorithms.test.ts"
+      ],
+      "gaps": [
+        "Evaluation and identity-bound cache actions are unit tested; browser evidence for metrics/denominators, threshold boundaries, corrupted cache and stale snapshots is absent."
+      ],
+      "required_fixes": [
+        "Run SPK-A09 boundary fixtures and cache corruption/branch/model identity cases through the actual signed Host UI."
+      ],
+      "dependencies": [
+        "proprium.narrative",
+        "proprium.knowledge",
+        "proprium.research"
+      ],
+      "priority": "P2",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "SPK-10",
+      "plugin_id": "proprium.speaker",
+      "requirement": "Optional trained reranker, held-out comparison and reviewed adoption (`RECOVERY`)\naccept-spk-a10 — With no model, evaluate and run deterministic training on a synthetic labeled corpus; verify exact held-out scene isolation, minimum 10 training examples, 5-point adoption gate and 95%-precision threshold rule. Dry-run and below-threshold results never propose. Eligible result yields one model proposal; reject, stale and apply/reload outcomes are distinct. Adopted model has exact schema/revision and malformed model falls back to deterministic rules.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/speaker/src/algorithms/speakerReranker.ts",
+        "plugins/speaker/src/guest.ts",
+        "plugins/speaker/plugin.json"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx; app/src/browser/proprium/plugins/manager.ts for SPK-12 lifecycle",
+      "ui_path": "plugins/speaker/plugin.json#speaker.evaluation (training forms)",
+      "existing_tests": [
+        "plugins/speaker/src/guest.test.ts",
+        "plugins/speaker/src/algorithms.test.ts"
+      ],
+      "gaps": [
+        "Deterministic training and adoption gates have unit evidence; browser dry-run, eligible proposal, reject/stale/apply/reload behavior has not been verified."
+      ],
+      "required_fixes": [
+        "Run SPK-A10 on synthetic labeled data in signed Host and prove only eligible non-dry-run makes a review proposal."
+      ],
+      "dependencies": [
+        "proprium.narrative",
+        "proprium.knowledge",
+        "proprium.research"
+      ],
+      "priority": "P2",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "SPK-11",
+      "plugin_id": "proprium.speaker",
+      "requirement": "Restore preserved correction/model files (`RECOVERY`)\naccept-spk-a11 — From the `speaker.recovery` panel, inspect the legacy correction/model files, then request migration with an idempotency key. Verify only absent targets are proposed through Host review and that proposal operations contain the exact original bytes and source/target revisions. Identical target reports unchanged; conflicting target remains untouched and reviewable; disabled Speaker makes no proposal. Preserve unknown JSON fields, malformed lines and original bytes; reject/stale review leaves all source and target files unchanged.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/speaker/src/migration.ts",
+        "plugins/speaker/src/guest.ts",
+        "plugins/speaker/plugin.json"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx; app/src/browser/proprium/plugins/manager.ts for SPK-12 lifecycle",
+      "ui_path": "plugins/speaker/plugin.json#speaker.recovery (new inspect and restore tabs)",
+      "existing_tests": [
+        "plugins/speaker/src/migration.test.ts",
+        "plugins/speaker/src/guest.test.ts"
+      ],
+      "gaps": [
+        "New typed inspect/propose actions inventory exact revision-pinned legacy bytes and propose absent-only creates. Browser Host review, reject/stale behavior and installed-disabled lifecycle are not yet verified."
+      ],
+      "required_fixes": [
+        "Run SPK-A11 from signed install through proposal review, verifying exact bytes and preconditions, identical/conflict no-op, reject/stale no writes and disabled lifecycle."
+      ],
+      "dependencies": [],
+      "priority": "P2",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "superseded_requirements": [
+        {
+          "ledger_revision": "da78cf7df4c5ea78713157ba5aa4b852408a5727",
+          "requirement": "Restore preserved correction/model files (`RECOVERY`)\naccept-spk-a11 — From the `speaker.recovery` panel, inspect the legacy correction/model files, then request migration with an idempotency key. Verify only absent targets are proposed through Host review and that proposal operations contain the exact original bytes and source/target revisions. Identical target reports unchanged; conflicting target remains untouched and reviewable; disabled Speaker makes no proposal. Preserve unknown JSON fields, malformed lines and original bytes; reject/stale review leaves all source and target files unchanged."
+        }
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "SPK-12",
+      "plugin_id": "proprium.speaker",
+      "requirement": "Host navigation, proposal review, failure isolation, desktop/mobile continuity (`DESIGN_TARGET`)\naccept-spk-a12 — On real Chromium desktop and mobile WebKit (plus declared supported Android browser), complete analyze → queue → jump → correction proposal → review → return. Type Japanese with IME during and after background analysis; selection, caret, composition, undo, scroll and unsaved draft remain intact. Navigate away/back, suspend/resume, disable/enable, disconnect network and cancel a job; no stale result, hidden write, stuck worker or editor loss. Controls are keyboard/screen-reader/touch accessible, mobile does not require drag, and reports reflow without clipped actions.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/speaker/plugin.json",
+        "app/src/browser/proprium/host/PluginPanel.tsx",
+        "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx",
+        "app/src/browser/proprium/plugins/manager.ts",
+        "app/src/browser/proprium/authoring/actions.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts → app/src/browser/proprium/host/authoring/AuthoringSurface.tsx → app/src/browser/proprium/host/PluginPanel.tsx; app/src/browser/proprium/plugins/manager.ts for SPK-12 lifecycle",
+      "ui_path": "Host-managed Speaker surfaces in plugins/speaker/plugin.json",
+      "existing_tests": [
+        "plugins/speaker/src/guest.test.ts",
+        "app/src/browser/proprium/host/authoring/AuthoringSurface.test.ts"
+      ],
+      "gaps": [
+        "Typed Host-rendered surfaces and normal proposal broker exist; install/signature/permission/update/rollback/offline lifecycle, mobile IME, background cancellation and editor continuity have no fresh signed browser evidence."
+      ],
+      "required_fixes": [
+        "Run SPK-A12 on desktop Chromium and mobile WebKit with signed artifact; cover install/approval/reload/disable/enable/offline/cancel/editor continuity and accessibility."
+      ],
+      "dependencies": [
+        "proprium.narrative",
+        "proprium.knowledge"
+      ],
+      "priority": "P2",
+      "verification": [
+        "node scripts/test-authoring-plugin-units.mjs — PASS (367 tests, 0 failures) on this worktree after Diagnostics UI and Speaker recovery fail-closed changes.",
+        "pnpm --filter @proprium/plugin-speaker typecheck — PASS.",
+        "PROPRIUM_E2E_PORT=4181 pnpm exec playwright test --config tests/browser/authoring-diagnostics-speaker.playwright.config.ts — BLOCKED in official setup after Narrative and Knowledge were signed: inherited PATH had no `cargo component`, needed to build Research; browser was not launched. Parent is coordinating the final all-plugin signed run with its Rust toolchain PATH.",
+        "node scripts/verify-authoring-canon.mjs — PASS: 8 plugins, 114 feature rows, 932 local links, dependency graph acyclic."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    }
+  ],
+  "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
+  "assessed_at": "2026-10-29",
+  "assessment_scope": "Reconciled against this source snapshot. Prior base_sha is retained as the original audit anchor. Implementation status does not substitute for the current R01–R14 acceptance result. Browser failures and unsupported coverage remain explicit."
+}

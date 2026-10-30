@@ -463,6 +463,37 @@ test("known but unusable hierarchy paths diagnose malformed work and do not retu
     (error: unknown) => (error as { code?: string }).code === "unsupported_format");
 });
 
+test("outline exposes recognition state and diagnostics for unrecognized and malformed repositories", () => {
+  const surfaces = manifest.ui as Array<any>;
+  const outline = surfaces.find(row => row.id === "proprium.narrative.work-outline");
+  assert.ok(outline);
+  const rootTabs = outline.body.tabs as Array<any>;
+  assert.equal(rootTabs[0].id, "narrative-recognition-tab");
+  const recognitionTabs = rootTabs[0].body.tabs as Array<any>;
+  assert.equal(recognitionTabs[0].body.type, "status");
+  assert.deepEqual(recognitionTabs[0].body.state, { data_key: "last_action_result.status" });
+  assert.equal(recognitionTabs[1].body.type, "table");
+  assert.deepEqual(recognitionTabs[1].body.rows, { data_key: "last_action_result.diagnostics" });
+
+  const empty = new MemoryHost();
+  empty.add("README.md", "A generic Git repository");
+  const unrecognized = run(empty, request("proprium.narrative.hierarchy.outline", {})) as any;
+  assertDeclaredOutput("proprium.narrative.hierarchy.outline", unrecognized);
+  assert.equal(unrecognized.status, "unrecognized");
+  assert.deepEqual(unrecognized.items, []);
+  assert.deepEqual(unrecognized.diagnostics, []);
+
+  const malformed = new MemoryHost();
+  malformed.add("plot/volumes/broken/volume.yaml", "- not a mapping\n");
+  const detected = run(malformed, request("proprium.narrative.hierarchy.outline", {})) as any;
+  assertDeclaredOutput("proprium.narrative.hierarchy.outline", detected);
+  assert.equal(detected.status, "malformed");
+  assert.deepEqual(detected.items, []);
+  assert.ok(detected.diagnostics.some((item: any) => item.path === "plot/volumes/broken/volume.yaml"));
+  assert.throws(() => run(malformed, request("proprium.narrative.hierarchy.tree", {})),
+    (error: unknown) => (error as { code?: string }).code === "unsupported_format");
+});
+
 test("hierarchy keeps tied and missing order rows accessible with diagnostics", () => {
   const host = new MemoryHost();
   addWork(host, 3);

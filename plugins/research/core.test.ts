@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   buildResearchIndex,
+  fuseSearchCandidates,
+  filterIgnoredCandidates,
   createResearchDocument,
   isSearchableDocumentPath,
   lexicalTokens,
@@ -9,10 +11,17 @@ import {
   queryResearchIndex,
   removeTermRegistryEntry,
   resolveTermSpans,
+  updateResearchIndex,
   upsertTermRegistry,
 } from "./core.js";
 
 const revision = (char: string) => char.repeat(64);
+
+test("ignored candidate terms are removed by exact author choice before pagination", () => {
+  const candidates = [{ term: "雨雲", occurrenceCount: 8 }, { term: "雨", occurrenceCount: 4 }, { term: "雨雲 (仮)", occurrenceCount: 2 }];
+  assert.deepEqual(filterIgnoredCandidates(candidates, new Set(["雨雲"])), [candidates[1], candidates[2]]);
+  assert.deepEqual(filterIgnoredCandidates(candidates, new Set()), candidates);
+});
 
 test("search filters roots and hidden paths, indexes Japanese pairs, and returns source ranges", () => {
   assert.equal(isSearchableDocumentPath("manuscript/vol/ch/scene.md"), true);
@@ -108,4 +117,51 @@ test("index and query reject unsafe, oversized, duplicate, malformed, or stale i
   ], "snapshot"), /Duplicate/u);
   assert.throws(() => parseTermRegistry({ schemaVersion: 2, terms: [] }), /Unsupported/u);
   assert.throws(() => queryResearchIndex(buildResearchIndex([], "a"), { query: "x", mode: "lexical", snapshot: "b" }), /another snapshot/u);
+});
+
+test("snapshot delta reuses unchanged documents, replaces changed files, and drops deleted files", () => {
+  const unchanged = { path: "manuscript/unchanged.md", fileRevision: revision("a"), text: "quiet harbor" };
+  const changedBefore = { path: "manuscript/changed.md", fileRevision: revision("b"), text: "old lighthouse" };
+  const deleted = { path: "manuscript/deleted.md", fileRevision: revision("c"), text: "removed harbor" };
+  const previous = buildResearchIndex([unchanged, changedBefore, deleted], "snapshot-1");
+  const reused = previous.documents.find(({ path }) => path === unchanged.path)!;
+  const changedAfter = { path: changedBefore.path, fileRevision: revision("d"), text: "new beacon" };
+  const added = { path: "manuscript/added.md", fileRevision: revision("e"), text: "distant beacon" };
+
+  const next = updateResearchIndex(previous, [
+    { path: unchanged.path, fileRevision: unchanged.fileRevision, byteLength: new TextEncoder().encode(unchanged.text).length },
+    { path: changedAfter.path, fileRevision: changedAfter.fileRevision, byteLength: new TextEncoder().encode(changedAfter.text).length },
+    { path: added.path, fileRevision: added.fileRevision, byteLength: new TextEncoder().encode(added.text).length },
+  ], [changedAfter, added], "snapshot-2");
+
+  assert.equal(next.snapshot, "snapshot-2");
+  assert.equal(next.documents.find(({ path }) => path === unchanged.path), reused, "unchanged parsed text and token data are reused");
+  assert.deepEqual(next.documents.map(({ path }) => path), ["manuscript/added.md", "manuscript/changed.md", "manuscript/unchanged.md"]);
+  const page = queryResearchIndex(next, { query: "beacon", mode: "lexical", snapshot: "snapshot-2" });
+  assert.deepEqual(page.hits.map(({ path }) => path), ["manuscript/added.md", "manuscript/changed.md"]);
+  assert.equal(queryResearchIndex(next, { query: "old", mode: "lexical", snapshot: "snapshot-2" }).hits.length, 0);
+  assert.throws(() => updateResearchIndex(previous, [
+    { path: changedAfter.path, fileRevision: changedAfter.fileRevision, byteLength: new TextEncoder().encode(changedAfter.text).length },
+  ], [], "snapshot-3"), /Changed searchable document bytes are required/u);
+});
+
+test("hybrid search uses bounded deterministic RRF and preserves the best exact source span per file", () => {
+  const lexical = [
+    { rank: 1, path: "manuscript/lexical.md", title: "lexical", fileRevision: "a".repeat(64), snippet: "lexical result", score: 120, scoreFactors: ["lexical-exact"], navigationSpan: { path: "manuscript/lexical.md", revision: "a".repeat(64), start: 0, end: 7, quote: "lexical" } },
+    { rank: 2, path: "manuscript/shared.md", title: "shared", fileRevision: "b".repeat(64), snippet: "shared result", score: 80, scoreFactors: ["lexical-pair"], navigationSpan: { path: "manuscript/shared.md", revision: "b".repeat(64), start: 2, end: 8, quote: "shared" } },
+  ];
+  const semantic = [
+    { candidateId: "one", entityId: "scene-1", sentenceIndex: 0, path: "manuscript/shared.md", title: "shared", fileRevision: "b".repeat(64), snippet: "best passage", cosineScore: 0.93, rank: 1, navigationSpan: { path: "manuscript/shared.md", revision: "b".repeat(64), start: 10, end: 22, quote: "best passage" } },
+    { candidateId: "two", entityId: "scene-1", sentenceIndex: 1, path: "manuscript/shared.md", title: "shared", fileRevision: "b".repeat(64), snippet: "duplicate passage", cosineScore: 0.92, rank: 2, navigationSpan: { path: "manuscript/shared.md", revision: "b".repeat(64), start: 30, end: 47, quote: "duplicate passage" } },
+    { candidateId: "three", entityId: "scene-2", sentenceIndex: 0, path: "manuscript/vector.md", title: "vector", fileRevision: "c".repeat(64), snippet: "vector result", cosineScore: 0.88, rank: 3, navigationSpan: { path: "manuscript/vector.md", revision: "c".repeat(64), start: 0, end: 13, quote: "vector result" } },
+  ];
+  const rows = fuseSearchCandidates(lexical, semantic, "hybrid", 30);
+  assert.equal(rows[0]?.path, "manuscript/shared.md");
+  assert.equal(rows[0]?.source, "hybrid");
+  assert.equal(rows[0]?.navigationSpan.start, 10);
+  assert.equal(rows[0]?.semanticRank, 1);
+  assert.equal(rows.length, 3);
+  assert.deepEqual(fuseSearchCandidates(lexical, semantic, "hybrid", 30), rows);
+  assert.deepEqual(fuseSearchCandidates(lexical, semantic, "semantic", 30).map(({ path }) => path), ["manuscript/shared.md", "manuscript/vector.md"]);
+  assert.throws(() => fuseSearchCandidates(lexical, semantic, "hybrid", 31), { code: "capacity" });
 });

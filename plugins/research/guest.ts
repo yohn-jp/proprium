@@ -5,6 +5,12 @@ import type { ActionRequest, ChangeSet, FileOperation } from "../../app/src/brow
 import type { GuestHost, Handler, HostCall } from "../shared/guest.js";
 import {
   buildResearchIndex,
+  MAX_DOCUMENTS,
+  MAX_INDEX_BYTES,
+  MAX_INDEX_NORMALIZATION_SPANS,
+  MAX_INDEX_TERMS,
+  fuseSearchCandidates,
+  filterIgnoredCandidates,
   isSearchableDocumentPath,
   isSafeRelativePath,
   parseTermRegistry,
@@ -12,8 +18,14 @@ import {
   removeTermRegistryEntry,
   resolveTermSpans,
   TERM_REGISTRY_PATH,
+  createResearchDocument,
+  updateResearchIndex,
   upsertTermRegistry,
+  type ResearchIndex,
+  type FusedSearchCandidate,
+  type SemanticSearchCandidate,
   type ResearchDocumentInput,
+  type ResearchDocument,
   type SearchRequest,
   type TermRegistry,
 } from "./core.js";
@@ -53,6 +65,7 @@ const MAX_CHUNK = 32_768;
 const CACHE_CHUNK_BYTES = 256 * 1024;
 const CACHE_TEXT_PART_BYTES = 48 * 1024;
 const MAX_CACHE_SERIALIZED_BYTES = 47 * 1024 * 1024;
+const CACHE_PUBLISH_LINES_PER_STEP = 64;
 const INLINE_CHANGE_BYTES = 32 * 1024;
 const ARTIFACT_CHUNK_BYTES = 32 * 1024;
 const ARTIFACT_OPERATIONS = { create: "artifact.create", append: "artifact.append", seal: "artifact.seal", discard: "artifact.discard" } as const;
@@ -79,9 +92,50 @@ interface ParsedYaml { document: Document; value: Record<string, unknown> }
 interface LoadedRegistry { registry: TermRegistry; revision: string | null }
 interface ResearchCacheEntry {
   snapshot: ActionRequest["snapshot"];
+  workspaceId: string;
+  repositoryId: number | null;
+  branch: string;
   scope?: string;
   snapshotId: string;
-  index: ReturnType<typeof buildResearchIndex>;
+  index: ResearchIndex;
+}
+interface ResearchIndexTask {
+  readonly taskId: string;
+  readonly binding: string;
+  readonly scope?: string;
+  readonly force: boolean;
+  readonly entries: FileEntry[];
+  readonly previous?: ResearchIndex;
+  readonly previousByPath: Map<string, ResearchIndex["documents"][number]>;
+  readonly documents: ResearchDocument[];
+  readonly prefixes: string[];
+  readonly seenPaths: Set<string>;
+  phase: "source_scan" | "index_build" | "cache_publish";
+  prefixIndex: number;
+  cursor: string | null;
+  lastPath: string | null;
+  seenCursors: Set<string>;
+  scannedPages: number;
+  sourceEntryCount: number;
+  sourceBytes: number;
+  completed: number;
+  nextSequence: number;
+  index?: ResearchIndex;
+  indexBytes: number;
+  indexTerms: number;
+  indexNormalizationSpans: number;
+  plannedSerializedBytes: number;
+  plannedChunkCount: number;
+  pendingPlanChunkBytes: number;
+  pendingPlanLineCount: number;
+  publishedBytes: number;
+  publishedChunkDigests: string[];
+  publicationReader?: Iterator<string>;
+  pendingPublicationLine?: string;
+  publicationDigest?: string;
+  preparedChunk?: { readonly index: number; readonly base64: string; readonly digest: string; readonly bytes: number; checkpointStored: boolean };
+  stalePublication?: { readonly digest: string; readonly chunkCount: number; nextChunk: number };
+  stalePublicationChecked: boolean;
 }
 
 function publicTerm(term: TermRegistry["terms"][number]): Record<string, unknown> {
@@ -108,6 +162,34 @@ function utf8PathCompare(a: string, b: string): number {
 }
 function snapshotCacheKey(context: ActionRequest, scope?: string): string {
   return JSON.stringify([context.scope.workspace_id, context.scope.repository_id, context.scope.branch, context.scope.generation, context.snapshot.id, scope ?? null]);
+}
+function researchTaskKey(context: ActionRequest, taskId: string): string {
+  return JSON.stringify([context.scope.workspace_id, context.scope.repository_id, context.scope.branch, taskId]);
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const row = value as Record<string, unknown>;
+    return `{${Object.keys(row).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(row[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+function sameScope(value: unknown, context: ActionRequest): boolean {
+  const scope = object(value, "scope");
+  exactFields(scope, ["workspace_id", "repository_id", "branch", "generation"]);
+  return scope.workspace_id === context.scope.workspace_id && scope.repository_id === context.scope.repository_id &&
+    scope.branch === context.scope.branch && scope.generation === context.scope.generation;
+}
+function sameSnapshot(value: unknown, context: ActionRequest): boolean {
+  const snapshot = object(value, "snapshot");
+  exactFields(snapshot, ["id", "local_commit", "worktree_generation", "draft_generation", "remote_commit"]);
+  return snapshot.id === context.snapshot.id && snapshot.local_commit === context.snapshot.local_commit &&
+    snapshot.worktree_generation === context.snapshot.worktree_generation && snapshot.draft_generation === context.snapshot.draft_generation &&
+    snapshot.remote_commit === context.snapshot.remote_commit;
+}
+function isWithinScope(path: string, scope?: string): boolean {
+  return scope === undefined || path === scope || path.startsWith(`${scope}/`);
 }
 function encodeCursor(value: Record<string, unknown>, prefix = TERMS_PAGE_PREFIX): string {
   const bytes = new TextEncoder().encode(JSON.stringify(value));
@@ -269,6 +351,17 @@ function* readOptionalText(host: GuestHost, context: ActionRequest, path: string
   return { text: yield* readEntryText(host, context, entry, maxBytes), revision: entry.revision };
 }
 
+function* readIgnoredCandidateTerms(host: GuestHost, context: ActionRequest): Generator<HostCall, { terms: Set<string>; revision: string | null }, unknown> {
+  const file = yield* readOptionalText(host, context, IGNORED_PATH, 1024 * 1024);
+  if (!file) return { terms: new Set(), revision: null };
+  const parsed = parseYamlObject(file.text, IGNORED_PATH);
+  const ignored = parsed.value.ignored ?? [];
+  if (!Array.isArray(ignored) || ignored.some((term) => typeof term !== "string" || term.length > 256)) {
+    throw fail("unsupported_schema", "Ignored candidates must be strings up to 256 characters", false, { path: IGNORED_PATH });
+  }
+  return { terms: new Set(ignored as string[]), revision: file.revision };
+}
+
 function* loadRegistry(host: GuestHost, context: ActionRequest): Generator<HostCall, LoadedRegistry, unknown> {
   const file = yield* readOptionalText(host, context, TERM_REGISTRY_PATH, 1024 * 1024);
   if (!file) return { registry: { schemaVersion: 1, terms: [] }, revision: null };
@@ -398,8 +491,11 @@ function cacheKey(context: ActionRequest, scope: string | undefined, key: string
 function* cacheGet(host: GuestHost, context: ActionRequest, scope: string | undefined, key: string): Generator<HostCall, { found: boolean; value?: unknown }, unknown> {
   return yield* host.request(HOST_OPERATIONS.cacheGet, { key: cacheKey(context, scope, key) });
 }
+function* cacheEvict(host: GuestHost, context: ActionRequest, scope: string | undefined, key: string): Generator<HostCall, void, unknown> {
+  yield* host.request(HOST_OPERATIONS.cacheEvict, { key: cacheKey(context, scope, key) });
+}
 function* evictResearchCache(host: GuestHost, context: ActionRequest, scope?: string): Generator<HostCall, unknown, unknown> {
-  return yield* host.request(HOST_OPERATIONS.cacheEvict, { key: cacheKey(context, scope, "manifest") });
+  return yield* cacheEvict(host, context, scope, "manifest");
 }
 function* storeCacheValue(host: GuestHost, context: ActionRequest, scope: string | undefined, key: string, value: unknown): Generator<HostCall, void, unknown> {
   const result = object(yield* host.request(HOST_OPERATIONS.cachePut, { key: cacheKey(context, scope, key), value }), "cache receipt");
@@ -420,17 +516,116 @@ function fromBase64(value: string): Uint8Array {
 function indexDigest(entries: readonly Pick<FileEntry, "path" | "revision">[]): string {
   return sha256Text(JSON.stringify(entries.map(({ path, revision }) => [path, revision])));
 }
-function* indexCacheLines(documents: readonly ResearchDocumentInput[]): Generator<string> {
-  const encoder = new TextEncoder();
-  for (let documentIndex = 0; documentIndex < documents.length; documentIndex++) {
-    const document = documents[documentIndex]!;
+function* indexCacheLines(documents: readonly ResearchDocumentInput[], startingDocumentIndex = 0): Generator<string> {
+  for (let offset = 0; offset < documents.length; offset++) {
+    const documentIndex = startingDocumentIndex + offset;
+    const document = documents[offset]!;
     const bytes = encoder.encode(document.text);
     const partCount = Math.max(1, Math.ceil(bytes.length / CACHE_TEXT_PART_BYTES));
     for (let partIndex = 0; partIndex < partCount; partIndex++) {
       const part = bytes.subarray(partIndex * CACHE_TEXT_PART_BYTES, Math.min((partIndex + 1) * CACHE_TEXT_PART_BYTES, bytes.length));
-      yield `${JSON.stringify({ documentIndex, path: document.path, fileRevision: document.fileRevision, partIndex, partCount, textBase64: base64(part) })}\n`;
+      yield indexCacheLine(document, documentIndex, partIndex, partCount, part);
     }
   }
+}
+const encoder = new TextEncoder();
+function indexCacheLine(document: ResearchDocumentInput, documentIndex: number, partIndex: number, partCount: number, part: Uint8Array): string {
+  return `${JSON.stringify({ documentIndex, path: document.path, fileRevision: document.fileRevision, partIndex, partCount, textBase64: base64(part) })}\n`;
+}
+function researchScopePrefixes(scope?: string): string[] {
+  return scope ? [scope] : ["manuscript/", "plot/", "bible/", "meta/scratch/"];
+}
+function taskProgress(task: ResearchIndexTask): { phase: ResearchIndexTask["phase"]; completed: number; total: number } {
+  if (task.phase === "source_scan") return { phase: task.phase, completed: task.scannedPages, total: 0 };
+  if (task.phase === "index_build") return { phase: task.phase, completed: task.completed, total: task.entries.length };
+  return task.plannedSerializedBytes > 0
+    ? { phase: task.phase, completed: task.publishedBytes, total: task.plannedSerializedBytes }
+    : { phase: task.phase, completed: 0, total: 1 };
+}
+function stagingIndex(value: unknown): { digest: string; chunkCount: number } | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  if (Object.keys(row).length !== 3 || row.schemaVersion !== 1 || typeof row.digest !== "string" || !/^[a-f0-9]{64}$/u.test(row.digest) ||
+      !Number.isSafeInteger(row.chunkCount) || (row.chunkCount as number) < 0 || (row.chunkCount as number) > 256) return null;
+  return { digest: row.digest, chunkCount: row.chunkCount as number };
+}
+function planResearchDocument(task: ResearchIndexTask, document: ResearchDocument): void {
+  const indexBytes = task.indexBytes + document.bytes;
+  const indexTerms = task.indexTerms + document.tokens.size;
+  const indexNormalizationSpans = task.indexNormalizationSpans + document.normalizationSpans.length;
+  if (indexBytes > MAX_INDEX_BYTES) throw fail("capacity", "Research index exceeds its 32 MiB limit");
+  if (indexTerms > MAX_INDEX_TERMS) throw fail("capacity", "Research index contains too many distinct document terms");
+  if (indexNormalizationSpans > MAX_INDEX_NORMALIZATION_SPANS) throw fail("capacity", "Research index contains too many normalization spans");
+  let plannedSerializedBytes = task.plannedSerializedBytes;
+  let plannedChunkCount = task.plannedChunkCount;
+  let pendingPlanChunkBytes = task.pendingPlanChunkBytes;
+  let pendingPlanLineCount = task.pendingPlanLineCount;
+  const documentIndex = task.documents.length;
+  for (const line of indexCacheLines([document], documentIndex)) {
+    const size = encoder.encode(line).byteLength;
+    if (size > CACHE_CHUNK_BYTES) throw fail("capacity", "A Research cache record exceeds the bounded cache chunk size");
+    if (pendingPlanChunkBytes > 0 && (pendingPlanChunkBytes + size > CACHE_CHUNK_BYTES || pendingPlanLineCount >= CACHE_PUBLISH_LINES_PER_STEP)) {
+      plannedChunkCount++;
+      pendingPlanChunkBytes = 0; pendingPlanLineCount = 0;
+    }
+    pendingPlanChunkBytes += size;
+    pendingPlanLineCount++;
+    plannedSerializedBytes += size;
+    if (plannedSerializedBytes > MAX_CACHE_SERIALIZED_BYTES) throw fail("capacity", "Serialized Research index exceeds its Host cache bound");
+    if (Math.ceil(plannedSerializedBytes * 4 / 3) + plannedChunkCount * 2048 > 64 * 1024 * 1024) {
+      throw fail("capacity", "Research index does not fit the per-plugin Host cache quota");
+    }
+  }
+  task.indexBytes = indexBytes;
+  task.indexTerms = indexTerms;
+  task.indexNormalizationSpans = indexNormalizationSpans;
+  task.plannedSerializedBytes = plannedSerializedBytes;
+  task.plannedChunkCount = plannedChunkCount;
+  task.pendingPlanChunkBytes = pendingPlanChunkBytes;
+  task.pendingPlanLineCount = pendingPlanLineCount;
+  task.documents.push(document);
+}
+function completeResearchIndexBuild(task: ResearchIndexTask, snapshotId: string): void {
+  if (task.documents.length > MAX_DOCUMENTS) throw fail("capacity", "Research document limit exceeded");
+  if (task.pendingPlanChunkBytes > 0) task.plannedChunkCount++;
+  task.pendingPlanChunkBytes = 0; task.pendingPlanLineCount = 0;
+  if (task.plannedChunkCount > 256 || Math.ceil(task.plannedSerializedBytes * 4 / 3) + task.plannedChunkCount * 2048 > 64 * 1024 * 1024) {
+    throw fail("capacity", "Research index does not fit the per-plugin Host cache quota");
+  }
+  task.index = { snapshot: snapshotId, documents: task.documents, bytes: task.indexBytes };
+  task.phase = "cache_publish";
+  task.completed = 0;
+  task.publicationDigest = indexDigest(task.index.documents.map(({ path, fileRevision }) => ({ path, revision: fileRevision })));
+  task.publicationReader = indexCacheLines(task.index.documents);
+}
+function preparePublicationChunk(task: ResearchIndexTask): { index: number; base64: string; digest: string; bytes: number; checkpointStored: boolean } | null {
+  if (!task.index || !task.publicationReader || !task.publicationDigest) throw fail("storage_unknown", "Research publication cursor is unavailable", true);
+  let text = ""; let size = 0; let lines = 0;
+  const readNext = (): string | null => {
+    if (task.pendingPublicationLine !== undefined) {
+      const line = task.pendingPublicationLine;
+      task.pendingPublicationLine = undefined;
+      return line;
+    }
+    const next = task.publicationReader!.next();
+    if (next.done) return null;
+    return next.value;
+  };
+  while (lines < CACHE_PUBLISH_LINES_PER_STEP) {
+    const line = readNext();
+    if (line === null) break;
+    const lineSize = encoder.encode(line).byteLength;
+    if (lineSize > CACHE_CHUNK_BYTES) throw fail("capacity", "A Research cache record exceeds the bounded cache chunk size");
+    if (size > 0 && size + lineSize > CACHE_CHUNK_BYTES) {
+      task.pendingPublicationLine = line;
+      break;
+    }
+    text += line; size += lineSize; lines++;
+  }
+  if (size === 0) return null;
+  const bytes = encoder.encode(text);
+  if (bytes.byteLength !== size) throw fail("storage_unknown", "Research cache chunk size changed during publication", true);
+  return { index: task.publishedChunkDigests.length, base64: base64(bytes), digest: sha256(bytes), bytes: size, checkpointStored: false };
 }
 
 function cacheManifest(value: unknown): IndexCacheManifest | null {
@@ -568,37 +763,59 @@ function* storeIndexSources(
   yield* storeCacheValue(host, context, scope, "manifest", manifest);
 }
 
-function* loadIndex(host: GuestHost, context: ActionRequest, scope?: string, force = false): Generator<HostCall, ReturnType<typeof buildResearchIndex>, unknown> {
+function* loadIndex(
+  host: GuestHost,
+  context: ActionRequest,
+  scope?: string,
+  force = false,
+  previous?: ResearchIndex,
+): Generator<HostCall, ResearchIndex, unknown> {
   const entries = yield* listSearchableEntries(host, context, scope);
   const searchable = entries.filter(({ path }) => isSearchableDocumentPath(path));
   if (searchable.length > 10_000) throw fail("capacity", "Research document limit exceeded");
   const totalBytes = searchable.reduce((total, entry) => total + entry.byte_length, 0);
   if (totalBytes > 32 * 1024 * 1024) throw fail("capacity", "Research index exceeds its 32 MiB limit");
-  if (!force) {
+  if (!force && !previous) {
     const cached = yield* cachedIndexSources(host, context, scope, searchable);
     if (cached) return buildResearchIndex(cached, context.snapshot.id);
   }
   const documents: ResearchDocumentInput[] = [];
+  const previousByPath = new Map((previous?.documents ?? []).map((document) => [document.path, document]));
   for (const entry of searchable) {
     if (entry.byte_length > MAX_FILE_READ) throw fail("capacity", `Searchable file exceeds its 2 MiB limit: ${entry.path}`, false, { path: entry.path });
+    const cached = previousByPath.get(entry.path);
+    if (!force && cached && cached.fileRevision === entry.revision && cached.bytes === entry.byte_length) continue;
     const text = yield* readEntryText(host, context, entry);
     documents.push({ path: entry.path, fileRevision: entry.revision, text });
   }
-  const index = buildResearchIndex(documents, context.snapshot.id);
+  const index = previous && !force
+    ? updateResearchIndex(previous, searchable.map((entry) => ({ path: entry.path, fileRevision: entry.revision, byteLength: entry.byte_length })), documents, context.snapshot.id)
+    : buildResearchIndex(documents, context.snapshot.id);
   yield* storeIndexSources(host, context, scope, index);
   return index;
 }
 
 export function createResearchHandlers(): Record<string, Handler> {
   const indexes = new Map<string, ResearchCacheEntry>();
+  const indexTasks = new Map<string, ResearchIndexTask>();
   let tokenizerReady = false;
   const dispose = () => {
     tokenizerReady = false;
     try { getResearchMorphologyBindings().release(); } catch { /* The component may not have initialized. */ }
   };
   const indexFor = (context: ActionRequest, scope?: string): ResearchCacheEntry | undefined => indexes.get(snapshotCacheKey(context, scope));
-  const rememberIndex = (context: ActionRequest, index: ReturnType<typeof buildResearchIndex>, scope?: string): ResearchCacheEntry => {
-    const entry: ResearchCacheEntry = { snapshot: context.snapshot, scope, snapshotId: context.snapshot.id, index };
+  const previousIndexFor = (context: ActionRequest, scope?: string): ResearchIndex | undefined => {
+    for (const entry of indexes.values()) {
+      if (entry.workspaceId === context.scope.workspace_id && entry.repositoryId === context.scope.repository_id &&
+          entry.branch === context.scope.branch && entry.scope === scope) return entry.index;
+    }
+    return undefined;
+  };
+  const rememberIndex = (context: ActionRequest, index: ResearchIndex, scope?: string): ResearchCacheEntry => {
+    const entry: ResearchCacheEntry = {
+      snapshot: context.snapshot, workspaceId: context.scope.workspace_id, repositoryId: context.scope.repository_id,
+      branch: context.scope.branch, scope, snapshotId: context.snapshot.id, index,
+    };
     const key = snapshotCacheKey(context, scope);
     indexes.delete(key); indexes.set(key, entry);
     while (indexes.size > 1) indexes.delete(indexes.keys().next().value!);
@@ -616,7 +833,7 @@ export function createResearchHandlers(): Record<string, Handler> {
       if (input.includeTerms !== undefined && typeof input.includeTerms !== "boolean" || input.morphologyHints !== undefined && typeof input.morphologyHints !== "boolean") throw fail("invalid_input", "search flags must be boolean");
       const scope = input.scope as string | undefined;
       let cached = indexFor(context, scope);
-      if (!cached) cached = rememberIndex(context, yield* loadIndex(host, context, scope), scope);
+      if (!cached) cached = rememberIndex(context, yield* loadIndex(host, context, scope, false, previousIndexFor(context, scope)), scope);
       const registry = input.includeTerms === false ? { registry: { schemaVersion: 1, terms: [] } as TermRegistry } : yield* loadRegistry(host, context);
       const page = queryResearchIndex(cached.index, {
         query: input.query, mode, snapshot: context.snapshot.id, scope,
@@ -629,14 +846,164 @@ export function createResearchHandlers(): Record<string, Handler> {
       const { warnings, ...value } = page;
       const result = { ...value, query: input.query, mode, hits: page.hits.map((hit) => {
         const first = hit.kind === "document" ? hit.matchRanges[0] : undefined;
-        return { ...hit, navigationSpan: first ? { path: hit.path, revision: hit.fileRevision, start: first.start, end: first.end } : null };
+        return { ...hit, navigationSpan: first ? { path: hit.path, revision: hit.fileRevision, start: first.start, end: first.end,
+          quote: cached!.index.documents.find((document) => document.path === hit.path)?.text.slice(first.start, first.end) ?? "" } : null };
       }) };
-      return warnings.length ? withWarnings(result, warnings) : result;
+      const boundResult = { ...result, snapshot: context.snapshot, scope: scope ?? null };
+      return warnings.length ? withWarnings(boundResult, warnings) : boundResult;
+    },
+    "research.search.fuse": function* (raw, context, host) {
+      const input = object(raw);
+      exactFields(input, ["mode", "query", "scope", "limit", "lexicalResult", "vectorResult"]);
+      if (input.mode !== "hybrid" && input.mode !== "semantic" && input.mode !== "expression") throw fail("invalid_input", "mode must be hybrid, semantic, or expression");
+      if (typeof input.query !== "string" || !input.query.trim() || input.query.length > 512) throw fail("invalid_input", "query must contain 1 to 512 characters");
+      const scope = input.scope === null ? undefined : input.scope;
+      if (scope !== undefined && (typeof scope !== "string" || !isSafeRelativePath(scope))) throw fail("invalid_path", "scope must be a safe relative path or null");
+      const limit = input.limit ?? 30;
+      if (!Number.isSafeInteger(limit) || (limit as number) < 1 || (limit as number) > 30) throw fail("invalid_input", "limit must be between 1 and 30");
+
+      const lexicalEnvelope = object(input.lexicalResult, "lexicalResult");
+      exactFields(lexicalEnvelope, ["scope", "snapshot", "value"]);
+      if (!sameScope(lexicalEnvelope.scope, context) || !sameSnapshot(lexicalEnvelope.snapshot, context)) throw fail("snapshot_stale", "Lexical results belong to another Host scope or snapshot", true);
+      const lexicalValue = object(lexicalEnvelope.value, "lexicalResult.value");
+      exactFields(lexicalValue, ["snapshot", "scope", "hits", "nextCursor", "indexSnapshot", "coverage", "query", "mode", "warnings"]);
+      if (!sameSnapshot(lexicalValue.snapshot, context) || lexicalValue.query !== input.query || lexicalValue.mode !== "lexical" ||
+          lexicalValue.scope !== (scope ?? null) || lexicalValue.indexSnapshot !== context.snapshot.id || !Array.isArray(lexicalValue.hits) || lexicalValue.hits.length > 30) {
+        throw fail("snapshot_stale", "Lexical result query, scope, or index does not match this fusion request", true);
+      }
+
+      const vectorEnvelope = object(input.vectorResult, "vectorResult");
+      exactFields(vectorEnvelope, ["scope", "snapshot", "query", "granularity", "value"]);
+      if (!sameScope(vectorEnvelope.scope, context) || !sameSnapshot(vectorEnvelope.snapshot, context) ||
+          vectorEnvelope.query !== input.query || vectorEnvelope.granularity !== "sentence") {
+        throw fail("snapshot_stale", "Semantic results belong to another Host scope, snapshot, query, or granularity", true);
+      }
+      const vectorValue = object(vectorEnvelope.value, "vectorResult.value");
+      exactFields(vectorValue, ["snapshot", "model", "results"]);
+      if (!sameSnapshot(vectorValue.snapshot, context) || !Array.isArray(vectorValue.results) || vectorValue.results.length > 30) {
+        throw fail("snapshot_stale", "Semantic result does not match this Host snapshot", true);
+      }
+      const model = object(vectorValue.model, "vectorResult.value.model");
+      if (typeof model.id !== "string" || typeof model.revision !== "string" || model.role !== "embedding") throw fail("invalid_input", "Semantic result model identity is invalid");
+
+      const index = yield* loadIndex(host, context, scope, false, previousIndexFor(context, scope));
+      const page = queryResearchIndex(index, {
+        query: input.query, mode: "lexical", snapshot: context.snapshot.id, scope,
+        scopeBinding: cacheScopeDigest(context, scope), limit: 30, includeTerms: false,
+      }, { tokenizerAvailable: false });
+      const expectedLexical = page.hits.map((hit) => {
+        const first = hit.matchRanges[0];
+        return { ...hit, navigationSpan: first ? { path: hit.path, revision: hit.fileRevision, start: first.start, end: first.end,
+          quote: index.documents.find((document) => document.path === hit.path)?.text.slice(first.start, first.end) ?? "" } : null };
+      });
+      if (canonicalJson(lexicalValue.hits) !== canonicalJson(expectedLexical)) throw fail("snapshot_stale", "Lexical hits no longer match the current Research index and query", true);
+
+      const documents = new Map(index.documents.map((document) => [document.path, document]));
+      const lexicalCandidates: FusedSearchCandidate[] = [];
+      for (const [offset, rawHit] of lexicalValue.hits.entries()) {
+        const hit = object(rawHit, `lexicalResult.value.hits[${offset}]`);
+        if (hit.kind !== "document" || typeof hit.path !== "string" || typeof hit.title !== "string" || typeof hit.fileRevision !== "string" ||
+            typeof hit.snippet !== "string" || typeof hit.score !== "number" || !Array.isArray(hit.scoreFactors)) throw fail("invalid_input", `Lexical hit ${offset} is invalid`);
+        if (!isWithinScope(hit.path, scope)) throw fail("invalid_path", `Lexical hit is outside the selected path scope: ${hit.path}`);
+        const document = documents.get(hit.path);
+        if (!document || document.fileRevision !== hit.fileRevision) throw fail("snapshot_stale", `Lexical hit source changed: ${hit.path}`, true);
+        const span = hit.navigationSpan === null ? undefined : object(hit.navigationSpan, `lexicalResult.value.hits[${offset}].navigationSpan`);
+        if (!span || typeof span.start !== "number" || typeof span.end !== "number" || typeof span.quote !== "string" ||
+            span.path !== hit.path || span.revision !== hit.fileRevision || !Number.isSafeInteger(span.start) || !Number.isSafeInteger(span.end) ||
+            span.start < 0 || span.end <= span.start || span.end > document.text.length || document.text.slice(span.start, span.end) !== span.quote) {
+          // A lexical candidate without a validated visible range cannot safely drive editor navigation.
+          continue;
+        }
+        lexicalCandidates.push({ rank: offset + 1, path: hit.path, title: hit.title, fileRevision: hit.fileRevision, snippet: hit.snippet,
+          score: hit.score, scoreFactors: hit.scoreFactors as string[], navigationSpan: { path: hit.path, revision: hit.fileRevision,
+            start: span.start, end: span.end, quote: span.quote } });
+      }
+
+      const semanticCandidates: SemanticSearchCandidate[] = [];
+      for (const [offset, rawCandidate] of vectorValue.results.entries()) {
+        const candidate = object(rawCandidate, `vectorResult.value.results[${offset}]`);
+        const evidence = Array.isArray(candidate.evidence) ? candidate.evidence : [];
+        const sourcePath = candidate.sourcePath;
+        const sourceRevision = candidate.sourceRevision;
+        const sentenceIndex = candidate.sentenceIndex;
+        const quote = candidate.quote;
+        const cosineScore = candidate.cosineScore;
+        const rank = candidate.rank;
+        if (typeof sourcePath === "string" && isSafeRelativePath(sourcePath) && !isWithinScope(sourcePath, scope)) continue;
+        const source = typeof sourcePath === "string" ? documents.get(sourcePath) : undefined;
+        const span = evidence.length === 1 ? object(evidence[0], `vectorResult.value.results[${offset}].evidence[0]`) : undefined;
+        if (typeof candidate.entityId !== "string" || !candidate.entityId || !Number.isSafeInteger(sentenceIndex) || (sentenceIndex as number) < 0 ||
+            typeof sourcePath !== "string" || !isSafeRelativePath(sourcePath) || !source || source.fileRevision !== sourceRevision ||
+            typeof quote !== "string" || !quote || quote.length > 32_768 || typeof cosineScore !== "number" || !Number.isFinite(cosineScore) || cosineScore < -1 || cosineScore > 1 ||
+            !Number.isSafeInteger(rank) || (rank as number) !== offset + 1 || !span || span.path !== sourcePath || span.revision !== sourceRevision ||
+            typeof span.start !== "number" || typeof span.end !== "number" ||
+            span.quote !== quote || !Number.isSafeInteger(span.start) || !Number.isSafeInteger(span.end) || span.start < 0 || span.end <= span.start ||
+            span.end > source.text.length || source.text.slice(span.start, span.end) !== quote) {
+          throw fail("snapshot_stale", `Semantic passage ${offset + 1} is not a current source-backed result`, true);
+        }
+        const semanticSpan = { path: sourcePath, revision: sourceRevision as string, start: span.start as number, end: span.end as number, quote };
+        semanticCandidates.push({ candidateId: `research-${sha256Text(JSON.stringify([candidate.entityId, sourcePath, sourceRevision, sentenceIndex])).slice(0, 48)}`,
+          entityId: candidate.entityId, sentenceIndex: sentenceIndex as number, path: sourcePath,
+          title: source.title, fileRevision: sourceRevision as string, snippet: quote,
+          cosineScore, rank: rank as number, navigationSpan: semanticSpan });
+      }
+
+      const fused = fuseSearchCandidates(lexicalCandidates, semanticCandidates, input.mode as "hybrid" | "semantic" | "expression", limit as number);
+      const warnings = [...page.warnings];
+      let expressionStatus: Record<string, unknown> = { state: "not_requested" };
+      if (input.mode === "expression") {
+        try {
+          yield* ensureResearchTokenizer(host, () => tokenizerReady, (value) => { tokenizerReady = value; });
+          const morphology = getResearchMorphologyBindings();
+          const tokenize = (text: string): string[] => {
+            const raw = morphology.tokenize(text);
+            if (!Array.isArray(raw)) throw fail("incompatible_abi", "Research tokenizer returned a non-array token result");
+            return [...new Set(mapLinderaRawTokens(text, raw).filter((token) => token.pos !== "記号")
+              .map((token) => normalizeUnicode(token.base ?? token.surface, "NFKC").toLowerCase()).filter(Boolean))].slice(0, 256);
+          };
+          const queryTerms = tokenize(input.query);
+          for (const row of fused) {
+            const candidateTerms = new Set(tokenize(row.snippet));
+            const matched = queryTerms.filter((term) => candidateTerms.has(term));
+            row.expressionScore = queryTerms.length ? matched.length / queryTerms.length : 0;
+            row.expressionTokens = matched;
+          }
+          fused.sort((a, b) => (b.expressionScore ?? 0) - (a.expressionScore ?? 0) || b.score - a.score ||
+            (a.lexicalRank ?? Number.MAX_SAFE_INTEGER) - (b.lexicalRank ?? Number.MAX_SAFE_INTEGER) || utf8PathCompare(a.path, b.path));
+          expressionStatus = { state: "ready", tokenizerIdentity: { id: RESEARCH_TOKENIZER_ID, version: RESEARCH_TOKENIZER_VERSION, digest: RESEARCH_DICTIONARY_MANIFEST_SHA256 }, matchedCandidates: fused.filter((row) => (row.expressionScore ?? 0) > 0).length };
+        } catch (cause) {
+          const failure = getMorphologyFailure(cause);
+          if (failure.code === "cancelled") throw fail("cancelled", failure.message, true);
+          expressionStatus = { state: "unavailable", reason: failure.code ?? "tokenizer_unavailable" };
+          warnings.push("expression_tokenizer_unavailable");
+        }
+      }
+
+      return {
+        snapshot: context.snapshot,
+        snapshotId: context.snapshot.id,
+        indexSnapshot: index.snapshot,
+        query: input.query,
+        mode: input.mode,
+        scope: scope ?? null,
+        hits: fused,
+        nextCursor: null,
+        coverage: { documents: index.documents.length, bytes: index.bytes },
+        expressionStatus,
+        semanticModel: model,
+        warnings,
+      };
     },
     "research.index.status": function* (raw, context, host) {
       const input = object(raw); exactFields(input, ["scope"]);
       if (input.scope !== undefined && (typeof input.scope !== "string" || !isSafeRelativePath(input.scope))) throw fail("invalid_path", "scope must be a safe relative path");
       const scope = input.scope as string | undefined;
+      const task = [...indexTasks.values()].find(item => item.binding === snapshotCacheKey(context, scope) && item.scope === scope);
+      if (task) {
+        const progress = taskProgress(task);
+        return { state: "indexing", coverage: { documents: task.entries.length, bytes: task.sourceBytes },
+          progress: { completed: progress.completed, total: progress.total } };
+      }
       let result: { found: boolean; value?: unknown };
       try { result = yield* cacheGet(host, context, scope, "manifest"); }
       catch (error) {
@@ -649,15 +1016,166 @@ export function createResearchHandlers(): Record<string, Handler> {
       return { state: "current", indexSnapshot: manifest.snapshotId, coverage: { documents: manifest.documentCount, bytes: manifest.sourceBytes } };
     },
     "research.index.rebuild": function* (raw, context, host) {
-      const input = object(raw); exactFields(input, ["scope", "force"]);
+      const input = object(raw); exactFields(input, ["taskId", "scope", "force"]);
+      if (typeof input.taskId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/u.test(input.taskId)) throw fail("invalid_input", "Host task ID is required");
       if (input.scope !== undefined && (typeof input.scope !== "string" || !isSafeRelativePath(input.scope))) throw fail("invalid_path", "scope must be a safe relative path");
       if (input.force !== undefined && typeof input.force !== "boolean") throw fail("invalid_input", "force must be boolean");
       const scope = input.scope as string | undefined;
       const existing = indexFor(context, scope);
-      const index = existing && input.force !== true ? existing.index : yield* loadIndex(host, context, scope, input.force === true);
-      const entry = rememberIndex(context, index, scope);
-      return { jobId: `research-index-${idHash(snapshotCacheKey(context, scope))}`, state: "current", indexSnapshot: entry.snapshotId, progress: { completed: index.documents.length, total: index.documents.length } };
+      if (existing && input.force !== true) return { snapshot: context.snapshot, taskId: input.taskId, jobId: input.taskId, state: "complete", phase: "complete", completed: existing.index.documents.length,
+        total: existing.index.documents.length, progress: { completed: existing.index.documents.length, total: existing.index.documents.length }, indexSnapshot: existing.snapshotId };
+      const taskKey = researchTaskKey(context, input.taskId);
+      const retained = indexTasks.get(taskKey);
+      if (retained) {
+        const progress = taskProgress(retained);
+        return { snapshot: context.snapshot, taskId: retained.taskId, jobId: retained.taskId, state: "running", ...progress,
+          progress: { completed: progress.completed, total: progress.total } };
+      }
+      const previous = input.force === true ? undefined : previousIndexFor(context, scope);
+      const task: ResearchIndexTask = { taskId: input.taskId, binding: snapshotCacheKey(context, scope), ...(scope ? { scope } : {}),
+        force: input.force === true, entries: [], previous, previousByPath: new Map((previous?.documents ?? []).map(item => [item.path, item])), documents: [],
+        prefixes: researchScopePrefixes(scope), seenPaths: new Set(), phase: "source_scan", prefixIndex: 0, cursor: null, lastPath: null,
+        seenCursors: new Set(), scannedPages: 0, sourceEntryCount: 0, sourceBytes: 0, completed: 0, nextSequence: 0,
+        indexBytes: 0, indexTerms: 0, indexNormalizationSpans: 0, plannedSerializedBytes: 0, plannedChunkCount: 0,
+        pendingPlanChunkBytes: 0, pendingPlanLineCount: 0, publishedBytes: 0, publishedChunkDigests: [], stalePublicationChecked: false };
+      indexTasks.set(taskKey, task);
+      return { snapshot: context.snapshot, taskId: input.taskId, jobId: input.taskId, state: "running", ...taskProgress(task), progress: { completed: 0, total: 0 } };
     },
+    "research.index.step": function* (raw, context, host) {
+      const input = object(raw); exactFields(input, ["taskId", "sequence"]);
+      if (typeof input.taskId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/u.test(input.taskId) || !Number.isSafeInteger(input.sequence) || (input.sequence as number) < 1) throw fail("invalid_input", "Research task step identity is invalid");
+      const taskKey = researchTaskKey(context, input.taskId);
+      const task = indexTasks.get(taskKey);
+      if (!task || task.binding !== snapshotCacheKey(context, task.scope)) throw fail("storage_unknown", "Research task checkpoint is unavailable; start a new rebuild", true);
+      const sequence = input.sequence as number;
+      if (sequence <= task.nextSequence) return { snapshot: context.snapshot, taskId: task.taskId, state: "running", ...taskProgress(task) };
+      if (sequence !== task.nextSequence + 1) throw fail("invalid_input", "Research task step sequence is out of order");
+      const running = () => {
+        task.nextSequence = sequence;
+        return { snapshot: context.snapshot, taskId: task.taskId, state: "running" as const, ...taskProgress(task) };
+      };
+      if (task.phase === "source_scan") {
+        if (!task.stalePublicationChecked) {
+          const stale = yield* cacheGet(host, context, task.scope, "staging-manifest");
+          if (stale?.found) {
+            const staging = stagingIndex(stale.value);
+            if (!staging) {
+              // A corrupt disposable marker has no safe cleanup cursor. Forget
+              // it and resume from the pinned source on the next bounded step.
+              yield* cacheEvict(host, context, task.scope, "staging-manifest");
+              task.stalePublicationChecked = true;
+              return running();
+            }
+            const committed = yield* cacheGet(host, context, task.scope, "manifest");
+            const manifest = committed?.found ? cacheManifest(committed.value) : null;
+            const stalePublication = { digest: staging.digest, chunkCount: staging.chunkCount, nextChunk: 0 };
+            if (manifest?.sha256 === staging.digest && manifest.chunkCount === staging.chunkCount) {
+              stalePublication.nextChunk = staging.chunkCount;
+            } else if (manifest?.sha256 === staging.digest) {
+              yield* evictResearchCache(host, context, task.scope);
+            }
+            task.stalePublication = stalePublication;
+          }
+          task.stalePublicationChecked = true;
+        }
+        if (task.stalePublication) {
+          const stale = task.stalePublication;
+          if (stale.nextChunk < stale.chunkCount) {
+            yield* cacheEvict(host, context, task.scope, `data:${stale.digest}:${stale.nextChunk}`);
+            stale.nextChunk++;
+          } else {
+            // A matching manifest means publication committed before an earlier
+            // worker stopped. Keep that derived index and only clear its marker.
+            yield* cacheEvict(host, context, task.scope, "staging-manifest");
+            task.stalePublication = undefined;
+          }
+          return running();
+        }
+        if (task.prefixIndex < task.prefixes.length) {
+          const prefix = task.prefixes[task.prefixIndex]!;
+          const page: FilePage = yield* host.request<FilePage>(HOST_OPERATIONS.list,
+            { snapshot: context.snapshot, prefix, ...(task.cursor ? { cursor: task.cursor } : {}), limit: 256 });
+          if (!page || !Array.isArray(page.entries) || page.entries.length > 256 || !(page.next_cursor === null || typeof page.next_cursor === "string")) {
+            throw fail("storage_unknown", "Host returned an invalid file page");
+          }
+          for (const entry of page.entries) {
+            if (!entry || typeof entry.path !== "string" || !entry.path.startsWith(prefix) || !isSafeRelativePath(entry.path) || !validRevision(entry.revision) ||
+                !Number.isSafeInteger(entry.byte_length) || entry.byte_length < 0 || typeof entry.media_type !== "string") throw fail("storage_unknown", "Host returned invalid file metadata");
+            if (task.lastPath !== null && utf8PathCompare(task.lastPath, entry.path) >= 0) throw fail("storage_unknown", "Host file pages are not in strict UTF-8 order");
+            task.lastPath = entry.path;
+            const inScope = !task.scope || entry.path === task.scope || entry.path.startsWith(`${task.scope}/`);
+            if (!inScope || !isSearchableDocumentPath(entry.path)) continue;
+            if (task.seenPaths.has(entry.path)) throw fail("snapshot_stale", "Host listing repeated a Research path", true);
+            if (entry.byte_length > MAX_FILE_READ) throw fail("capacity", `Searchable file exceeds its 2 MiB limit: ${entry.path}`, false, { path: entry.path });
+            if (task.entries.length >= MAX_DOCUMENTS) throw fail("capacity", "Research document limit exceeded");
+            task.sourceBytes += entry.byte_length;
+            if (task.sourceBytes > 32 * 1024 * 1024) throw fail("capacity", "Research index exceeds its 32 MiB limit");
+            task.seenPaths.add(entry.path); task.entries.push(entry);
+          }
+          task.sourceEntryCount += page.entries.length;
+          if (task.sourceEntryCount > MAX_SOURCE_PATHS) throw fail("capacity", "Research source path limit exceeded");
+          task.scannedPages++;
+          if (page.next_cursor !== null) {
+            if (page.entries.length === 0 || !page.next_cursor || task.seenCursors.has(page.next_cursor)) throw fail("snapshot_stale", "Research file-list cursor did not advance", true);
+            task.seenCursors.add(page.next_cursor); task.cursor = page.next_cursor;
+          } else {
+            task.prefixIndex++; task.cursor = null; task.lastPath = null; task.seenCursors.clear();
+          }
+        }
+        if (task.prefixIndex === task.prefixes.length) {
+          task.entries.sort((left, right) => utf8PathCompare(left.path, right.path));
+          task.phase = "index_build";
+          if (task.entries.length === 0) completeResearchIndexBuild(task, context.snapshot.id);
+        }
+        return running();
+      }
+      if (task.phase === "index_build") {
+        const entry = task.entries[task.completed];
+        if (entry) {
+          const previous = task.previousByPath.get(entry.path);
+          let document: ResearchDocument;
+          if (!previous || task.force || previous.fileRevision !== entry.revision || previous.bytes !== entry.byte_length) {
+            const text = yield* readEntryText(host, context, entry);
+            document = createResearchDocument({ path: entry.path, fileRevision: entry.revision, text });
+          } else document = previous;
+          planResearchDocument(task, document);
+          task.completed++;
+        }
+        if (task.completed === task.entries.length) {
+          completeResearchIndexBuild(task, context.snapshot.id);
+        }
+        return running();
+      }
+      if (!task.index || !task.publicationDigest) throw fail("storage_unknown", "Research index build was not prepared for publication", true);
+      if (!task.preparedChunk) task.preparedChunk = preparePublicationChunk(task) ?? undefined;
+      const chunk = task.preparedChunk;
+      if (chunk) {
+        if (!chunk.checkpointStored) {
+          yield* storeCacheValue(host, context, task.scope, "staging-manifest",
+            { schemaVersion: 1, digest: task.publicationDigest, chunkCount: chunk.index + 1 });
+          chunk.checkpointStored = true;
+        }
+        yield* storeCacheValue(host, context, task.scope, `data:${task.publicationDigest}:${chunk.index}`, { base64: chunk.base64 });
+        task.publishedChunkDigests.push(chunk.digest);
+        task.publishedBytes += chunk.bytes;
+        task.preparedChunk = undefined;
+        return running();
+      }
+      if (task.publishedBytes !== task.plannedSerializedBytes || task.publishedChunkDigests.length !== task.plannedChunkCount) {
+        throw fail("storage_unknown", "Research publication does not match its bounded serialization plan", true);
+      }
+      const manifest: IndexCacheManifest = { schemaVersion: 1, snapshotId: context.snapshot.id, scope: task.scope ?? null,
+        documentCount: task.index.documents.length, sourceBytes: task.index.bytes, serializedBytes: task.plannedSerializedBytes,
+        chunkCount: task.publishedChunkDigests.length, sha256: task.publicationDigest, chunkDigests: task.publishedChunkDigests };
+      yield* storeCacheValue(host, context, task.scope, "manifest", manifest);
+      yield* cacheEvict(host, context, task.scope, "staging-manifest");
+      const published = rememberIndex(context, task.index, task.scope);
+      task.nextSequence = sequence;
+      indexTasks.delete(taskKey);
+      return { snapshot: context.snapshot, taskId: task.taskId, state: "complete", phase: "complete", completed: 1, total: 1, indexSnapshot: published.snapshotId };
+    },
+    "research.task.status": () => { throw fail("capability_denied", "Research task status is owned by the Host"); },
+    "research.task.cancel": () => { throw fail("capability_denied", "Research task cancellation is owned by the Host"); },
     "research.terms.list": function* (raw, context, host) {
       const input = object(raw); exactFields(input, ["prefix", "cursor", "limit"]);
       if (input.prefix !== undefined && (typeof input.prefix !== "string" || input.prefix.length > 256)) throw fail("invalid_input", "prefix must be at most 256 characters");
@@ -881,10 +1399,11 @@ export function createResearchHandlers(): Record<string, Handler> {
       }
       const includeReadings = input.includeReadings !== false;
       const knownTerms = [...new Set(known as string[])];
+      const ignored = yield* readIgnoredCandidateTerms(host, context);
       const requestDigest = sha256Text(JSON.stringify([
         corpus.kind,
         candidateSources.map(({ id, path, revision, texts }) => [id, path ?? null, revision, texts.map(({ id: textId, text }) => [textId, text])]),
-        knownTerms.slice().sort(), includeReadings,
+        knownTerms.slice().sort(), includeReadings, ignored.revision, [...ignored.terms].sort(),
       ]));
       const scopeDigest = cacheScopeDigest(context);
       let offset = 0;
@@ -918,7 +1437,7 @@ export function createResearchHandlers(): Record<string, Handler> {
         });
         sourcesWithTokens.push({ id: source.id, ...(source.path ? { path: source.path } : {}), revision: source.revision, texts });
       }
-      const candidates = aggregateCandidateEvidence(sourcesWithTokens, new Set(knownTerms));
+      const candidates = filterIgnoredCandidates(aggregateCandidateEvidence(sourcesWithTokens, new Set(knownTerms)), ignored.terms);
       const page = candidates.slice(offset, offset + (limit as number));
       const output = page.map(({ reading, ...candidate }) => ({ ...candidate, ...(includeReadings && reading ? { reading } : {}) }));
       const nextOffset = offset + output.length;
@@ -927,6 +1446,11 @@ export function createResearchHandlers(): Record<string, Handler> {
         nextCursor: nextOffset < candidates.length ? encodeCursor({ snapshot: context.snapshot.id, scope: scopeDigest, params: requestDigest, offset: nextOffset }, "research-candidates-v1:") : null,
         tokenizerIdentity: { id: RESEARCH_TOKENIZER_ID, version: RESEARCH_TOKENIZER_VERSION, digest: RESEARCH_DICTIONARY_MANIFEST_SHA256 },
       };
+    },
+    "research.candidates.ignore.list": function* (raw, context, host) {
+      exactFields(object(raw), []);
+      const ignored = yield* readIgnoredCandidateTerms(host, context);
+      return { snapshot: context.snapshot, fileRevision: ignored.revision, terms: [...ignored.terms].sort(utf8PathCompare) };
     },
     "research.terms.variants": (raw) => {
       const input = object(raw); exactFields(input, ["candidates", "knownTerms"]);

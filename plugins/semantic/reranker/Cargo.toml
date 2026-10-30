@@ -1,0 +1,22 @@
+[package]
+name = "proprium-semantic-reranker"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+anyhow = "=1.0.104"
+prost = "=0.14.4"
+sha2 = "=0.10.9"
+tokenizers = { version = "=0.21.4", default-features = false, features = ["fancy-regex"] }
+tract-onnx = { path = "vendor/tract-onnx" }
+wit-bindgen-rt = { version = "=0.44.0", features = ["bitflags"] }
+
+[patch.crates-io]
+ahash = { path = "../model/vendor/ahash" }
+
+[package.metadata.component]
+package = "proprium:semantic-reranker"

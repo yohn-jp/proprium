@@ -54,6 +54,7 @@ export interface FindingContext {
   documentRevision?: string;
   draftGeneration?: string;
   configRevision?: string;
+  sceneId?: string;
 }
 
 export interface DiagnosticFinding {
@@ -416,6 +417,7 @@ export interface FindingIdentityInput {
   sourcePath: string;
   sourceRevision: string;
   textHash?: string;
+  configRevision?: string;
   kind: string;
   ruleId: string;
   start?: number;
@@ -423,7 +425,9 @@ export interface FindingIdentityInput {
   quote?: string;
 }
 export function findingFingerprint(value: FindingIdentityInput): string {
-  const canonical = JSON.stringify([value.workspaceId ?? null, value.repositoryId ?? null, value.branch ?? null, value.generation ?? null, value.snapshotId ?? null, value.actionId, value.analyzerVersion, value.sourcePath, value.sourceRevision, value.textHash ?? null, value.kind, value.ruleId, value.start ?? null, value.end ?? null, value.quote ?? null]);
+  // Keep decisions stable across unrelated workspace generations/snapshots.
+  // All analyzer, configuration, source and evidence identity remains bound.
+  const canonical = JSON.stringify([value.repositoryId ?? null, value.branch ?? null, value.actionId, value.analyzerVersion, value.sourcePath, value.sourceRevision, value.textHash ?? null, value.configRevision ?? null, value.kind, value.ruleId, value.start ?? null, value.end ?? null, value.quote ?? null]);
   return sha256(canonical);
 }
 
@@ -433,16 +437,14 @@ export function findingsForTextAnalysis(text: string, result: TextAnalysisResult
   const findings: DiagnosticFinding[] = [];
   const add = (kind: RuleKind | "rhythm", className: DiagnosticFinding["class"], ruleId: string, start: number, end: number, quote: string, message: string) => {
     const fingerprint = findingFingerprint({
-      workspaceId: context.workspaceId,
       repositoryId: context.repositoryId,
       branch: context.branch,
-      generation: context.generation,
-      snapshotId: context.snapshotId,
       actionId: "proprium.diagnostics.text.analyze.v1",
       analyzerVersion: "1.0.0",
       sourcePath: sourcePath ?? `input:${result.textHash}`,
       sourceRevision: sourceRevision ?? result.textHash,
       textHash: result.textHash,
+      configRevision: context.configRevision,
       kind,
       ruleId,
       start,
@@ -472,6 +474,7 @@ export function findingsForTextAnalysis(text: string, result: TextAnalysisResult
         generation: context.generation,
         snapshot: context.snapshotId,
         findingFingerprint: fingerprint,
+        ...(context.sceneId ? { sceneId: context.sceneId } : {}),
         analyzer: { id: "proprium.diagnostics.cpu", version: "1.0.0" },
         sources: sourcePath && sourceRevision ? [{ path: sourcePath, fileRevision: sourceRevision, textHash: result.textHash, span: { start, end }, quote }] : [],
         ...(context.configRevision ? { configRevisions: { lint: context.configRevision } } : {}),

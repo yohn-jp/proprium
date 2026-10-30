@@ -1,0 +1,1076 @@
+{
+  "schema": "proprium.authoring.feature-audit/v1",
+  "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+  "plugin_id": "proprium.paired-writing",
+  "lifecycle": "FROZEN",
+  "feature_count": 21,
+  "features": [
+    {
+      "feature_id": "PW-01",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "`assistant.health`, `assistant.queue.status`, `assistant.settings.read`, `assistant.settings.propose`, `assistant.usage.read`; lazy health/queue, non-secret presets, reviewed workspace settings, usage view",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/guest.ts",
+        "plugins/paired-writing/src/provider-status.ts",
+        "plugins/paired-writing/src/settings.ts",
+        "plugins/paired-writing/src/model-settings.ts",
+        "plugins/paired-writing/src/usage-history.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "plugins/paired-writing/test/provider-status.test.ts",
+        "plugins/paired-writing/test/settings.test.ts",
+        "plugins/paired-writing/test/usage-history.test.ts",
+        "tests/browser/authoring-tools.acceptance.ts"
+      ],
+      "gaps": [
+        "Host-local preferences, provider consent, non-secret workspace settings and usage preservation are separate paths; no full author workflow proof for all fields.",
+        "Pre-freeze evidence records FAIL at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-01, accept-pw-11; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Host provider broker / preference store"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "FAIL",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-01",
+        "accept-pw-11"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-02",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "assistant.rewrite/rewrite.propose; three strategies, local fallback, split/tell-show, exact selection and proposal",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/guest.ts",
+        "plugins/paired-writing/src/rewrite.ts",
+        "plugins/paired-writing/src/rewrite-local.ts",
+        "plugins/paired-writing/src/assistance-preview.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "plugins/paired-writing/test/rewrite-local.test.ts",
+        "plugins/paired-writing/test/assistance-preview.test.ts",
+        "plugins/paired-writing/test/assistance-adapters.test.ts"
+      ],
+      "gaps": [
+        "Exact UTF-16 editor selection, rationale/citation UI, safe return to the same dirty editor range, and full browser proof are not certified.",
+        "Pre-freeze evidence records NOT_CHECKED at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-02; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Host editor selection and reviewed proposal; optional provider broker"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "NOT_CHECKED",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": null,
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-02"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-03",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "assistant.continuation/preview; trailing context, budget, retrieval, draft base validation, exact preview",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/guest.ts",
+        "plugins/paired-writing/src/continuation.ts",
+        "plugins/paired-writing/src/continuation-contribution.ts",
+        "plugins/paired-writing/src/continuation-schemas.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "plugins/paired-writing/test/continuation.test.ts",
+        "plugins/paired-writing/test/continuation-schemas.test.ts"
+      ],
+      "gaps": [
+        "Full UI path, all context and budget edges, current snapshot behavior and browser operation remain uncertified.",
+        "Pre-freeze evidence records FAIL at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-03; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Host snapshot reads; Narrative hierarchy; optional Semantic retrieval/provider"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "FAIL",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-03"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-04",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "assistant.qa/preview; bounded chat/read tools, exact cited-source check, stream",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/guest.ts",
+        "plugins/paired-writing/src/qa-answer.ts",
+        "plugins/paired-writing/src/context.ts",
+        "plugins/paired-writing/src/assistance-preview.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "plugins/paired-writing/test/qa-answer.test.ts",
+        "plugins/paired-writing/test/assistance-preview.test.ts",
+        "tests/browser/authoring-qa.acceptance.ts"
+      ],
+      "gaps": [
+        "The browser scenario covers part of local QA; full multi-turn, citation, stale, cancellation and MCP parity requirements remain uncertified.",
+        "Pre-freeze evidence records FAIL at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-04; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Host bounded reads and provider consent; optional Research"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "FAIL",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": "Registered local QA preview and source-verified low-confidence excerpts, with Research and bounded local fallback, are implemented. Full PW-04 acceptance and currentBrowser UI proof are not certified.",
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-04"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-05",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "scene/chapter summary/previews, hash cache, child+parent proposal; reaction uses accepted ordered summaries",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/guest.ts",
+        "plugins/paired-writing/src/summaries.ts",
+        "plugins/paired-writing/src/summary-state-contribution.ts",
+        "plugins/paired-writing/src/reader-reaction.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "plugins/paired-writing/test/summaries.test.ts",
+        "plugins/paired-writing/test/reader-reaction.test.ts",
+        "tests/browser/authoring-tools.acceptance.ts"
+      ],
+      "gaps": [
+        "Accepted summary freshness, child/parent reviewed persistence and complete first-read UI are not certified. Reader-reaction route is also tracked as DIA-10/DIA-A12 and is frozen.",
+        "Pre-freeze evidence records FAIL at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-05; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Host snapshot/cache/proposal; Narrative hierarchy; optional Knowledge/Semantic"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "FAIL",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-05"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-06",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "topic/turn actions and previews; profile/examples/relation context and bounded turns",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/guest.ts",
+        "plugins/paired-writing/src/dialogue.ts",
+        "plugins/paired-writing/src/dialogue-zukan-contribution.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "plugins/paired-writing/test/dialogue-zukan.test.ts",
+        "plugins/paired-writing/test/assistance-preview.test.ts"
+      ],
+      "gaps": [
+        "Profile/evidence coverage and full UI behavior are not certified; saved Dialogue Sketch CRUD remains Knowledge-owned.",
+        "Pre-freeze evidence records FAIL at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-06; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Host snapshot reads; optional Knowledge"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "FAIL",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-06"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-07",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "`assistant.aspect.review`, `assistant.aspect.review.preview`; deterministic tempo/POV/explanation observations",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/guest.ts",
+        "plugins/paired-writing/src/adapter-contribution.ts",
+        "plugins/diagnostics/guest.ts",
+        "plugins/diagnostics/src/aspectReview.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "plugins/diagnostics/tests/aspectReview.test.ts",
+        "plugins/diagnostics/tests/aspectGuest.test.ts"
+      ],
+      "gaps": [
+        "Paired legacy adapter routing and visible dependency-unavailable behavior are not certified; Diagnostics source tests do not prove the Paired route.",
+        "Pre-freeze evidence records FAIL at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-07; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Diagnostics owner actions; Host action registry"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "FAIL",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-07"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-08",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "`assistant.synonyms.suggestions`, `assistant.synonyms.preview`; word+sentence, 3–5 candidates, exact prompt preview",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/guest.ts",
+        "plugins/paired-writing/src/synonym-generation.ts",
+        "plugins/paired-writing/src/synonym-preview.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "plugins/paired-writing/test/synonym-preview.test.ts",
+        "plugins/paired-writing/test/synonym-zukan-proposals.test.ts",
+        "tests/browser/authoring-tools.acceptance.ts"
+      ],
+      "gaps": [
+        "Research-owned terminology adoption and Paired generation are distinct; no complete browser flow proves both through Host review.",
+        "Pre-freeze evidence records FAIL at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-07; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Host provider preview; Research terminology and proposal"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "FAIL",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-07"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-09",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "contradictions.assist revalidates Semantic candidate/current quote, returns verdict/reason, no write",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/guest.ts",
+        "plugins/paired-writing/src/assistance-adapters.ts",
+        "plugins/paired-writing/src/validation.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "plugins/paired-writing/test/assistance-adapters.test.ts"
+      ],
+      "gaps": [
+        "Semantic evidence revalidation, current quote checks, visible result and Diagnostics presentation are not certified end to end.",
+        "Pre-freeze evidence records FAIL at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-07; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Optional Semantic result and Diagnostics presentation; Host snapshot"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "FAIL",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-07"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-10",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "speaker.attribute validates live draft target/base",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/guest.ts",
+        "plugins/paired-writing/src/adapter-contribution.ts",
+        "plugins/speaker/guest.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "plugins/speaker/src/guest.test.ts",
+        "plugins/speaker/src/algorithms.test.ts"
+      ],
+      "gaps": [
+        "Paired live-draft handoff is not independently verified; attribution, correction and voice authoring remain Speaker-owned.",
+        "Pre-freeze evidence records FAIL at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-07; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Speaker owner action; Host live-draft revision"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "FAIL",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-07"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-11",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "`assistant.zukan.suggestions`, `assistant.zukan.sandbox.preview`, `assistant.stateEvents.draft`; grounded entity/event/Dialogue Sketch quotes, typed candidate output",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/guest.ts",
+        "plugins/paired-writing/src/zukan.ts",
+        "plugins/paired-writing/src/zukan-proposals.ts",
+        "plugins/paired-writing/src/state-events.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "plugins/paired-writing/test/state-events.test.ts",
+        "plugins/paired-writing/test/synonym-zukan-proposals.test.ts"
+      ],
+      "gaps": [
+        "Grounded candidates and owner-submitted Knowledge proposals are not proven through the complete saved UI/review path.",
+        "Pre-freeze evidence records FAIL at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-07; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Host evidence/snapshot; optional Knowledge"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "FAIL",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-07"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-12",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "All 11 registered preview actions: scene/chapter, QA, continuation, aspect, dialogue topics/single/bulk turns, reader reaction, synonyms, sandbox Zukan",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/guest.ts",
+        "plugins/paired-writing/src/assistance-preview.ts",
+        "plugins/paired-writing/src/continuation-contribution.ts",
+        "plugins/paired-writing/src/dialogue-zukan-contribution.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "plugins/paired-writing/test/assistance-preview.test.ts",
+        "plugins/paired-writing/test/continuation.test.ts",
+        "plugins/paired-writing/test/dialogue-zukan.test.ts"
+      ],
+      "gaps": [
+        "The acceptance demands 11 previews across multiple owners; existing unit coverage is partial and not a complete Host UI suite.",
+        "Pre-freeze evidence records FAIL at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-02, accept-pw-03, accept-pw-04, accept-pw-06, accept-pw-07; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Owner plugin preview actions; Host dispatch/UI"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "FAIL",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-02",
+        "accept-pw-03",
+        "accept-pw-04",
+        "accept-pw-06",
+        "accept-pw-07"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-13",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "Nine legacy IDs: `assistant.settings`, `assistant.rewrite`, `assistant.summaries`, `assistant.qa`, `assistant.continuation`, `assistant.aspect-review`, `assistant.dialogue`, `assistant.reader-reaction`, `assistant.proposals`",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/guest.ts",
+        "plugins/paired-writing/src/adapter-contribution.ts",
+        "plugins/paired-writing/src/continuation-contribution.ts",
+        "plugins/paired-writing/src/dialogue-zukan-contribution.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "tests/browser/authoring-tools.acceptance.ts",
+        "app/src/browser/proprium/host/authoring/WorkspaceAuthoringPanels.test.ts"
+      ],
+      "gaps": [
+        "Browser test opens several Paired tabs, but all nine legacy jobs are not proven discoverable or usable across Desktop/Mobile.",
+        "Pre-freeze evidence records FAIL at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-08; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Host contribution registry and generic panel renderer"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "FAIL",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-08"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-14",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "`assistant.rewrite.stream` and `assistant.qa.stream` SSE delta/final/error/canceled",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/guest.ts",
+        "plugins/paired-writing/src/provider-generation.ts",
+        "app/src/browser/proprium/authoring/brokers.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "app/src/browser/proprium/authoring/brokers.test.ts"
+      ],
+      "gaps": [
+        "Per-action stream delta/final/error/cancel semantics and browser recovery are not certified.",
+        "Pre-freeze evidence records FAIL at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-09; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Host async provider/action transport; separate Gateway MCP"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "FAIL",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-09"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-15",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "`get_scene_context`, `get_writing_context`, `get_context_manifest`, `submit_change_set`, `list_change_sets`, `get_change_set`, `suggest_rewrite`",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/guest.ts",
+        "plugins/paired-writing/src/context.ts",
+        "plugins/paired-writing/src/changeset-workflow.ts",
+        "gateway/mcp.go"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "plugins/paired-writing/test/guest.test.ts",
+        "plugins/paired-writing/test/changeset-workflow.test.ts",
+        "gateway/mcp_test.go",
+        "tests/browser/authoring-mcp.acceptance.spec.ts",
+        "tests/browser/authoring-mcp-disconnect.acceptance.spec.ts",
+        "tests/browser/authoring-mcp-timeout.acceptance.spec.ts"
+      ],
+      "gaps": [
+        "Shared MCP transport coverage exists, but full Paired context/manifest/ChangeSet/diff/partial approval/return journey is not certified.",
+        "Pre-freeze evidence records NOT_CHECKED at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-10; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Host action/proposal/receipt APIs; optional Gateway; Narrative scene identity"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "NOT_CHECKED",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": null,
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-10"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-16",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "`list_projects`, `discover_actions`, `invoke_action`, `get_entity`, `list_entities`, `get_volume_tree`, `search`, `analyze_manuscript`, `get_diagnostics`, `get_thread_status`, `get_status`, `get_history`, `get_observation`, `update_entity`, `create_scene`, `lint_manuscript`, `reload`, `check_stylometric_deviations`, `check_plot_semantics`, `check_consistency`, `check_continuity`, `compute_cooccurrence`, `check_voice_consistency`, `check_style_deviations`, `get_dialogue`, `format_manuscript`",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/guest.ts",
+        "gateway/mcp.go",
+        "app/src/browser/proprium/authoring/actions.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "tests/browser/authoring-tools.acceptance.ts",
+        "tests/browser/authoring-mcp.acceptance.spec.ts",
+        "gateway/mcp_test.go"
+      ],
+      "gaps": [
+        "Legacy tool ownership and typed routes are described, but complete tool-to-owner browser parity is not certified.",
+        "Pre-freeze evidence records FAIL at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-07, accept-pw-10; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Host action discovery and scope; Narrative/Knowledge/Research/Diagnostics/Speaker/Semantic owners"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "FAIL",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-07",
+        "accept-pw-10"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-17",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "assistant/migration.ts exact non-secret settings and usage restore, enable gated, conflicts withheld",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/src/settings.ts",
+        "plugins/paired-writing/src/model-settings.ts",
+        "plugins/paired-writing/src/usage-history.ts",
+        "plugins/paired-writing/src/provider-status.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "plugins/paired-writing/test/settings.test.ts",
+        "plugins/paired-writing/test/usage-history.test.ts"
+      ],
+      "gaps": [
+        "Legacy restore/migration conflict handling and gating are not proven in current Browser Host UI.",
+        "Pre-freeze evidence records FAIL at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-01, accept-pw-11; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Host recovery inventory/store; explicit user review"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "FAIL",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-01",
+        "accept-pw-11"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-18",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "Loom SelectionLens, InlineDiffCandidate, RewriteSuggestModal, inlineChangeSet; exact UTF-16/revision/evidence, stale reject, Escape dismiss/Tab accept focused current",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/src/rewrite.ts",
+        "plugins/paired-writing/src/rewrite-local.ts",
+        "app/src/browser/proprium/host/authoring/review-selection.ts",
+        "app/src/browser/proprium/host/authoring/AuthoringReview.tsx"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "plugins/paired-writing/test/rewrite-local.test.ts",
+        "app/src/browser/proprium/host/authoring/review-selection.test.ts",
+        "app/src/browser/proprium/authoring/writer-browser.test.ts"
+      ],
+      "gaps": [
+        "SelectionLens-specific focus, Escape/Tab, stale text rejection and same-caret mobile return are not certified.",
+        "Pre-freeze evidence records FAIL at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-02, accept-pw-08; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Host editor selection/draft; reviewed changeset"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "FAIL",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-02",
+        "accept-pw-08"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-19",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "Loom DialogueSketchView/Editor create/list/edit/save, ordered participant lines, preview/optional analysis; no dedicated Scriptorium assistant panel",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/src/dialogue.ts",
+        "plugins/paired-writing/src/dialogue-zukan-contribution.ts",
+        "plugins/knowledge/src/actions.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "plugins/paired-writing/test/dialogue-zukan.test.ts",
+        "plugins/knowledge/src/actions.test.ts"
+      ],
+      "gaps": [
+        "Dialogue Sketch saved CRUD is Knowledge-owned; its author UI and Paired-generated candidates are not covered by one current flow.",
+        "Pre-freeze evidence records FAIL at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-06; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Knowledge persistence and UI; Host review; optional Paired candidate generation"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "FAIL",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": "Required canon action/UI/provider or migration behavior remains unimplemented or only partially delivered; settings/synonym preview additions do not complete this feature.",
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-06"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-20",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "Loom target doc specifies Manifest, Context/Inspect/Changes, stale/partial/retry and mobile return",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/plugin.json",
+        "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx",
+        "app/src/browser/proprium/host/authoring/WorkspaceAuthoringPanels.tsx"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "tests/browser/authoring-tools.acceptance.ts",
+        "tests/browser/authoring-mcp.acceptance.spec.ts"
+      ],
+      "gaps": [
+        "Manifest/Context/Inspect/Changes states, partial/retry handling and mobile return do not yet have a complete Paired UI acceptance run.",
+        "Pre-freeze evidence records NOT_CHECKED at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-08, accept-pw-10; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Host contribution UI, review, navigation and snapshot state"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "NOT_CHECKED",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": null,
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-08",
+        "accept-pw-10"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "PW-21",
+      "plugin_id": "proprium.paired-writing",
+      "requirement": "`story.changes.propose`; v1 operation IDs/evidence, identity mapping, validation, source fingerprint/retry and generic proposal build",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/paired-writing/guest.ts",
+        "plugins/paired-writing/src/changeset-workflow.ts",
+        "plugins/paired-writing/src/change-assembly.ts",
+        "plugins/paired-writing/src/manuscript-compiler.ts",
+        "plugins/narrative/src/change-compiler.ts",
+        "plugins/knowledge/src/changeProposal.ts",
+        "app/src/browser/proprium/authoring/stages.ts",
+        "app/src/browser/proprium/authoring/writer.ts"
+      ],
+      "host_path": "app/src/browser/proprium/authoring/actions.ts; snapshots.ts; brokers.ts; service.ts; writer.ts; stages.ts",
+      "ui_path": "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx; WorkspaceAuthoringPanels.tsx; AuthoringReview.tsx (generic contribution renderer; not every Paired feature has a dedicated visible proof)",
+      "existing_tests": [
+        "plugins/paired-writing/test/changeset.test.ts",
+        "plugins/paired-writing/test/changeset-workflow.test.ts",
+        "plugins/paired-writing/test/manuscript-compiler.test.ts",
+        "plugins/narrative/src/actions.test.ts",
+        "plugins/knowledge/src/changeProposal.test.ts",
+        "app/src/browser/proprium/authoring/nested-proposal.test.ts",
+        "app/src/browser/proprium/authoring/stages.test.ts"
+      ],
+      "gaps": [
+        "Typed source validation and owner compiler slices exist; complete mixed-operation proposal, Host staging, dependency-closed unit review, receipt recovery and browser flow are not certified.",
+        "Pre-freeze evidence records NOT_CHECKED at 731e574c5393c1a3b06e75965ede00fef820ce5f; it is historical and is not a fresh check of 75816593cec3dbca9080ec7073679ab3998993a7."
+      ],
+      "required_fixes": [
+        "No Paired-only implementation work while frozen. On an explicit product resume decision, resolve the linked canon gate(s): accept-pw-10, accept-pw-21; satisfy the gap list with signed installed Desktop and Mobile browser evidence."
+      ],
+      "dependencies": [
+        "Narrative/Knowledge owner compilers; Host staged-byte view, writer and receipts"
+      ],
+      "priority": "P1 — FROZEN",
+      "verification": [
+        {
+          "status": "NOT_CHECKED",
+          "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+          "pre_freeze_status": "NOT_CHECKED",
+          "pre_freeze_sha": "731e574c5393c1a3b06e75965ede00fef820ce5f",
+          "pre_freeze_evidence_ref": "evidence/authoring/validation/results.json",
+          "pre_freeze_output": null,
+          "command": null,
+          "fixture": null,
+          "browser_platform": null
+        }
+      ],
+      "canon": "docs/canon/plugins/PAIRED-WRITING.md",
+      "acceptance_ids": [
+        "accept-pw-10",
+        "accept-pw-21"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    }
+  ],
+  "paired_only_cross_plugin_requirements": [
+    {
+      "feature_id": "NAR-10",
+      "plugin_id": "proprium.narrative",
+      "requirement": "Preserve and compile structural NarrativeChangeSet parts for Paired multi-domain intake.",
+      "status": "FROZEN",
+      "freeze_scope": "The Paired compatibility intake, staged cross-domain transaction and final combined unit; shared Narrative hierarchy compiler/read-set validation remains owned by Narrative and is retained.",
+      "pre_freeze_status": "NOT_CHECKED",
+      "acceptance_id": "accept-nar-a10"
+    },
+    {
+      "feature_id": "DIA-10",
+      "plugin_id": "proprium.diagnostics",
+      "requirement": "Chapter first-read questions, expectations and confusion report.",
+      "status": "FROZEN",
+      "freeze_scope": "This feature and Paired provider/action route only; other Diagnostics rules/actions remain active.",
+      "pre_freeze_status": "NOT_CHECKED",
+      "acceptance_id": "accept-dia-a12"
+    },
+    {
+      "feature_id": "KNO-24",
+      "plugin_id": "proprium.knowledge",
+      "requirement": "Saved suggestion ingestion plus Paired optional candidate generation.",
+      "status": "PARTIAL",
+      "freeze_scope": "Only Paired optional generation/intake is FROZEN; Knowledge-owned saved suggestion CRUD, manual authoring, review and ingestion remain active and must be verified.",
+      "remaining_scope": "Knowledge-owned persisted suggestion reads and create/review actions, manual UI/CRUD, source tracking, conflict and recovery.",
+      "acceptance_id": "accept-kno-a19"
+    }
+  ],
+  "shared_acceptance_scope": {
+    "r09": "FROZEN",
+    "still_active": [
+      "H0",
+      "R02",
+      "R03",
+      "R06",
+      "R12",
+      "R13",
+      "R01",
+      "R04",
+      "R05",
+      "R07",
+      "R08",
+      "R10",
+      "R11",
+      "R14"
+    ],
+    "notes": [
+      "FROZEN is not PASS.",
+      "Shared Host/WIT, Git, security, plugin distribution, MCP/Gateway, offline and rollback acceptance remain active under their own owners.",
+      "KNO-24 remains an active mixed Knowledge requirement; only its Paired optional generation route is frozen.",
+      "DIA-11 contradiction verdict and its shared Diagnostics/Semantic evidence remain active."
+    ]
+  },
+  "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
+  "assessed_at": "2026-10-29",
+  "assessment_scope": "Reconciled against this source snapshot. Prior base_sha is retained as the original audit anchor. Implementation status does not substitute for the current R01–R14 acceptance result. Browser failures and unsupported coverage remain explicit."
+}

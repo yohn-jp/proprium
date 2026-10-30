@@ -82,6 +82,51 @@ function createHarness(overrides: Partial<ActionDispatcherOptions> = {}) {
   return { dispatcher: new AuthoringActionDispatcher({ ...defaults, ...overrides }), entries, executed, hostCalls };
 }
 
+test("scoped previous-generation cache operations pass the real dispatcher without accepting a guest snapshot", async () => {
+  const capability = "workspace.derived.cache";
+  const operations = [
+    ["workspace.derived.cache.get_previous", "cacheGetPrevious"],
+    ["workspace.derived.cache.evict_previous", "cacheEvictPrevious"],
+    ["workspace.derived.cache.evict_prefix", "cacheEvictPrefix"],
+    ["workspace.derived.cache.evict_previous_prefix", "cacheEvictPreviousPrefix"],
+  ] as const;
+  for (const [operation, port] of operations) {
+    const selector = { schema_version: 1, config_digest: "config", model_digest: null,
+      ...(operation.endsWith('_prefix') ? { key_prefix: "index-stage:" } : { key: "index-stage:" }) };
+    let calls = 0;
+    const make = (payload: Record<string, unknown>, granted = true) => createHarness({
+      installed: async () => installed({ descriptors: [descriptor({ required_capabilities: [] })],
+        grants: granted ? [capability] : [], host_capabilities: [capability] }),
+      runtime: { invoke: async options => {
+        await options.resolve_host_call({ call_id: 'cache-call', operation, payload });
+        return { request_id: options.request.request_id, scope, snapshot, ok: true, value: { hits: 0 }, warnings: [] };
+      } },
+      capabilities: { [port]: async (payload, context) => {
+        calls++;
+        assert.deepEqual(payload.selector, { ...selector, plugin_id });
+        assert.deepEqual(context.request.scope, scope);
+        assert.deepEqual(context.request.snapshot, snapshot);
+        assert.equal((payload.selector as Record<string, unknown>).snapshot, undefined);
+        return { found: false };
+      } },
+    });
+    const allowed = await make({ selector }).dispatcher.invoke({ plugin_id, action_id, input: { query: 'index' } }, principal());
+    assert.equal(allowed.ok, true, JSON.stringify(allowed));
+    assert.equal(calls, 1);
+    for (const [payload, granted] of [
+      [{ selector }, false],
+      [{ selector: { ...selector, plugin_id: 'other.plugin' } }, true],
+      [{ selector: { ...selector, snapshot } }, true],
+      [{ selector: { ...selector, ...(operation.endsWith('_prefix') ? { key: 'foreign-shape' } : { key_prefix: 'foreign-shape' }) } }, true],
+      [{ selector, snapshot }, true],
+    ] as const) {
+      const denied = await make(payload, granted).dispatcher.invoke({ plugin_id, action_id, input: { query: 'index' } }, principal());
+      assert.equal(denied.ok, false);
+      assert.equal(calls, 1, 'rejected cache operations must not reach storage');
+    }
+  }
+});
+
 test("a granted provider request reaches the consent broker with Host-issued identity", async () => {
   const providerCap = "provider.request";
   let reached = false;

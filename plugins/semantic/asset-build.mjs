@@ -5,6 +5,10 @@ import { dirname, resolve, sep } from 'node:path';
 const PREFIX = 'proprium/semantic/';
 const MAX_CHUNK = 16 * 1024 * 1024;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+const SOURCE_PREFIXES = new Map([
+  ['proprium.semantic.embedding.e5-small', `${PREFIX}embedding/e5-small/`],
+  ['proprium.semantic.reranker.bge-v2-m3', `${PREFIX}reranker/bge-reranker-v2-m3/`],
+]);
 
 function outputPath(directory, path) {
   if (typeof path !== 'string' || !path.startsWith(PREFIX) || path.includes('\\') || path.split('/').some(part => !part || part === '.' || part === '..')) throw new Error('Invalid Semantic asset path');
@@ -30,8 +34,10 @@ export async function generatePinnedAssets({ manifestBytes, group, outputDirecto
   if (encoded.length !== group.bytes || digest(encoded) !== group.sha256 || !group.manifest_path.includes(`/${group.sha256}/`)) throw new Error('Semantic asset manifest size or digest mismatch');
   const manifest = JSON.parse(encoded.toString('utf8'));
   if (manifest.schema !== 'proprium.assets/v1' || manifest.id !== group.id || !Array.isArray(manifest.files)) throw new Error('Semantic asset manifest identity mismatch');
+  const sourcePrefix = SOURCE_PREFIXES.get(group.id);
+  if (!sourcePrefix || (group.id === 'proprium.semantic.embedding.e5-small' ? group.role !== 'embedding' : group.role !== 'reranker')) throw new Error('Unsupported Semantic asset group');
   for (const file of manifest.files) {
-    if (typeof file.path !== 'string' || !file.path.startsWith(`${PREFIX}embedding/e5-small/`) || !Number.isSafeInteger(file.bytes) || file.bytes < 0 || !/^[a-f0-9]{64}$/u.test(file.sha256) || !Array.isArray(file.chunks)) throw new Error('Invalid Semantic file metadata');
+    if (typeof file.path !== 'string' || !file.path.startsWith(sourcePrefix) || !Number.isSafeInteger(file.bytes) || file.bytes < 0 || !/^[a-f0-9]{64}$/u.test(file.sha256) || !Array.isArray(file.chunks)) throw new Error('Invalid Semantic file metadata');
     let expectedOffset = 0;
     for (const chunk of file.chunks) {
       outputPath(outputDirectory, chunk.path);

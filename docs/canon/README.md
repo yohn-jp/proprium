@@ -2,6 +2,8 @@
 
 **Status: normative recovery target, NOT an assertion that plugins already ship.** Proprium remains a general-purpose, browser-native Git editor. Novel writing, Story Knowledge and adjacent narrative workflows are first-class **official plugins**, not mandatory Git Core schemas. The loss being repaired is the missing packaged and reachable product capabilities, not the generic Git core.
 
+**Paired Writing lifecycle: FROZEN.** Its existing implementation, plugin configuration and persisted workspace data are retained. New Paired Writing feature work is stopped; the freeze is not a completion claim and does not turn its last recorded failures or unchecked requirements into passes. Only security defects, data-corruption defects, or severe regressions to other products may be fixed. Paired-only gaps do not justify extending the shared Host. Resuming feature work requires an explicit product decision. Shared Host, Git, distribution, security and MCP requirements remain governed by their own acceptance rows.
+
 ## Authority
 
 1. Explicit owner instructions and confirmed product decisions.
@@ -23,6 +25,8 @@ No archived implementation or historical roadmap overrides today's generic-Core 
 | [Plugin specifications](plugins/README.md) | One canonical feature contract per independently deployable product plugin |
 
 Every plugin document MUST name an immutable ID, scope and non-goals, source anchors, actions/read models, UI, data ownership, Host capabilities, dependencies, recovery strategy, errors and an executable acceptance gate. If a feature is missing, record it as a gap; do not erase it, substitute a placeholder or claim it was never in the product.
+
+The Paired Writing requirements remain in the [feature inventory](RECOVERY-INVENTORY.md) and [plugin specification](plugins/PAIRED-WRITING.md) with lifecycle `FROZEN`. Its feature and plugin-specific acceptance rows use `FROZEN`, a lifecycle disposition distinct from `PASS`; previous `FAIL` or `NOT_CHECKED` evidence remains visible in the implementation ledger. The legacy R09 gate is retained and mapped to `FROZEN`; shared predicates continue through their independently owned acceptance gates.
 
 The [pinned Scriptorium update audit](SCRIPTORIUM-LATEST-DELTA.md) supplements P0 Host/Narrative and Research with browser page-departure, recent-scene recovery, Japanese indexing and authorization-failure invariants. Its source revision and all 42 registered UI contributions are checked through `traceability.json` and the source-aware verifier.
 

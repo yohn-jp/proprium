@@ -139,3 +139,26 @@ test("Diagnostics panel offers an explicit Semantic evidence review", async () =
   assert.equal(evidence.body.primary, "evidenceA.quote");
   assert.equal(evidence.body.secondary, "evidenceB.quote");
 });
+
+test("Diagnostics exposes Host-reviewed lint and manuscript formatting from pinned scene results", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const manifest = JSON.parse(await readFile(new URL("../plugin.json", import.meta.url), "utf8"));
+  const scene = manifest.ui.find((panel: { id: string }) => panel.id === "diagnostics.analysis").body.tabs.find((tab: { id: string }) => tab.id === "scene");
+  const lint = scene.body.tabs.find((tab: { id: string }) => tab.id === "lint-proposal").body;
+  const format = scene.body.tabs.find((tab: { id: string }) => tab.id === "format-proposal").body;
+  assert.equal(lint.submit.action_id, "proprium.diagnostics.lint.propose.v1");
+  assert.deepEqual(lint.submit.input_template, {
+    documentPath: { data_key: "last_action_result.identity.documentPath" },
+    expectedRevision: { data_key: "last_action_result.identity.documentRevision" },
+    textHash: { data_key: "last_action_result.identity.textHash" },
+    idempotencyKey: { data_key: "form.idempotency_key" },
+  });
+  assert.equal(format.submit.action_id, "proprium.diagnostics.manuscript.format.propose.v1");
+  assert.deepEqual(format.submit.input_template, {
+    sceneId: { data_key: "last_action_result.identity.sceneId" },
+    expectedRevision: { data_key: "last_action_result.identity.documentRevision" },
+    idempotencyKey: { data_key: "form.idempotency_key" },
+  });
+  assert.equal(lint.submit_when.data_key, "last_action_result.identity.documentRevision");
+  assert.equal(format.submit_when.data_key, "last_action_result.identity.documentRevision");
+});

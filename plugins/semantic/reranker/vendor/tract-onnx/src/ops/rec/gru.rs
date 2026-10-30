@@ -1,0 +1,227 @@
+use crate::model::ParsingContext;
+use crate::pb::*;
+use tract_hir::internal::*;
+use tract_hir::ops;
+use tract_hir::tract_core::ops::einsum::EinSum;
+
+use super::common::CommonRec;
+use super::common::WireBody;
+
+pub fn gru(
+    _ctx: &ParsingContext,
+    pb: &NodeProto,
+) -> TractResult<(Box<dyn InferenceOp>, Vec<String>)> {
+    let gru = GRU {
+        f: Box::new(ops::nn::sigmoid()),
+        g: Box::new(ops::math::tanh()),
+        linear_before_reset: pb.get_attr("linear_before_reset").unwrap_or(false),
+    };
+    let common = CommonRec::from_node_and_options(pb, 3, 0, Box::new(gru))?;
+
+    Ok((expand(common), vec![]))
+}
+
+/// The fused cell only reproduces the standard ONNX activations, so the importer
+/// checks the ops it holds rather than trusting how it was built.
+fn is_element_wise<O: tract_hir::tract_core::ops::element_wise::ElementWiseMiniOp>(
+    op: &dyn TypedOp,
+) -> bool {
+    op.downcast_ref::<tract_hir::tract_core::ops::element_wise::ElementWiseOp>()
+        .is_some_and(|ew| ew.0.is::<O>())
+}
+
+#[derive(Debug, Clone)]
+pub struct GRU {
+    pub f: Box<dyn TypedOp>,
+    pub g: Box<dyn TypedOp>,
+    pub linear_before_reset: bool,
+}
+
+impl WireBody for GRU {
+    fn name(&self) -> &'static str {
+        "GRU"
+    }
+
+    fn w_b_multipliers(&self) -> (usize, usize) {
+        (3, 6)
+    }
+
+    fn have_extra_c_state(&self) -> bool {
+        false
+    }
+
+    fn fused_sequence_op(
+        &self,
+        hidden: usize,
+        has_bias: bool,
+        chunk: isize,
+        seq_len: usize,
+        emit_y: bool,
+    ) -> Option<Box<dyn TypedOp>> {
+        // GruSeq's loop body IS GruEpilogue, so the fused form is valid exactly
+        // where the epilogue is.
+        (seq_len >= 4
+            && self.linear_before_reset
+            && is_element_wise::<tract_hir::tract_core::ops::nn::Sigmoid>(self.f.as_ref())
+            && is_element_wise::<tract_hir::tract_core::ops::math::Tanh>(self.g.as_ref()))
+        .then(|| {
+            Box::new(tract_hir::tract_core::ops::gru_seq::GruSeq {
+                hidden,
+                has_bias,
+                chunk,
+                // The Scan this replaces is built with reset_every_turn false, so
+                // the fused op starts from the same contract.
+                reset_every_turn: false,
+                emit_y,
+                projected: false,
+                packed_r: None,
+            }) as Box<dyn TypedOp>
+        })
+    }
+
+    #[allow(non_snake_case)]
+    fn wire_body(&self, prefix: &str, body: &mut TypedModel) -> TractResult<()> {
+        use tract_hir::ops::{array, math};
+        macro_rules! wire {
+            ($name: ident = $op: expr, $($param: expr),*) => {
+                let $name = body.wire_node(
+                    format!("{}.{}", prefix, stringify!($name)),
+                    $op, [$($param),*].as_ref())?[0];
+            }
+        }
+
+        let Xt: OutletId = body.node_by_name("Xt").unwrap().id.into();
+        let W: OutletId = body.node_by_name("W").unwrap().id.into();
+        let R: OutletId = body.node_by_name("R").unwrap().id.into();
+        let Ht_1: OutletId = body.node_by_name("Ht_1").unwrap().id.into();
+        let b: Option<OutletId> = body.node_by_name("b").ok().map(|n| n.id.into());
+
+        let h_size = body.outlet_fact(R)?.shape[1].clone();
+
+        let dt = body.outlet_fact(Xt)?.datum_type;
+        let matmul_t = EinSum::new("mk,nk->mn".parse()?, dt);
+
+        wire!(Xt_WT = matmul_t.clone(), Xt, W);
+
+        // With linear_before_reset the reset gate scales the already-biased
+        // recurrent product, so the cell needs no second matmul and collapses into
+        // one op: the W-side biases fold into Xt·Wᵀ and the R-side ones into
+        // Ht-1·Rᵀ, each a single 3*h slice of b. Without it the reset gate applies
+        // to Ht-1 before that product, so the decomposed form stands, as it does
+        // for non-standard activations and a symbolic hidden size.
+        if self.linear_before_reset
+            && is_element_wise::<tract_hir::tract_core::ops::nn::Sigmoid>(self.f.as_ref())
+            && is_element_wise::<tract_hir::tract_core::ops::math::Tanh>(self.g.as_ref())
+            && let Ok(hidden) = h_size.to_usize()
+        {
+            use tract_hir::tract_core::ops::gru_cell::GruEpilogue;
+            wire!(Ht_1_RT_all = matmul_t.clone(), Ht_1, R);
+            let (xh, rh) = if let Some(b) = b {
+                wire!(Wb_all = array::Slice::new(1, 0.to_dim() * &h_size, 3.to_dim() * &h_size), b);
+                wire!(Rb_all = array::Slice::new(1, 3.to_dim() * &h_size, 6.to_dim() * &h_size), b);
+                wire!(xh = math::add(), Xt_WT, Wb_all);
+                wire!(rh = math::add(), Ht_1_RT_all, Rb_all);
+                (xh, rh)
+            } else {
+                (Xt_WT, Ht_1_RT_all)
+            };
+            let Ht = body.wire_node(
+                format!("{prefix}.gru_cell"),
+                GruEpilogue { hidden },
+                &[xh, rh, Ht_1],
+            )?[0];
+            wire!(y_h = AxisOp::Add(1), Ht);
+            body.select_output_outlets(&[y_h])?;
+            return Ok(());
+        }
+
+        // The gate weights are contiguous row blocks of W and R, so one product
+        // per operand yields all the gates' products as contiguous column blocks.
+        // Rh is excluded unless the reset gate is applied after the product, since
+        // otherwise it multiplies rt (.) Ht-1 rather than Ht-1.
+        let r_gates = if self.linear_before_reset { 3 } else { 2 };
+
+        wire!(Xt_WzT = array::Slice::new(1, 0.to_dim() * &h_size, 1.to_dim() * &h_size), Xt_WT);
+        wire!(Xt_WrT = array::Slice::new(1, 1.to_dim() * &h_size, 2.to_dim() * &h_size), Xt_WT);
+        wire!(Xt_WhT = array::Slice::new(1, 2.to_dim() * &h_size, 3.to_dim() * &h_size), Xt_WT);
+
+        wire!(R_gates = array::Slice::new(0, 0.to_dim() * &h_size, r_gates.to_dim() * &h_size), R);
+        wire!(Ht_1_RT = matmul_t.clone(), Ht_1, R_gates);
+        wire!(Ht_1_RzT = array::Slice::new(1, 0.to_dim() * &h_size, 1.to_dim() * &h_size), Ht_1_RT);
+        wire!(Ht_1_RrT = array::Slice::new(1, 1.to_dim() * &h_size, 2.to_dim() * &h_size), Ht_1_RT);
+
+        // zt = f(Xt*(Wz^T) + Ht-1*(Rz^T) + Wbz + Rbz)
+        wire!(zt0 = math::add(), Xt_WzT, Ht_1_RzT);
+        let mut zt0 = zt0;
+        if let Some(b) = b {
+            wire!(Wbz = array::Slice::new(1, 0.to_dim() * &h_size, 1.to_dim() * &h_size), b);
+            wire!(Rbz = array::Slice::new(1, 3.to_dim() * &h_size, 4.to_dim() * &h_size), b);
+            wire!(Wbz_Rbz = math::add(), Wbz, Rbz);
+            wire!(zt0_biased = math::add(), zt0, Wbz_Rbz);
+            zt0 = zt0_biased
+        };
+        wire!(zt = self.f.clone(), zt0);
+
+        // rt = f(Xt*(Wr^T) + Ht-1*(Rr^T) + Wbr + Rbr)
+        wire!(rt0 = math::add(), Xt_WrT, Ht_1_RrT);
+        let mut rt0 = rt0;
+        if let Some(b) = b {
+            wire!(Wbr = array::Slice::new(1, 1.to_dim() * &h_size, 2.to_dim() * &h_size), b);
+            wire!(Rbr = array::Slice::new(1, 4.to_dim() * &h_size, 5.to_dim() * &h_size), b);
+            wire!(Wbr_Rbr = math::add(), Wbr, Rbr);
+            wire!(rt0_biased = math::add(), rt0, Wbr_Rbr);
+            rt0 = rt0_biased
+        };
+        wire!(rt = self.f.clone(), rt0);
+
+        // ht = g(Xt*(Wh^T) + (rt (.) Ht-1)*(Rh^T) + Rbh + Wbh) # default, when linear_before_reset = 0
+        // ht = g(Xt*(Wh^T) + (rt (.) (Ht-1*(Rh^T) + Rbh)) + Wbh) # when linear_before_reset != 0
+        let rt_Ht_1_RhT_Rbh = if self.linear_before_reset {
+            // rt (.) (Ht-1*(Rh^T) + Rbh)
+            wire!(
+                Ht_1_RhT = array::Slice::new(1, 2.to_dim() * &h_size, 3.to_dim() * &h_size),
+                Ht_1_RT
+            );
+            let Ht_1_RhT_Rbh = if let Some(b) = b {
+                wire!(Rbh = array::Slice::new(1, 5.to_dim() * &h_size, 6.to_dim() * &h_size), b);
+                wire!(Ht_1_RhT_Rbh = math::add(), Ht_1_RhT, Rbh);
+                Ht_1_RhT_Rbh
+            } else {
+                Ht_1_RhT
+            };
+            wire!(rt_Ht_1_RhT_Rbh = math::mul(), rt, Ht_1_RhT_Rbh);
+            rt_Ht_1_RhT_Rbh
+        } else {
+            // (rt (.) Ht-1)*(Rh^T) + Rbh
+            wire!(Rh = array::Slice::new(0, 2.to_dim() * &h_size, 3.to_dim() * &h_size), R);
+            wire!(rt_Ht_1 = math::mul(), rt, Ht_1);
+            wire!(rt_Ht_1_RhT = matmul_t, rt_Ht_1, Rh);
+            if let Some(b) = b {
+                wire!(Rbh = array::Slice::new(1, 5.to_dim() * &h_size, 6.to_dim() * &h_size), b);
+                wire!(rt_Ht_1_RhT_Rbh = math::add(), rt_Ht_1_RhT, Rbh);
+                rt_Ht_1_RhT_Rbh
+            } else {
+                rt_Ht_1_RhT
+            }
+        };
+        wire!(ht0 = math::add(), Xt_WhT, rt_Ht_1_RhT_Rbh);
+        let mut ht0 = ht0;
+        if let Some(b) = b {
+            wire!(Wbh = array::Slice::new(1, 2.to_dim() * &h_size, 3.to_dim() * &h_size), b);
+            wire!(ht0_biased = math::add(), ht0, Wbh);
+            ht0 = ht0_biased
+        }
+        wire!(ht = self.g.clone(), ht0);
+
+        // Ht = (1 - zt) (.) ht + zt (.) Ht-1, rearranged so every operand keeps the
+        // cell shape: a literal 1 is rank-1 and would broadcast on each element-wise
+        // step.
+        wire!(Ht_1_sub_ht = math::sub(), Ht_1, ht);
+        wire!(zt_Ht_1_sub_ht = math::mul(), zt, Ht_1_sub_ht);
+        wire!(Ht = math::add(), ht, zt_Ht_1_sub_ht);
+
+        wire!(y_h = AxisOp::Add(1), Ht);
+        body.select_output_outlets(&[y_h])?;
+        Ok(())
+    }
+}

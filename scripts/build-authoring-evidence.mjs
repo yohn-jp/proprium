@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { refreshCanonMetadata } from "./authoring-evidence-metadata.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const traceabilityPath = resolve(root, "docs/canon/traceability.json");
@@ -13,13 +14,15 @@ const plugins = [
 ];
 const rIds = Array.from({ length: 14 }, (_, index) => `R${String(index + 1).padStart(2, "0")}`);
 const officialPluginIds = plugins.map(([id]) => id);
-const evidenceStatuses = ["PASS", "FAIL", "BLOCKED", "NOT_CHECKED"];
+const evidenceStatuses = ["PASS", "FAIL", "BLOCKED", "NOT_CHECKED", "FROZEN"];
 
-function statusRecord() {
-  return { status: "NOT_CHECKED", fixture: null, command: null, git_sha: null, browser_platform: null,
+function statusRecord(status = "NOT_CHECKED") {
+  return { status, ...(status === "FROZEN" ? { pre_freeze_status: "NOT_CHECKED" } : {}),
+    fixture: null, command: null, git_sha: null, browser_platform: null,
     input: null, output: null, receipt: null, artifact: null, evidence_ref: null, blocker: null };
 }
-function parseFeatureRows(document) {
+function parseFeatureRows(document, inventoryLifecycleByFeature) {
+  const pluginFrozen = /^\*\*Lifecycle:\s*FROZEN\.?\*\*/mu.test(document);
   const rows = new Map();
   for (const line of document.split("\n")) {
     if (!line.startsWith("|")) continue;
@@ -30,7 +33,9 @@ function parseFeatureRows(document) {
     if (!match) throw new Error(`Cannot derive a canonical feature ID from ${line}`);
     const feature = match[1];
     const anchors = acceptanceReferences(cells.at(-2) ?? "");
-    rows.set(feature, { author_visible_result: (cells[2] ?? "").trim(), acceptance: anchors,
+    const lifecycle = pluginFrozen || /\*\*FROZEN\*\*/u.test(firstCell) ||
+      inventoryLifecycleByFeature.get(feature) === "FROZEN" ? "FROZEN" : "ACTIVE";
+    rows.set(feature, { lifecycle, author_visible_result: (cells[2] ?? "").trim(), acceptance: anchors,
       source_disposition: (cells[3] ?? "").trim() });
   }
   return rows;
@@ -41,7 +46,8 @@ function caseCode(id) {
   const prefixes = { nar: "NAR-A", kno: "KNO-A", res: "RES-A", pw: "PW-", dia: "DIA-A", spk: "SPK-A", sem: "SEM-A", pub: "PUB-AC" };
   return `${prefixes[match[1]]}${match[3].padStart(match[1] === "res" ? 3 : match[1] === "pw" || match[1] === "pub" ? 2 : 1, "0")}`;
 }
-function parseAcceptanceCases(document, acceptanceIds) {
+function parseAcceptanceCases(document, acceptanceIds, frozenAcceptanceIds) {
+  const pluginFrozen = /^\*\*Lifecycle:\s*FROZEN\.?\*\*/mu.test(document);
   const section = /^#{2,3}\s+(?:\d+\.\s+)?(?:Feature\s+)?Acceptance\b[^\r\n]*$/imu.exec(document);
   if (!section) throw new Error("Plugin Canon is missing its Acceptance section");
   const sectionOffset = section.index + section[0].length;
@@ -85,7 +91,8 @@ function parseAcceptanceCases(document, acceptanceIds) {
       const preceding = [...sectionText.slice(0, lineOffset).matchAll(/<a id="([^"]+)"><\/a>/gu)];
       reference = preceding.at(-1)?.[1] ?? id;
     }
-    cases.set(id, { canon_title: title, canon_reference: `#${reference}`, canon_requirement: requirement });
+    const lifecycle = pluginFrozen || /\*\*FROZEN\*\*/u.test(line) || frozenAcceptanceIds.has(id) ? "FROZEN" : "ACTIVE";
+    cases.set(id, { lifecycle, canon_title: title, canon_reference: `#${reference}`, canon_requirement: requirement });
   }
   return cases;
 }
@@ -95,8 +102,9 @@ function parseRMatrix(document) {
   for (const line of document.split("\n")) {
     if (line.includes("Executable end-to-end job") && line.includes("Required proof")) { matrixStarted = true; continue; }
     if (!matrixStarted) continue;
-    const match = /^\|\s*(R\d{2})\s*\|([^|]+)\|([^|]+)\|/u.exec(line);
-    if (match) rows.set(match[1], { canon_title: match[2].trim(), required_proof: match[3].trim() });
+    const match = /^\|\s*(R\d{2})([^|]*)\|([^|]+)\|([^|]+)\|/u.exec(line);
+    if (match) rows.set(match[1], { lifecycle: /\bFROZEN\b/u.test(match[2]) ? "FROZEN" : "ACTIVE",
+      canon_title: match[3].trim(), required_proof: match[4].trim() });
     else if (rows.size) break;
   }
   return rows;
@@ -177,6 +185,12 @@ async function requirements() {
   const inventoryEnd = inventoryDocument.indexOf("## Exact Scriptorium Action crosswalk", inventoryStart);
   if (inventoryStart < 0 || inventoryEnd < 0) throw new Error("Recovery inventory feature section cannot be found");
   const inventoryFeatureIds = [...inventoryDocument.slice(inventoryStart, inventoryEnd).matchAll(/^\|\s*\[([A-Z]+-\d{2,3})\]/gmu)].map(item => item[1]);
+  const inventoryLifecycleByFeature = new Map(inventoryDocument.slice(inventoryStart, inventoryEnd).split("\n")
+    .map(line => {
+      const match = /^\|\s*\[([A-Z]+-\d{2,3})\]/u.exec(line);
+      const featureCell = line.split("|")[1] ?? "";
+      return match ? [match[1], /\*\*FROZEN\*\*/u.test(featureCell) ? "FROZEN" : "ACTIVE"] : null;
+    }).filter(Boolean));
   const inventoryAcceptance = new Map();
   for (const line of inventoryDocument.slice(inventoryStart, inventoryEnd).split("\n")) {
     const match = /^\|\s*\[([A-Z]+-\d{2,3})\][^|]*\|([^|]*)\|/u.exec(line);
@@ -186,9 +200,18 @@ async function requirements() {
   for (const [pluginId, file] of plugins) {
     const path = `docs/canon/plugins/${file}`;
     const document = await readFile(resolve(root, path), "utf8");
-    const features = parseFeatureRows(document);
+    const features = parseFeatureRows(document, inventoryLifecycleByFeature);
     const canonSourceRevisions = parseSourceRevisions(document);
-    const acceptanceCasesById = parseAcceptanceCases(document, parseAcceptanceIds(document));
+    const featureLifecyclesByAcceptance = new Map();
+    for (const [featureId, feature] of features) for (const acceptanceId of feature.acceptance) {
+      const owners = featureLifecyclesByAcceptance.get(acceptanceId) ?? [];
+      owners.push(feature.lifecycle);
+      featureLifecyclesByAcceptance.set(acceptanceId, owners);
+    }
+    const frozenAcceptanceIds = new Set([...featureLifecyclesByAcceptance]
+      .filter(([, lifecycles]) => lifecycles.length > 0 && lifecycles.every(lifecycle => lifecycle === "FROZEN"))
+      .map(([id]) => id));
+    const acceptanceCasesById = parseAcceptanceCases(document, parseAcceptanceIds(document), frozenAcceptanceIds);
     for (const [featureId, feature] of features) {
       const expected = inventoryAcceptance.get(featureId) ?? [];
       if (JSON.stringify([...feature.acceptance].sort()) !== JSON.stringify(expected)) {
@@ -201,11 +224,11 @@ async function requirements() {
       const sourceUi = traceability.source_ui_contributions.filter(contribution =>
         contribution.owner === pluginId && contribution.feature_id === id).map(contribution => contribution.id);
       const anchors = immutableAnchors(sourceActions, sourceUi, traceability, pinSource);
-      return { feature_id: id, source_anchor_state: anchors.length ? "TRACEABILITY_MAPPED" : "UNMAPPED",
+      return { feature_id: id, lifecycle: row.lifecycle, source_anchor_state: anchors.length ? "TRACEABILITY_MAPPED" : "UNMAPPED",
         author_visible_result: row.author_visible_result, source_disposition: row.source_disposition,
         canon_source_revisions: canonSourceRevisions, acceptance_anchors: row.acceptance,
         source_actions: sourceActions, source_ui_contributions: sourceUi, source_anchors: anchors,
-        source_revisions: uniqueRevisions(anchors), ...statusRecord() };
+        source_revisions: uniqueRevisions(anchors), ...statusRecord(row.lifecycle === "FROZEN" ? "FROZEN" : "NOT_CHECKED") };
     });
     const acceptanceCases = parseAcceptanceIds(document).map(id => {
       const linkedFeatures = featureRecords.filter(feature => feature.acceptance_anchors.includes(id));
@@ -216,9 +239,10 @@ async function requirements() {
       if (!canonicalCase) throw new Error(`${pluginId}: no canonical acceptance case ${id}`);
       return { id, ...canonicalCase, feature_ids: linkedFeatures.map(feature => feature.feature_id).sort(),
         canon_source_revisions: canonSourceRevisions, source_anchors: anchors,
-        source_revisions: uniqueRevisions(anchors), ...statusRecord() };
+        source_revisions: uniqueRevisions(anchors), ...statusRecord(canonicalCase.lifecycle === "FROZEN" ? "FROZEN" : "NOT_CHECKED") };
     });
-    records.push({ plugin_id: pluginId, canon: path, feature_count: featureRecords.length,
+    records.push({ plugin_id: pluginId, lifecycle: /^\*\*Lifecycle:\s*FROZEN\.?\*\*/mu.test(document) ? "FROZEN" : "ACTIVE",
+      canon: path, feature_count: featureRecords.length,
       acceptance_anchors: parseAcceptanceIds(document), canon_source_revisions: canonSourceRevisions,
       acceptance_cases: acceptanceCases,
       features: featureRecords });
@@ -236,10 +260,11 @@ async function requirements() {
     source_repo: pinSource(source.source).repo, source_revision: pinSource(source.source).revision,
     source_revisions: [pinSource(source.source).revision],
     owner: source.owner, via: source.via, ...statusRecord() }));
-  return { schema: "proprium.authoring.evidence/v1", release_sha: null, registry_digest: null,
+  return { schema: "proprium.authoring.evidence/v2", release_sha: null, registry_digest: null,
     generated_from: { acceptance: "docs/canon/ACCEPTANCE.md", inventory: "docs/canon/RECOVERY-INVENTORY.md",
       traceability: "docs/canon/traceability.json", plugins: records.map(item => item.canon) },
-    matrix: rIds.map(id => ({ id, ...acceptanceMatrix.get(id), ...statusRecord() })),
+    matrix: rIds.map(id => ({ id, ...acceptanceMatrix.get(id),
+      ...statusRecord(acceptanceMatrix.get(id).lifecycle === "FROZEN" ? "FROZEN" : "NOT_CHECKED") })),
     plugins: records, recovered_source: { action_count: sourceActions.length, ui_count: sourceUi.length, tool_count: sourceTools.length,
       source_file_count: sourceFiles.length, source_files: sourceFiles.map(sourceFileRecord),
       source_actions: sourceActions, ui_contributions: sourceUi, source_tools: sourceTools,
@@ -251,6 +276,12 @@ function sha256(value) { return typeof value === "string" && /^[a-f0-9]{64}$/u.t
 function validateOne(item, label, errors, { allowEmptySourceRevisions = false, requireArtifact = false,
   requireAllPluginDigests = false } = {}) {
   if (!evidenceStatuses.includes(item.status)) errors.push(`${label}: invalid status`);
+  if (item.status === "FROZEN" && !["PASS", "FAIL", "BLOCKED", "NOT_CHECKED"].includes(item.pre_freeze_status)) {
+    errors.push(`${label}: FROZEN requires its last pre-freeze implementation status`);
+  }
+  if (item.status !== "FROZEN" && item.pre_freeze_status !== undefined) {
+    errors.push(`${label}: pre_freeze_status is only valid for FROZEN`);
+  }
   if (item.status === "PASS") {
     for (const key of ["fixture", "command", "git_sha", "browser_platform", "input", "output", "receipt", "evidence_ref"]) {
       if (!nonempty(item[key])) errors.push(`${label}: PASS requires ${key}`);
@@ -294,6 +325,10 @@ function audit(actual, required, errors) {
     if (item && (item.canon_title !== expected.canon_title || item.required_proof !== expected.required_proof)) {
       errors.push(`${expected.id}: executable job or required proof differs from ACCEPTANCE.md`);
     }
+    if (item && item.lifecycle !== expected.lifecycle) errors.push(`${expected.id}: lifecycle differs from ACCEPTANCE.md`);
+    if (item && (expected.lifecycle === "FROZEN") !== (item.status === "FROZEN")) {
+      errors.push(`${expected.id}: implementation status must match its canonical lifecycle`);
+    }
   }
   for (const item of actual.matrix ?? []) validateOne(item, item.id, errors, {
     requireArtifact: ["R02", "R13", "R14"].includes(item.id),
@@ -304,7 +339,8 @@ function audit(actual, required, errors) {
   for (const plugin of required.plugins) {
     const ledger = actualPlugins.get(plugin.plugin_id);
     if (!ledger) { errors.push(`${plugin.plugin_id}: missing`); continue; }
-    if (ledger.canon !== plugin.canon || !sameJson(ledger.canon_source_revisions ?? [], plugin.canon_source_revisions)) {
+    if (ledger.canon !== plugin.canon || ledger.lifecycle !== plugin.lifecycle ||
+        !sameJson(ledger.canon_source_revisions ?? [], plugin.canon_source_revisions)) {
       errors.push(`${plugin.plugin_id}: canon path or pinned canon source revisions differ`);
     }
     if (!sameJson([...(ledger.acceptance_anchors ?? [])].sort(), [...plugin.acceptance_anchors].sort())) {
@@ -315,6 +351,10 @@ function audit(actual, required, errors) {
     for (const feature of plugin.features) {
       const record = features.get(feature.feature_id);
       if (!record) { errors.push(`${plugin.plugin_id}/${feature.feature_id}: missing`); continue; }
+      if (record.lifecycle !== feature.lifecycle ||
+          (feature.lifecycle === "FROZEN") !== (record.status === "FROZEN")) {
+        errors.push(`${plugin.plugin_id}/${feature.feature_id}: implementation status must match its canonical lifecycle`);
+      }
       if (JSON.stringify([...(record.acceptance_anchors ?? [])].sort()) !== JSON.stringify([...feature.acceptance_anchors].sort())) {
         errors.push(`${plugin.plugin_id}/${feature.feature_id}: acceptance links differ from canon`);
       }
@@ -358,6 +398,7 @@ function audit(actual, required, errors) {
         const expected = plugin.acceptance_cases.find(item => item.id === id);
         if (!expected || row.canon_title !== expected.canon_title || row.canon_reference !== expected.canon_reference ||
             row.canon_requirement !== expected.canon_requirement ||
+            row.lifecycle !== expected.lifecycle || (expected.lifecycle === "FROZEN") !== (row.status === "FROZEN") ||
             !sameJson(row.feature_ids, expected.feature_ids) ||
             !sameJson(row.source_anchors, expected.source_anchors) ||
             !sameJson(row.source_revisions, expected.source_revisions) || !sameJson(row.canon_source_revisions, expected.canon_source_revisions)) {
@@ -387,7 +428,10 @@ function audit(actual, required, errors) {
   for (const source of required.recovered_source.source_files) {
     const item = sourceFiles.get(`${source.repo}:${source.source_path}`);
     if (!item || item.source_revision !== source.source_revision) errors.push(`immutable source ${source.repo}:${source.source_path} revision differs from traceability.json`);
-    else validateOne(item, `source_files/${source.repo}:${source.source_path}`, errors);
+    else {
+      validateOne(item, `source_files/${source.repo}:${source.source_path}`, errors);
+      if (item.status === "FROZEN") errors.push(`source_files/${source.repo}:${source.source_path}: source parity evidence cannot be FROZEN`);
+    }
   }
   for (const [group, expectedCount] of [["source_actions", required.recovered_source.action_count],
     ["ui_contributions", required.recovered_source.ui_count], ["source_tools", required.recovered_source.tool_count]]) {
@@ -395,7 +439,10 @@ function audit(actual, required, errors) {
     if (actualItems.length !== expectedCount || new Set(actualItems.map(item => item.source_id)).size !== expectedCount) {
       errors.push(`${group}: source parity rows differ from traceability.json`);
     }
-    for (const item of actualItems) validateOne(item, `${group}/${item.source_id}`, errors);
+    for (const item of actualItems) {
+      validateOne(item, `${group}/${item.source_id}`, errors);
+      if (item.status === "FROZEN") errors.push(`${group}/${item.source_id}: source parity evidence cannot be FROZEN`);
+    }
   }
   const actualActionFeatures = new Map((sourceGroups?.source_actions ?? []).map(item => [item.source_id, item.feature_ids]));
   const actualActions = new Map((sourceGroups?.source_actions ?? []).map(item => [item.source_id, item]));
@@ -471,7 +518,19 @@ function audit(actual, required, errors) {
 }
 
 const required = await requirements();
-if (process.argv.includes("--check")) {
+if (process.argv.includes("--refresh-requirements")) {
+  const argument = process.argv[process.argv.indexOf("--refresh-requirements") + 1];
+  const path = argument && !argument.startsWith("--") ? resolve(argument) : outputPath;
+  const { execFileSync } = await import("node:child_process");
+  const revision = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+  const { ledger, changed } = refreshCanonMetadata(JSON.parse(await readFile(path, "utf8")), required, revision);
+  const errors = audit(ledger, required, []);
+  if (errors.length) { console.error(errors.join("\n")); process.exitCode = 1; }
+  else {
+    await writeFile(path, `${JSON.stringify(ledger, null, 2)}\n`);
+    console.log(`Refreshed ${changed} canonical descriptions; historical execution results and superseded descriptions retained.`);
+  }
+} else if (process.argv.includes("--check")) {
   const actual = JSON.parse(await readFile(outputPath, "utf8"));
   const errors = audit(actual, required, []);
   if (errors.length) { console.error(errors.join("\n")); process.exitCode = 1; }

@@ -327,6 +327,13 @@
       "output_schema": {
         "type": "object",
         "properties": {
+          "status": {
+            "enum": [
+              "recognized",
+              "unrecognized",
+              "malformed"
+            ]
+          },
           "parent_id": {
             "type": [
               "string",
@@ -548,6 +555,7 @@
           }
         },
         "required": [
+          "status",
           "parent_id",
           "items",
           "next_cursor",
@@ -5279,6 +5287,64 @@
         },
         "tabs": [
           {
+            "id": "narrative-recognition-tab",
+            "title": "認識と診断",
+            "body": {
+              "id": "narrative-recognition-tabs",
+              "type": "tabs",
+              "title": "作品の状態",
+              "tabs": [
+                {
+                  "id": "narrative-recognition-status",
+                  "title": "認識状態",
+                  "body": {
+                    "id": "narrative-recognition-state",
+                    "type": "status",
+                    "title": "作品構成",
+                    "state": {
+                      "data_key": "last_action_result.status"
+                    },
+                    "messages": {
+                      "recognized": "このリポジトリの作品構成を認識しました。",
+                      "unrecognized": "作品構成は見つかりません。通常のファイル表示はそのまま利用でき、空のリポジトリでは巻を作成して開始できます。",
+                      "malformed": "有効な巻を見つけられませんでした。原稿は変更されていません。診断を確認してください。"
+                    }
+                  }
+                },
+                {
+                  "id": "narrative-recognition-diagnostics",
+                  "title": "診断",
+                  "body": {
+                    "id": "narrative-recognition-diagnostic-list",
+                    "type": "table",
+                    "title": "作品構成の診断",
+                    "rows": {
+                      "data_key": "last_action_result.diagnostics"
+                    },
+                    "columns": [
+                      {
+                        "key": "severity",
+                        "label": "重大度"
+                      },
+                      {
+                        "key": "code",
+                        "label": "コード"
+                      },
+                      {
+                        "key": "path",
+                        "label": "パス"
+                      },
+                      {
+                        "key": "message",
+                        "label": "説明"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
             "id": "narrative-browse",
             "title": "構成",
             "body": {
@@ -5509,7 +5575,7 @@
               "fields": [
                 {
                   "id": "ordered_ids",
-                  "label": "順序（1 行に 1 件）",
+                  "label": "章の順序",
                   "type": "ordered-list",
                   "required": true,
                   "initial_value": {
@@ -5549,7 +5615,7 @@
               "fields": [
                 {
                   "id": "ordered_ids",
-                  "label": "順序（1 行に 1 件）",
+                  "label": "シーンの順序",
                   "type": "ordered-list",
                   "required": true,
                   "initial_value": {
@@ -5860,7 +5926,7 @@
           },
           {
             "id": "ordered_ids",
-            "label": "並べ替え後の ID",
+            "label": "章の順序",
             "type": "ordered-list",
             "required": true,
             "placeholder": "1 行に 1 件の ID"
@@ -5914,7 +5980,7 @@
           },
           {
             "id": "ordered_ids",
-            "label": "並べ替え後の ID",
+            "label": "シーンの順序",
             "type": "ordered-list",
             "required": true,
             "placeholder": "1 行に 1 件の ID"

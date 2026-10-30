@@ -124,6 +124,56 @@ test("official guest dispatches a typed paged entity action against exact Host s
   guest.dispose();
 });
 
+test("shared scene cursor composes source-backed Knowledge projections at one Host snapshot", () => {
+  const host = new HostFixture();
+  const scenePath = "plot/volumes/v1/chapters/c1/scenes/s1.yaml";
+  const sceneContent = [
+    "id: scene-1", "type: scene", "chapter: ch-1", "order: 1", "pov: char-a", "location: loc-a", "appears: [char-a]",
+    "threads:", "  plants: [thread-lantern]", "state_events:", "  - sceneId: scene-1", "    kind: knowledge",
+    "    subject: char-a", "    object: loc-a", "    payload: { knows: harbor-secret }", "    eventId: event-1",
+    "    status: confirmed", "    evidence:", "      - sceneId: scene-1", "        excerpt: 灯台で待った", "manuscript: manuscript/scene.md", "",
+  ].join("\n");
+  const sceneBytes = encode.encode(sceneContent);
+  host.files.set(scenePath, { content: sceneContent, bytes: sceneBytes, revision: createHash("sha256").update(sceneBytes).digest("hex") });
+  const threadPath = "plot/threads/thread-lantern.yaml";
+  const threadContent = "id: thread-lantern\ntype: thread\nname: 灯台の約束\n";
+  const threadBytes = encode.encode(threadContent);
+  host.files.set(threadPath, { content: threadContent, bytes: threadBytes, revision: createHash("sha256").update(threadBytes).digest("hex") });
+  const manuscriptPath = "manuscript/scene.md";
+  const manuscriptContent = "あかりは青い灯台で待った。翌朝、約束を思い出した。\n";
+  const manuscriptBytes = encode.encode(manuscriptContent);
+  host.files.set(manuscriptPath, { content: manuscriptContent, bytes: manuscriptBytes, revision: createHash("sha256").update(manuscriptBytes).digest("hex") });
+
+  guest.initialize({ pluginId: "proprium.knowledge", version: "0.1.0", workspaceId: "workspace-1" });
+  try {
+  const listed = request(host, {}, "knowledge.lenses.scenes");
+  assert.equal(listed.ok, true, JSON.stringify(listed.error));
+  const items = (listed.value as { items: Array<Record<string, unknown>> }).items;
+  assert.deepEqual(items.map(({ id }) => id), ["scene-1"]);
+  const result = request(host, { sceneId: "scene-1" }, "knowledge.lenses.at-scene");
+  assert.equal(result.ok, true, JSON.stringify(result.error));
+  assert.deepEqual(result.snapshot, host.snapshot);
+  const value = result.value as {
+    cursor: { sceneId: string; sourceRevision: string }; location: { id: string };
+    appearances: Array<{ id: string }>; confirmedEvents: Array<{ eventId?: string }>;
+    threadStates: Array<{ threadId: string; status: string }>; readerDisclosures: Array<{ entityId: string }>;
+    timeline: { sceneId: string } | null; facts: Array<{ aspect: string }>;
+    sourceFiles: Array<{ path: string; revision: string }>;
+  };
+  assert.equal(value.cursor.sceneId, "scene-1");
+  assert.equal(value.cursor.sourceRevision, host.files.get(scenePath)?.revision);
+  assert.equal(value.location.id, "loc-a");
+  assert.deepEqual(value.appearances.map(({ id }) => id), ["char-a"]);
+  assert.ok(value.confirmedEvents.some(({ eventId }) => eventId === "event-1"));
+  assert.ok(value.threadStates.some(({ threadId, status }) => threadId === "thread-lantern" && status === "planted"));
+  assert.ok(value.readerDisclosures.some(({ entityId }) => entityId === "char-a"));
+  assert.equal(value.timeline?.sceneId, "scene-1");
+  assert.ok(value.facts.some(({ aspect }) => aspect === "Location"));
+  assert.ok(value.sourceFiles.some(({ path }) => path === "manuscript/scene.md"));
+  assert.ok(host.fileSnapshots.length > 0 && host.fileSnapshots.every((id) => id === host.snapshot.id));
+  } finally { guest.dispose(); }
+});
+
 test("guest rejects unknown input fields before reading workspace bytes", () => {
   guest.initialize({ pluginId: "proprium.knowledge", version: "0.1.0", workspaceId: "workspace-1" });
   const host = new HostFixture();
@@ -154,6 +204,40 @@ test("entity create emits a deterministic Host-reviewed file proposal with an ab
   const read = (change.read_set as Array<Record<string, unknown>>).find((item) => item.path === operation.path);
   assert.equal(read?.revision, null);
   assert.ok(Array.isArray(operation.content));
+  guest.dispose();
+});
+
+test("entity create pins optional quoted source spans in the proposal read set and evidence", () => {
+  guest.initialize({ pluginId: "proprium.knowledge", version: "0.1.0", workspaceId: "workspace-1" });
+  const host = new HostFixture();
+  const expectedCollectionRevision = (request(host, {}, "knowledge.entities.collection-revision").value as { collectionRevision: string }).collectionRevision;
+  const source = "bible/locations/loc-a.yaml";
+  const file = host.files.get(source)!;
+  const quote = "name: Harbor";
+  const start = file.content.indexOf(quote);
+  const result = request(host, {
+    type: "location", expectedCollectionRevision, values: { name: "New Place" },
+    evidence: [{ path: source, revision: file.revision, start, end: start + quote.length, quote }],
+  }, "knowledge.entities.create", "idem-create-evidence");
+  assert.equal(result.ok, true);
+  const change = host.proposals[0]!;
+  assert.ok((change.read_set as Array<Record<string, unknown>>).some((item) => item.path === source && item.revision === file.revision));
+  assert.ok((change.evidence as Array<Record<string, unknown>>).some((item) => item.path === source && item.revision === file.revision &&
+    item.start === start && item.end === start + quote.length && item.quote === quote));
+  assert.deepEqual(change.domain_evidence, [{ kind: "knowledge.entity.create", source_spans: [{ path: source, revision: file.revision,
+    start, end: start + quote.length, quote }] }]);
+  guest.dispose();
+});
+
+test("entity create rejects malformed optional source spans before proposal submission", () => {
+  guest.initialize({ pluginId: "proprium.knowledge", version: "0.1.0", workspaceId: "workspace-1" });
+  const host = new HostFixture();
+  const expectedCollectionRevision = (request(host, {}, "knowledge.entities.collection-revision").value as { collectionRevision: string }).collectionRevision;
+  const result = request(host, { type: "location", expectedCollectionRevision, values: { name: "New Place" },
+    evidence: [{ path: "../outside.md", revision: "a".repeat(64), start: 0, end: 1, quote: "x" }] },
+  "knowledge.entities.create", "idem-create-invalid-evidence");
+  assert.equal(result.ok, false);
+  assert.equal(host.proposals.length, 0);
   guest.dispose();
 });
 

@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { pathToFileURL, fileURLToPath } from "node:url";
 const schemaPath = process.env.PROPRIUM_AUTHORING_SCHEMA ?? fileURLToPath(new URL("../../app/src/browser/proprium/authoring/schema.ts", import.meta.url));
-const { assertDescriptor, assertSurface } = await import(pathToFileURL(schemaPath).href);
+const { assertDescriptor, assertSurface, assertValue } = await import(pathToFileURL(schemaPath).href);
 import { createResearchHandlers } from "./guest.js";
 
 test("Research official manifest declares every implemented action and only actionable Host surfaces", async () => {
@@ -26,7 +26,7 @@ test("Research official manifest declares every implemented action and only acti
   const handlers = createResearchHandlers();
   const actionIds = metadata.actions.map((value) => {
     assertDescriptor(value);
-    return value.action_id;
+    return (value as { action_id: string }).action_id;
   });
   assert.equal(new Set(actionIds).size, actionIds.length);
   assert.deepEqual([...actionIds].sort(), Object.keys(handlers).sort());
@@ -58,6 +58,54 @@ test("Research official manifest declares every implemented action and only acti
   }
   assert.ok(bindings.length > 0);
   for (const actionId of bindings) assert.ok(actionIds.includes(actionId), `surface binding references undeclared action ${actionId}`);
+});
+
+test("Research index jobs use Host task IDs, bounded steps and distinct Host-owned status/cancel contracts", async () => {
+  const metadata = JSON.parse(await readFile(new URL("./plugin.json", import.meta.url), "utf8"));
+  const action = (id: string) => metadata.actions.find((item: any) => item.action_id === id);
+  const rebuild = action("research.index.rebuild");
+  const step = action("research.index.step");
+  const status = action("research.task.status");
+  const cancel = action("research.task.cancel");
+  const hostSnapshot = { id: "snapshot-1", local_commit: "a".repeat(40), worktree_generation: "worktree-1", draft_generation: null };
+  assert.equal(rebuild.requires_user_gesture, true);
+  assert.deepEqual(rebuild.callers, ["ui"]);
+  assertValue(rebuild.input_schema, {}, "Host task ID injection remains optional to declarative rebuild callers");
+  assertValue(rebuild.input_schema, { taskId: "task-1" }, "Host-created rebuild task ID");
+  assertValue(rebuild.output_schema, { snapshot: hostSnapshot, taskId: "task-1", jobId: "task-1", state: "running", phase: "source_scan",
+    completed: 0, total: 0, progress: { completed: 0, total: 0 } }, "start result with an indeterminate source scan");
+  assert.equal(step.requires_user_gesture, false);
+  assert.deepEqual(step.callers, ["ui"]);
+  assertValue(step.input_schema, { taskId: "task-1", sequence: 1 }, "Host-issued Research task step");
+  assertValue(step.output_schema, { snapshot: hostSnapshot, taskId: "task-1", state: "running", phase: "index_build", completed: 1, total: 2 }, "step result");
+  assert.deepEqual(status.required_capabilities, []);
+  assertValue(status.output_schema, { snapshot: hostSnapshot, activeTasks: [] }, "Host task status");
+  assert.equal(cancel.requires_user_gesture, true);
+  assertValue(cancel.output_schema, { snapshot: hostSnapshot, taskId: "task-1", cancelled: true }, "Host task cancellation");
+});
+
+test("search fusion accepts typed Host action results only from the user interface", async () => {
+  const metadata = JSON.parse(await readFile(new URL("./plugin.json", import.meta.url), "utf8"));
+  const action = metadata.actions.find((item: any) => item.action_id === "research.search.fuse");
+  assert.equal(action.effect, "read");
+  assert.deepEqual(action.callers, ["ui"]);
+  assert.ok(action.required_capabilities.includes("workspace.file.read"));
+  assert.ok(action.required_capabilities.includes("workspace.derived.cache"));
+  assert.ok(!action.required_capabilities.includes("workspace.change.propose"));
+});
+
+test("synonym contracts support absent groups and revision-bound add or merge proposals", async () => {
+  const metadata = JSON.parse(await readFile(new URL("./plugin.json", import.meta.url), "utf8"));
+  const lookup = metadata.actions.find((item: any) => item.action_id === "research.synonyms.get");
+  const propose = metadata.actions.find((item: any) => item.action_id === "research.synonyms.propose");
+
+  assertValue(lookup.output_schema, { group: null, alternatives: [], fileRevision: null }, "empty synonym lookup");
+  assertValue(propose.input_schema, { words: ["灯", "明かり"], expectedFileRevision: null }, "new synonym group");
+  assertValue(propose.input_schema, {
+    words: ["山", "峰"], context: "positive",
+    mergeGroupRef: { fileRevision: "a".repeat(64), ordinal: 0, words: ["山", "丘"], context: "positive" },
+    expectedFileRevision: "a".repeat(64),
+  }, "revision-bound synonym merge");
 });
 
 test("analyzer exposes local literal analysis and its results", async () => {

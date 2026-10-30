@@ -21,11 +21,13 @@ function file(path: string, text: string): FixtureFile {
 
 class ResearchHostFixture {
   readonly files = new Map<string, FixtureFile>();
+  readonly snapshotIds = new Set([snapshot.id]);
   readonly calls: Array<{ operation: string; payload: Record<string, unknown> }> = [];
   readonly proposals: ChangeSet[] = [];
   readonly cache = new Map<string, unknown>();
   readonly artifacts = new Map<string, { bytes: number[]; nextSequence: number; filename: string; mediaType: string; sealed?: boolean }>();
   failArtifactAppend = false;
+  failCachePutOnce = false;
   private artifactSequence = 0;
 
   request<T>(operation: string, payload: Record<string, unknown>): Generator<HostCall, T, unknown> {
@@ -46,7 +48,7 @@ class ResearchHostFixture {
     if (operation === "workspace.file.read") {
       const entry = this.files.get(payload.path as string);
       if (!entry) throw Object.assign(new Error("missing"), { code: "file_not_found" });
-      if (payload.snapshot && (payload.snapshot as Snapshot).id !== snapshot.id) throw new Error("wrong snapshot");
+      if (payload.snapshot && !this.snapshotIds.has((payload.snapshot as Snapshot).id)) throw new Error("wrong snapshot");
       const offset = payload.offset as number;
       const length = payload.length as number;
       const bytes = [...entry.bytes.slice(offset, offset + length)];
@@ -86,6 +88,10 @@ class ResearchHostFixture {
       return this.cache.has(key) ? { found: true, value: this.cache.get(key) } : { found: false };
     }
     if (operation === "workspace.derived.cache.put") {
+      if (this.failCachePutOnce) {
+        this.failCachePutOnce = false;
+        throw Object.assign(new Error("cache write failed"), { code: "storage_unknown" });
+      }
       this.cache.set(JSON.stringify(payload.key as CacheKey), payload.value);
       return { stored: true };
     }
@@ -103,11 +109,12 @@ async function invoke(
   hostFixture: ResearchHostFixture,
   actionId: string,
   input: Record<string, unknown>,
-  options: { idempotencyKey?: string; scope?: ActionRequest["scope"] } = {},
+  options: { idempotencyKey?: string; scope?: ActionRequest["scope"]; snapshot?: Snapshot } = {},
 ): Promise<unknown> {
+  const requestSnapshot = options.snapshot ?? snapshot;
   const context: ActionRequest = {
     schema_version: 1, request_id: `request-${actionId}`, plugin_id: "proprium.research", action_id: actionId,
-    scope: options.scope ?? scope, snapshot, input, deadline_ms: 30_000,
+    scope: options.scope ?? scope, snapshot: requestSnapshot, input, deadline_ms: 30_000,
     ...(options.idempotencyKey ? { idempotency_key: options.idempotencyKey } : {}),
   };
   const guestHost: GuestHost = { request: hostFixture.request.bind(hostFixture) };
@@ -121,6 +128,15 @@ async function invoke(
     catch (error) { state = iterator.throw(error); }
   }
   return state.value;
+}
+
+async function rebuildResearchIndex(host: ResearchHostFixture, handlers = createResearchHandlers(), taskId = "research-test-task") {
+  let result = await invoke(handlers["research.index.rebuild"]!, host, "research.index.rebuild", { taskId }) as Record<string, unknown>;
+  let sequence = 0;
+  while (result.state === "running") {
+    result = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence: ++sequence }) as Record<string, unknown>;
+  }
+  return result;
 }
 
 test("search values match the signed schema with and without envelope warnings", async () => {
@@ -145,6 +161,8 @@ test("search values match the signed schema with and without envelope warnings",
       assertValue(outputSchema, output.value, "Research query output");
       assert.equal(output.value.hits[0].path, item.path);
       assert.deepEqual(output.warnings, morphologyHints ? ["tokenizer_unavailable"] : []);
+      assert.deepEqual(output.value.snapshot, snapshot);
+      assert.equal(output.value.scope, null);
       assert.equal(Object.hasOwn(output.value, "warnings"), false);
     } finally { guest.dispose(); }
   }
@@ -202,8 +220,8 @@ test("index status reads Host metadata and a new guest verifies cached source re
   const source = file("manuscript/volume/chapter.md", "The lantern in the rain.");
   host.files.set(source.path, source);
   const firstHandlers = createResearchHandlers();
-  const rebuilt = await invoke(firstHandlers["research.index.rebuild"]!, host, "research.index.rebuild", {}) as { state: string; indexSnapshot: string };
-  assert.equal(rebuilt.state, "current");
+  const rebuilt = await rebuildResearchIndex(host, firstHandlers) as { state: string; indexSnapshot: string };
+  assert.equal(rebuilt.state, "complete");
   assert.equal(rebuilt.indexSnapshot, snapshot.id);
   assert.ok([...host.cache.values()].some((value) => value && typeof value === "object" && (value as Record<string, unknown>).schemaVersion === 1));
 
@@ -215,9 +233,367 @@ test("index status reads Host metadata and a new guest verifies cached source re
   const queryCallsStart = host.calls.length;
   const page = await invoke(createResearchHandlers()["research.query"]!, host, "research.query", { query: "lantern", includeTerms: false }) as { hits: Array<{ path: string; navigationSpan: unknown }> };
   assert.equal(page.hits[0]?.path, source.path);
-  assert.deepEqual(page.hits[0]?.navigationSpan, { path: source.path, revision: source.revision, start: 4, end: 11 });
+  assert.deepEqual(page.hits[0]?.navigationSpan, { path: source.path, revision: source.revision, start: 4, end: 11, quote: "lantern" });
   assert.ok(host.calls.slice(queryCallsStart).some(({ operation }) => operation === "workspace.derived.cache.get"));
   assert.equal(host.calls.slice(queryCallsStart).some(({ operation }) => operation === "workspace.file.read"), false);
+});
+
+test("Research rebuild pages source metadata, reads one file per step, and publishes bounded cache chunks", async () => {
+  const host = new ResearchHostFixture();
+  for (let index = 0; index < 3; index++) host.files.set(`manuscript/a-${index}.md`, file(`manuscript/a-${index}.md`, `lighthouse passage ${index}`));
+  const handlers = createResearchHandlers();
+  const taskId = "research-stepped-task";
+  const startCallCount = host.calls.length;
+  const started = await invoke(handlers["research.index.rebuild"]!, host, "research.index.rebuild", { taskId }) as Record<string, unknown>;
+  assert.deepEqual({ state: started.state, phase: started.phase, completed: started.completed, total: started.total },
+    { state: "running", phase: "source_scan", completed: 0, total: 0 });
+  assert.equal(host.calls.length, startCallCount, "starting the task does not enumerate the full source tree");
+  const inProgress = await invoke(handlers["research.index.status"]!, host, "research.index.status", {}) as Record<string, unknown>;
+  assert.equal(inProgress.state, "indexing");
+  assert.deepEqual(inProgress.progress, { completed: 0, total: 0 });
+  let result: Record<string, unknown> = started;
+  let sequence = 0;
+  const listCounts: number[] = [];
+  while (result.phase === "source_scan") {
+    const before = host.calls.filter(({ operation }) => operation === "workspace.file.list").length;
+    result = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence: ++sequence }) as Record<string, unknown>;
+    const after = host.calls.filter(({ operation }) => operation === "workspace.file.list").length;
+    assert.ok(after - before <= 1, "each source scan step lists at most one Host page");
+    listCounts.push(after - before);
+  }
+  assert.deepEqual(listCounts, [1, 1, 1, 1]);
+  assert.deepEqual({ phase: result.phase, completed: result.completed, total: result.total }, { phase: "index_build", completed: 0, total: 3 });
+  const readCountBeforeFirstBuild = host.calls.filter(({ operation }) => operation === "workspace.file.read").length;
+  result = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence: ++sequence }) as Record<string, unknown>;
+  assert.equal(result.completed, 1);
+  assert.equal(host.calls.filter(({ operation }) => operation === "workspace.file.read").length - readCountBeforeFirstBuild, 1);
+  const callsBeforeResume = host.calls.length;
+  const resumed = await invoke(handlers["research.index.rebuild"]!, host, "research.index.rebuild", { taskId }) as Record<string, unknown>;
+  assert.deepEqual({ phase: resumed.phase, completed: resumed.completed, total: resumed.total }, { phase: "index_build", completed: 1, total: 3 });
+  assert.equal(host.calls.length, callsBeforeResume, "explicit resume keeps the in-flight build cursor");
+  for (let completed = 2; completed <= 3; completed++) {
+    const readCount = host.calls.filter(({ operation }) => operation === "workspace.file.read").length;
+    result = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence: ++sequence }) as Record<string, unknown>;
+    assert.equal(host.calls.filter(({ operation }) => operation === "workspace.file.read").length - readCount, 1,
+      "each index build step reads at most one source file");
+    if (completed < 3) assert.equal(result.completed, completed);
+    else assert.equal(result.phase, "cache_publish");
+  }
+  assert.equal(result.phase, "cache_publish");
+  const priorManifests = [...host.cache.values()].filter((value) => value && typeof value === "object" &&
+    (value as Record<string, unknown>).snapshotId === snapshot.id && Array.isArray((value as Record<string, unknown>).chunkDigests));
+  assert.equal(priorManifests.length, 0, "the cache is not committed before all chunks are published");
+  const publishChunk = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence: ++sequence }) as Record<string, unknown>;
+  assert.equal(publishChunk.state, "running");
+  assert.equal(publishChunk.phase, "cache_publish");
+  assert.equal(publishChunk.completed, publishChunk.total);
+  assert.equal([...host.cache.values()].some((value) => value && typeof value === "object" &&
+    Array.isArray((value as Record<string, unknown>).chunkDigests)), false, "the manifest is committed in a separate step");
+  const published = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence: ++sequence }) as Record<string, unknown>;
+  assert.deepEqual({ state: published.state, phase: published.phase, completed: published.completed, total: published.total },
+    { state: "complete", phase: "complete", completed: 1, total: 1 });
+  const query = await invoke(handlers["research.query"]!, host, "research.query", { query: "lighthouse", includeTerms: false }) as { hits: unknown[] };
+  assert.equal(query.hits.length, 3);
+});
+
+test("Research source scan advances one 256-entry page per task step", async () => {
+  const host = new ResearchHostFixture();
+  for (let index = 0; index < 260; index++) {
+    const path = `manuscript/source-${String(index).padStart(3, "0")}.md`;
+    host.files.set(path, file(path, `source ${index}`));
+    const plotPath = `plot/source-${String(index).padStart(3, "0")}.md`;
+    host.files.set(plotPath, file(plotPath, `source ${index}`));
+  }
+  const handlers = createResearchHandlers();
+  const taskId = "research-paged-scan";
+  const started = await invoke(handlers["research.index.rebuild"]!, host, "research.index.rebuild", { taskId }) as Record<string, unknown>;
+  assert.equal(started.phase, "source_scan");
+  for (let sequence = 1; sequence <= 2; sequence++) {
+    const before = host.calls.filter(({ operation }) => operation === "workspace.file.list").length;
+    const progress = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence }) as Record<string, unknown>;
+    const listingCalls = host.calls.filter(({ operation }) => operation === "workspace.file.list").slice(before);
+    assert.equal(listingCalls.length, 1);
+    assert.equal(listingCalls[0]!.payload.limit, 256);
+    assert.equal(progress.phase, "source_scan");
+    assert.equal(progress.completed, sequence);
+    assert.equal(progress.total, 0, "the Host reports source-scan progress as indeterminate");
+  }
+  const status = await invoke(handlers["research.index.status"]!, host, "research.index.status", {}) as Record<string, unknown>;
+  assert.deepEqual(status.coverage, { documents: 260, bytes: 2_490 });
+  assert.deepEqual(status.progress, { completed: 2, total: 0 });
+  let result: Record<string, unknown> = { phase: "source_scan" };
+  for (let sequence = 3; sequence <= 6; sequence++) {
+    const before = host.calls.filter(({ operation }) => operation === "workspace.file.list").length;
+    result = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence }) as Record<string, unknown>;
+    assert.equal(host.calls.filter(({ operation }) => operation === "workspace.file.list").length - before, 1);
+    assert.equal(result.phase, sequence < 6 ? "source_scan" : "index_build");
+  }
+  assert.deepEqual({ phase: result.phase, completed: result.completed, total: result.total }, { phase: "index_build", completed: 0, total: 520 });
+  const fullCoverage = await invoke(handlers["research.index.status"]!, host, "research.index.status", {}) as Record<string, unknown>;
+  assert.deepEqual(fullCoverage.coverage, { documents: 520, bytes: 4_980 });
+});
+
+test("Research explicit same-session resume keeps the guest page cursor", async () => {
+  const host = new ResearchHostFixture();
+  host.files.set("manuscript/resume.md", file("manuscript/resume.md", "cursor remains in this guest"));
+  const handlers = createResearchHandlers();
+  const taskId = "research-resume-cursor";
+  await invoke(handlers["research.index.rebuild"]!, host, "research.index.rebuild", { taskId });
+  const firstPage = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence: 1 }) as Record<string, unknown>;
+  assert.equal(firstPage.completed, 1);
+  const listCalls = host.calls.filter(({ operation }) => operation === "workspace.file.list").length;
+  const resumed = await invoke(handlers["research.index.rebuild"]!, host, "research.index.rebuild", { taskId }) as Record<string, unknown>;
+  assert.deepEqual({ state: resumed.state, phase: resumed.phase, completed: resumed.completed, total: resumed.total },
+    { state: "running", phase: "source_scan", completed: 1, total: 0 });
+  assert.equal(host.calls.filter(({ operation }) => operation === "workspace.file.list").length, listCalls,
+    "resume reports the retained cursor without rescanning");
+  const nextPage = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence: 2 }) as Record<string, unknown>;
+  assert.equal(nextPage.completed, 2);
+});
+
+test("Research retries a failed cache checkpoint with the same task sequence", async () => {
+  const host = new ResearchHostFixture();
+  host.files.set("manuscript/retry-cache.md", file("manuscript/retry-cache.md", "retry the bounded cache write"));
+  const handlers = createResearchHandlers();
+  const taskId = "research-cache-retry";
+  await invoke(handlers["research.index.rebuild"]!, host, "research.index.rebuild", { taskId });
+  let sequence = 0;
+  let result: Record<string, unknown>;
+  do {
+    result = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence: ++sequence }) as Record<string, unknown>;
+  } while (result.phase !== "cache_publish");
+
+  host.failCachePutOnce = true;
+  await assert.rejects(invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence: ++sequence }), /cache write failed/u);
+  const retry = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence }) as Record<string, unknown>;
+  assert.equal(retry.state, "running");
+  assert.equal(retry.phase, "cache_publish");
+  assert.equal([...host.cache.keys()].filter((key) => (JSON.parse(key) as CacheKey).key.includes(":data:")).length, 1);
+});
+
+test("Research cache publication splits more than 64 serialized records across Host steps", async () => {
+  const host = new ResearchHostFixture();
+  for (let index = 0; index < 65; index++) {
+    const path = `manuscript/cache-${String(index).padStart(2, "0")}.md`;
+    host.files.set(path, file(path, `cache record ${index}`));
+  }
+  const handlers = createResearchHandlers();
+  const taskId = "research-cache-slicing";
+  await invoke(handlers["research.index.rebuild"]!, host, "research.index.rebuild", { taskId });
+  let sequence = 0;
+  let result: Record<string, unknown>;
+  do {
+    result = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence: ++sequence }) as Record<string, unknown>;
+  } while (result.phase !== "cache_publish");
+
+  const cachePutsBefore = host.calls.filter(({ operation }) => operation === "workspace.derived.cache.put").length;
+  const first = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence: ++sequence }) as Record<string, unknown>;
+  assert.equal(first.state, "running");
+  assert.equal(first.phase, "cache_publish");
+  const firstChunkData = [...host.cache.entries()].filter(([key]) => (JSON.parse(key) as CacheKey).key.includes(":data:"));
+  assert.equal(firstChunkData.length, 1, "the first publication step stores one bounded data chunk");
+  assert.equal(host.calls.filter(({ operation }) => operation === "workspace.derived.cache.put").length - cachePutsBefore, 2,
+    "one chunk step stores its recovery marker and data");
+  assert.equal([...host.cache.values()].some((value) => value && typeof value === "object" &&
+    Array.isArray((value as Record<string, unknown>).chunkDigests)), false);
+
+  const callsBeforeResume = host.calls.length;
+  const resumed = await invoke(handlers["research.index.rebuild"]!, host, "research.index.rebuild", { taskId }) as Record<string, unknown>;
+  assert.deepEqual({ phase: resumed.phase, completed: resumed.completed, total: resumed.total },
+    { phase: "cache_publish", completed: first.completed as number, total: first.total as number });
+  assert.equal(host.calls.length, callsBeforeResume, "explicit resume does not republish an already confirmed chunk");
+
+  const second = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence: ++sequence }) as Record<string, unknown>;
+  assert.equal(second.state, "running");
+  const allChunkData = [...host.cache.keys()].filter((key) => (JSON.parse(key) as CacheKey).key.includes(":data:"));
+  assert.equal(allChunkData.length, 2, "the remaining record is published in its own bounded step");
+  const completed = await invoke(handlers["research.index.step"]!, host, "research.index.step", { taskId, sequence: ++sequence }) as Record<string, unknown>;
+  assert.equal(completed.state, "complete");
+  const manifest = [...host.cache.values()].find((value) => value && typeof value === "object" &&
+    (value as Record<string, unknown>).schemaVersion === 1 && Array.isArray((value as Record<string, unknown>).chunkDigests)) as Record<string, unknown> | undefined;
+  assert.equal(manifest?.chunkCount, 2);
+  assert.equal(host.cache.size, 3, "the committed cache contains only the manifest and its two data chunks");
+});
+
+test("a reloaded Research guest removes partial staged chunks in bounded steps and restarts from its pinned snapshot", async () => {
+  const host = new ResearchHostFixture();
+  for (let index = 0; index < 65; index++) {
+    const path = `manuscript/reload-${String(index).padStart(2, "0")}.md`;
+    host.files.set(path, file(path, `reload record ${index}`));
+  }
+  const taskId = "research-reload-stage-cleanup";
+  const firstGuest = createResearchHandlers();
+  await invoke(firstGuest["research.index.rebuild"]!, host, "research.index.rebuild", { taskId });
+  let sequence = 0;
+  let result: Record<string, unknown>;
+  do {
+    result = await invoke(firstGuest["research.index.step"]!, host, "research.index.step", { taskId, sequence: ++sequence }) as Record<string, unknown>;
+  } while (result.phase !== "cache_publish");
+  await invoke(firstGuest["research.index.step"]!, host, "research.index.step", { taskId, sequence: ++sequence });
+  assert.equal([...host.cache.keys()].filter((key) => (JSON.parse(key) as CacheKey).key.includes(":data:")).length, 1);
+  assert.equal([...host.cache.values()].some((value) => value && typeof value === "object" &&
+    Array.isArray((value as Record<string, unknown>).chunkDigests)), false, "partial chunks have no committed manifest");
+
+  const restartedGuest = createResearchHandlers();
+  const restarted = await invoke(restartedGuest["research.index.rebuild"]!, host, "research.index.rebuild", { taskId }) as Record<string, unknown>;
+  assert.equal(restarted.phase, "source_scan");
+  for (const [sequence, expectedCacheKey] of [[1, ":data:"], [2, "staging-manifest"]] as const) {
+    const before = host.calls.length;
+    const progress = await invoke(restartedGuest["research.index.step"]!, host, "research.index.step", { taskId, sequence }) as Record<string, unknown>;
+    const newCalls = host.calls.slice(before);
+    assert.equal(newCalls.some(({ operation }) => operation === "workspace.file.list"), false,
+      "restart cleanup does not combine eviction with a source scan");
+    assert.ok(newCalls.some(({ operation, payload }) => operation === "workspace.derived.cache.evict" &&
+      (JSON.stringify(payload.key) as string).includes(expectedCacheKey)));
+    assert.equal(progress.phase, "source_scan");
+  }
+  assert.equal([...host.cache.keys()].some((key) => (JSON.parse(key) as CacheKey).key.includes(":data:")), false);
+  assert.equal([...host.cache.values()].some((value) => value && typeof value === "object" &&
+    (value as Record<string, unknown>).schemaVersion === 1 && "digest" in (value as Record<string, unknown>)), false,
+    "the partial publication marker is removed");
+  const beforeScan = host.calls.filter(({ operation }) => operation === "workspace.file.list").length;
+  const firstScan = await invoke(restartedGuest["research.index.step"]!, host, "research.index.step", { taskId, sequence: 3 }) as Record<string, unknown>;
+  assert.equal(host.calls.filter(({ operation }) => operation === "workspace.file.list").length - beforeScan, 1);
+  assert.equal(firstScan.completed, 1);
+});
+
+test("changed snapshots reread only changed and added files while removing deleted entries", async () => {
+  const host = new ResearchHostFixture();
+  for (const [path, text] of [
+    ["manuscript/changed.md", "old lighthouse"],
+    ["manuscript/removed.md", "harbor removed"],
+    ["manuscript/unchanged.md", "quiet harbor"],
+  ]) host.files.set(path, file(path, text));
+  const handlers = createResearchHandlers();
+  const original = await invoke(handlers["research.query"]!, host, "research.query", { query: "harbor", includeTerms: false }) as { hits: Array<{ path: string }> };
+  assert.deepEqual(original.hits.map(({ path }) => path), ["manuscript/removed.md", "manuscript/unchanged.md"]);
+
+  host.files.set("manuscript/changed.md", file("manuscript/changed.md", "new beacon"));
+  host.files.delete("manuscript/removed.md");
+  host.files.set("manuscript/added.md", file("manuscript/added.md", "distant beacon"));
+  const nextSnapshot: Snapshot = { ...snapshot, id: "snapshot-2", worktree_generation: "generation-2", draft_generation: "draft-2" };
+  host.snapshotIds.add(nextSnapshot.id);
+  const nextScope = { ...scope, generation: "scope-2" };
+  const readStart = host.calls.length;
+  const updated = await invoke(handlers["research.query"]!, host, "research.query", { query: "beacon", includeTerms: false }, {
+    scope: nextScope, snapshot: nextSnapshot,
+  }) as { hits: Array<{ path: string }> };
+
+  assert.deepEqual(updated.hits.map(({ path }) => path), ["manuscript/added.md", "manuscript/changed.md"]);
+  assert.deepEqual(host.calls.slice(readStart).filter(({ operation }) => operation === "workspace.file.read").map(({ payload }) => payload.path).sort(), [
+    "manuscript/added.md", "manuscript/changed.md",
+  ]);
+  const nextSnapshotManifests = [...host.cache.values()].filter((value) => value && typeof value === "object" &&
+    (value as Record<string, unknown>).snapshotId === nextSnapshot.id);
+  assert.ok(nextSnapshotManifests.length > 0, "the updated snapshot is sealed into its own cache namespace");
+});
+
+test("UI-only search fusion validates both Host envelopes and source spans before RRF", async () => {
+  const host = new ResearchHostFixture();
+  const source = file("manuscript/lantern.md", "The lantern opens the sea.\n");
+  host.files.set(source.path, source);
+  const handlers = createResearchHandlers();
+  const lexicalValue = await invoke(handlers["research.query"]!, host, "research.query", {
+    query: "lantern", mode: "lexical", limit: 30, includeTerms: false,
+  }) as Record<string, unknown>;
+  const quote = "The lantern opens the sea.";
+  const span = { path: source.path, revision: source.revision, start: 0, end: quote.length, quote };
+  const vectorValue = {
+    snapshot,
+    model: { id: "e5-small", revision: "v1", role: "embedding", dimensions: 384, digest: "d".repeat(64) },
+    results: [{ entityId: "scene-a", sourcePath: source.path, sourceRevision: source.revision, sentenceIndex: 0,
+      quote, cosineScore: 0.91, rank: 1, indexCoverage: 1, evidence: [span] }],
+  };
+  const fusionInput = {
+    mode: "hybrid", query: "lantern", limit: 30,
+    lexicalResult: { scope, snapshot, value: lexicalValue },
+    vectorResult: { scope, snapshot, query: "lantern", granularity: "sentence", value: vectorValue },
+  };
+  const result = await invoke(handlers["research.search.fuse"]!, host, "research.search.fuse", fusionInput) as {
+    snapshot: Snapshot; snapshotId: string; hits: Array<{ path: string; source: string; navigationSpan: { quote: string }; semanticCandidate?: { sentenceIndex: number } }>;
+    expressionStatus: { state: string }; warnings: string[];
+  };
+  const schemaPath = process.env.PROPRIUM_AUTHORING_SCHEMA ?? fileURLToPath(new URL("../../app/src/browser/proprium/authoring/schema.ts", import.meta.url));
+  const { assertValue } = await import(pathToFileURL(schemaPath).href);
+  const metadata = JSON.parse(readFileSync(new URL("./plugin.json", import.meta.url), "utf8"));
+  const descriptor = metadata.actions.find((row: any) => row.action_id === "research.search.fuse");
+  assertValue(descriptor.input_schema, fusionInput, "Research fusion input");
+  assertValue(descriptor.output_schema, result, "Research fusion output");
+  assert.equal(result.snapshotId, snapshot.id);
+  assert.deepEqual(result.snapshot, snapshot);
+  assert.equal(result.hits[0]?.path, source.path);
+  assert.equal(result.hits[0]?.source, "hybrid");
+  assert.equal(result.hits[0]?.navigationSpan.quote, quote);
+  assert.equal(result.hits[0]?.semanticCandidate?.sentenceIndex, 0);
+  assert.equal(result.expressionStatus.state, "not_requested");
+
+  await assert.rejects(() => invoke(handlers["research.search.fuse"]!, host, "research.search.fuse", {
+    ...fusionInput, vectorResult: { ...fusionInput.vectorResult, snapshot: { ...snapshot, id: "old-snapshot" } },
+  }), /another Host scope, snapshot, query, or granularity/u);
+  await assert.rejects(() => invoke(handlers["research.search.fuse"]!, host, "research.search.fuse", {
+    ...fusionInput, vectorResult: { ...fusionInput.vectorResult, value: { ...vectorValue,
+      results: [{ ...vectorValue.results[0], quote: "forged quote" }] } },
+  }), /not a current source-backed result/u);
+});
+
+test("path-scoped fusion filters the global Semantic page without changing provider ranks", async () => {
+  const host = new ResearchHostFixture();
+  const inside = file("manuscript/in-scope/lantern.md", "The lantern waits inside.\n");
+  const outside = file("manuscript/other/lantern.md", "The lantern waits outside.\n");
+  host.files.set(inside.path, inside); host.files.set(outside.path, outside);
+  const handlers = createResearchHandlers();
+  const pathScope = "manuscript/in-scope";
+  const lexicalValue = await invoke(handlers["research.query"]!, host, "research.query", {
+    query: "lantern", mode: "lexical", scope: pathScope, limit: 30, includeTerms: false,
+  }) as Record<string, unknown>;
+  const outsideQuote = "The lantern waits outside.";
+  const insideQuote = "The lantern waits inside.";
+  const vectorValue = {
+    snapshot,
+    model: { id: "e5-small", revision: "v1", role: "embedding" },
+    results: [
+      { entityId: "scene-outside", sourcePath: outside.path, sourceRevision: outside.revision, sentenceIndex: 0,
+        quote: outsideQuote, cosineScore: 0.95, rank: 1, indexCoverage: 1,
+        evidence: [{ path: outside.path, revision: outside.revision, start: 0, end: outsideQuote.length, quote: outsideQuote }] },
+      { entityId: "scene-inside", sourcePath: inside.path, sourceRevision: inside.revision, sentenceIndex: 0,
+        quote: insideQuote, cosineScore: 0.90, rank: 2, indexCoverage: 1,
+        evidence: [{ path: inside.path, revision: inside.revision, start: 0, end: insideQuote.length, quote: insideQuote }] },
+    ],
+  };
+  const result = await invoke(handlers["research.search.fuse"]!, host, "research.search.fuse", {
+    mode: "hybrid", query: "lantern", scope: pathScope, limit: 30,
+    lexicalResult: { scope, snapshot, value: lexicalValue },
+    vectorResult: { scope, snapshot, query: "lantern", granularity: "sentence", value: vectorValue },
+  }) as { scope: string | null; hits: Array<{ path: string; semanticRank: number | null; scoreFactors: string[] }> };
+  assert.equal(result.scope, pathScope);
+  assert.deepEqual(result.hits.map(({ path }) => path), [inside.path]);
+  assert.equal(result.hits[0]?.semanticRank, 2);
+  assert.ok(result.hits[0]?.scoreFactors.includes("rrf-semantic:1/62"));
+});
+
+test("expression fusion reports tokenizer denial while preserving its validated hybrid candidates", async () => {
+  const host = new ResearchHostFixture();
+  const source = file("manuscript/lantern.md", "The lantern opens the sea.\n");
+  host.files.set(source.path, source);
+  const handlers = createResearchHandlers();
+  const lexicalValue = await invoke(handlers["research.query"]!, host, "research.query", {
+    query: "lantern", mode: "lexical", limit: 30, includeTerms: false,
+  }) as Record<string, unknown>;
+  const quote = "The lantern opens the sea.";
+  const vectorValue = { snapshot, model: { id: "e5-small", revision: "v1", role: "embedding" }, results: [
+    { entityId: "scene-a", sourcePath: source.path, sourceRevision: source.revision, sentenceIndex: 0,
+      quote, cosineScore: 0.91, rank: 1, indexCoverage: 1,
+      evidence: [{ path: source.path, revision: source.revision, start: 0, end: quote.length, quote }] },
+  ] };
+  const result = await invoke(handlers["research.search.fuse"]!, host, "research.search.fuse", {
+    mode: "expression", query: "lantern", limit: 30,
+    lexicalResult: { scope, snapshot, value: lexicalValue },
+    vectorResult: { scope, snapshot, query: "lantern", granularity: "sentence", value: vectorValue },
+  }) as { expressionStatus: { state: string; reason?: string }; hits: unknown[]; warnings: string[] };
+  assert.equal(result.expressionStatus.state, "unavailable");
+  assert.equal(result.expressionStatus.reason, "dependency_unavailable");
+  assert.equal(result.hits.length, 1);
+  assert.ok(result.warnings.includes("expression_tokenizer_unavailable"));
 });
 
 test("token counting labels an explicitly selected approximation and rejects unavailable or unsafe models", async () => {
@@ -337,6 +713,40 @@ test("synonym and candidate preference proposals preserve YAML comments and exte
   assert.match(ignoreText, /keep this note/u);
   assert.match(ignoreText, /owner: author/u);
   assert.doesNotMatch(ignoreText, /雨雲/u);
+});
+
+test("candidate ignore list reads the current revision and reports terms in deterministic order", async () => {
+  const host = new ResearchHostFixture();
+  const ignored = file(IGNORED, "owner: author\nignored:\n  - zebra\n  - 雨雲\n  - alpha\n");
+  host.files.set(ignored.path, ignored);
+  const result = await invoke(createResearchHandlers()["research.candidates.ignore.list"]!, host, "research.candidates.ignore.list", {}) as {
+    snapshot: Snapshot; fileRevision: string; terms: string[];
+  };
+  assert.deepEqual(result, { snapshot, fileRevision: ignored.revision, terms: ["alpha", "zebra", "雨雲"] });
+  const missing = await invoke(createResearchHandlers()["research.candidates.ignore.list"]!, new ResearchHostFixture(), "research.candidates.ignore.list", {}) as {
+    fileRevision: string | null; terms: string[];
+  };
+  assert.deepEqual(missing, { snapshot, fileRevision: null, terms: [] });
+});
+
+test("new synonym proposals work when no dictionary or merge target exists", async () => {
+  const host = new ResearchHostFixture();
+  const handlers = createResearchHandlers();
+  const lookup = await invoke(handlers["research.synonyms.get"]!, host, "research.synonyms.get", { term: "灯" }) as Record<string, unknown>;
+  assert.deepEqual(lookup, { group: null, alternatives: [], fileRevision: null });
+
+  const proposalInput = { words: ["灯", "明かり"], expectedFileRevision: null };
+  const output = await invoke(handlers["research.synonyms.propose"]!, host, "research.synonyms.propose", proposalInput,
+    { idempotencyKey: "new-synonym-key" }) as Record<string, unknown>;
+  assert.deepEqual(host.proposals.at(-1)!.units[0]!.operations.map(({ path }) => path), [SYNONYMS]);
+  assert.deepEqual(output.groupsAfter, [{ words: ["灯", "明かり"] }]);
+
+  const schemaPath = process.env.PROPRIUM_AUTHORING_SCHEMA ?? fileURLToPath(new URL("../../app/src/browser/proprium/authoring/schema.ts", import.meta.url));
+  const { assertValue } = await import(pathToFileURL(schemaPath).href);
+  const manifest = JSON.parse(readFileSync(new URL("./plugin.json", import.meta.url), "utf8"));
+  assertValue(manifest.actions.find((item: any) => item.action_id === "research.synonyms.get").output_schema, lookup, "empty synonym lookup");
+  assertValue(manifest.actions.find((item: any) => item.action_id === "research.synonyms.propose").input_schema, proposalInput, "new synonym proposal input");
+  assertValue(manifest.actions.find((item: any) => item.action_id === "research.synonyms.propose").output_schema, output, "new synonym proposal output");
 });
 
 test("large registry proposals seal a scoped artifact before referencing its bytes", async () => {

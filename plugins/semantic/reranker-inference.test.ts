@@ -1,0 +1,161 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  BGE_ASSET_GROUP_ID, BGE_MODEL, BGE_PREPARATION_TOTAL, rankBgeLogits, releaseBgeReranker, setBgeRerankerBindings,
+  startBgePreparation, stepBgePreparation,
+} from "./reranker-inference.ts";
+import type { HostCall } from "../shared/guest.ts";
+
+const rangeCount = 393;
+const baseBytes = Math.floor(BGE_MODEL.data_bytes / rangeCount);
+const ranges = Array.from({ length: rangeCount }, (_, index) => {
+  const offset = index * baseBytes;
+  return { index, name: `tensor-${index}`, offset, bytes: index === rangeCount - 1 ? BGE_MODEL.data_bytes - offset : baseBytes };
+});
+let calls: Array<{ group_id: string; file_path: string; offset: number; length: number }> = [];
+let appends = 0;
+let releases = 0;
+let loaded = false;
+
+setBgeRerankerBindings({
+  inspectGraph: () => ranges,
+  beginData: () => undefined,
+  beginTensor: () => undefined,
+  appendTensor: () => { appends += 1; },
+  finishTensor: () => undefined,
+  finishData: () => undefined,
+  beginTokenizer: () => undefined,
+  appendTokenizer: () => undefined,
+  finishTokenizer: () => undefined,
+  loadModel: () => { loaded = true; },
+  scorePair: (_query, passage) => passage === "positive" ? 3 : -2,
+  modelId: () => BGE_MODEL.id,
+  modelRevision: () => BGE_MODEL.revision,
+  memoryBytes: () => 3_540_385_792n,
+  release: () => { releases += 1; loaded = false; },
+});
+
+function host() {
+  return {
+    *request<T>(operation: string, payload: Record<string, unknown>): Generator<HostCall, T, unknown> {
+      return (yield { kind: "host_call", call_id: "test", operation, payload }) as T;
+    },
+  };
+}
+
+function assetResult(call: HostCall): unknown {
+  const request = call.payload as typeof calls[number];
+  calls.push(request);
+  const bytes = new Array(request.length).fill(0);
+  const total = request.file_path === BGE_MODEL.graph_path ? BGE_MODEL.graph_bytes
+    : request.file_path === BGE_MODEL.data_path ? BGE_MODEL.data_bytes : BGE_MODEL.tokenizer_bytes;
+  return { group_id: request.group_id, file_path: request.file_path, offset: request.offset, total_bytes: total,
+    bytes, sha256: request.file_path === BGE_MODEL.graph_path ? BGE_MODEL.graph_sha256
+      : request.file_path === BGE_MODEL.data_path ? BGE_MODEL.data_sha256 : BGE_MODEL.tokenizer_sha256,
+    next_offset: request.offset + bytes.length === total ? null : request.offset + bytes.length };
+}
+function invokeStep(taskId: string, sequence: number) {
+  const iterator = stepBgePreparation(taskId, sequence, host() as never);
+  let state = iterator.next();
+  while (!state.done) state = iterator.next(assetResult(state.value as HostCall) as never);
+  return state.value;
+}
+
+test("BGE outputs sigmoid-normalized scores while preserving raw-logit order and finite bounds", () => {
+  const results = rankBgeLogits([
+    { candidateId: "negative-real", logit: -4.454114 },
+    { candidateId: "positive-real", logit: 8.533679 },
+    { candidateId: "equal-first", logit: 2 },
+    { candidateId: "equal-second", logit: 2 },
+    { candidateId: "extreme-negative", logit: -1000 },
+    { candidateId: "near-extreme-negative", logit: -999 },
+    { candidateId: "near-extreme-positive", logit: 999 },
+    { candidateId: "extreme-positive", logit: 1000 },
+  ], 8);
+
+  assert.deepEqual(results.map(result => result.candidateId), [
+    "extreme-positive", "near-extreme-positive", "positive-real", "equal-first", "equal-second",
+    "negative-real", "near-extreme-negative", "extreme-negative",
+  ]);
+  assert.ok(Math.abs(results.find(result => result.candidateId === "positive-real")!.score - 0.9998033088272947) < 1e-15);
+  assert.ok(Math.abs(results.find(result => result.candidateId === "negative-real")!.score - 0.011496903919214803) < 1e-15);
+  assert.equal(results.find(result => result.candidateId === "extreme-positive")!.score, 1);
+  assert.equal(results.find(result => result.candidateId === "near-extreme-positive")!.score, 1);
+  assert.equal(results.find(result => result.candidateId === "near-extreme-negative")!.score, 0);
+  assert.equal(results.find(result => result.candidateId === "extreme-negative")!.score, 0);
+  assert.ok(results.every(result => Number.isFinite(result.score) && result.score >= 0 && result.score <= 1));
+  assert.throws(() => rankBgeLogits([{ candidateId: "bad", logit: Number.POSITIVE_INFINITY }], 1), /non-finite/);
+});
+
+test("BGE uses a separate exact asset group and each scheduler action stays below 4096 range calls", () => {
+  calls = []; appends = 0; releases = 0; loaded = false;
+  const start = startBgePreparation("bge_task");
+  assert.equal(start.phase, "inspect_graph");
+  assert.equal(start.completed, 0);
+  assert.equal(start.total, BGE_PREPARATION_TOTAL);
+  assert.equal(start.total, 8_733);
+
+  // The first Host call is the graph chunk. A missing asset grant fails closed before inference.
+  const first = stepBgePreparation("bge_task", 1, { request: function* (operation: string, payload: Record<string, unknown>) {
+    yield { kind: "host_call", call_id: "test", operation, payload };
+    return undefined;
+  } } as never);
+  const call = first.next();
+  assert.equal(call.value?.operation, "workspace.asset.read");
+  assert.throws(() => first.throw(Object.assign(new Error("missing"), { code: "file_not_found" })),
+    (error: Error & { code?: string }) => error.code === "provider_unavailable");
+  assert.equal(loaded, false);
+  assert.equal(releases, 2);
+
+  const fresh = startBgePreparation("bge_task");
+  assert.equal(fresh.state, "running");
+  const result = invokeStep("bge_task", 1);
+  assert.equal(result.state, "running");
+  assert.equal(result.phase, "load_tensors");
+  assert.equal(result.completed, 64);
+  assert.ok(calls.length <= 64);
+  assert.equal(calls.length, 64);
+  assert.equal(calls[0]?.group_id, BGE_ASSET_GROUP_ID);
+  assert.equal(calls[0]?.file_path, BGE_MODEL.graph_path);
+  assert.equal(calls[2]?.file_path, BGE_MODEL.data_path);
+  assert.equal(calls[2]?.offset, 0);
+  assert.ok(appends >= 62);
+  assert.ok(appends <= 64);
+  releaseBgeReranker();
+});
+
+test("BGE resumes from the next Host-permitted sequence after cancellation and still rejects later gaps", () => {
+  calls = []; appends = 0; releases = 0; loaded = false;
+  releaseBgeReranker();
+  const start = startBgePreparation("bge_task");
+  assert.equal(start.state, "running");
+  const first = invokeStep("bge_task", 1);
+  assert.equal(first.state, "running");
+  assert.equal(first.phase, "load_tensors");
+  assert.equal(first.completed, 64);
+
+  const cancelledStep = stepBgePreparation("bge_task", 2, host() as never);
+  const pending = cancelledStep.next();
+  assert.equal(pending.done, false);
+  assert.equal(pending.value?.operation, "workspace.asset.read");
+  assert.throws(() => cancelledStep.throw(Object.assign(new Error("task cancelled"), { code: "cancelled" })),
+    (error: Error & { code?: string }) => error.code === "cancelled");
+
+  const resumedStart = startBgePreparation("bge_task");
+  assert.equal(resumedStart.state, "running");
+  assert.equal(resumedStart.completed, 0);
+  calls = [];
+  const resumed = invokeStep("bge_task", 2);
+  assert.equal(resumed.state, "running");
+  assert.equal(resumed.phase, "load_tensors");
+  assert.equal(resumed.completed, 64);
+  assert.equal(calls[0]?.file_path, BGE_MODEL.graph_path);
+  assert.equal(calls[0]?.offset, 0);
+
+  const replay = stepBgePreparation("bge_task", 2, host() as never).next();
+  assert.equal(replay.done, true);
+  assert.deepEqual(replay.value, resumed);
+  const skipped = stepBgePreparation("bge_task", 4, host() as never);
+  assert.throws(() => skipped.next(), (error: Error & { code?: string }) => error.code === "snapshot_stale");
+  releaseBgeReranker();
+});

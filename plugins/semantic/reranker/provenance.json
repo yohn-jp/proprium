@@ -1,0 +1,9 @@
+{
+  "schema": "proprium.semantic.model-provenance/v1",
+  "model_id": "mogolloni/bge-reranker-v2-m3-onnx",
+  "revision": "e5023553f6c47f09057da7a19cdd79ef850a4985",
+  "precision": "fp32",
+  "license": "Apache-2.0",
+  "source": "https://huggingface.co/mogolloni/bge-reranker-v2-m3-onnx/tree/e5023553f6c47f09057da7a19cdd79ef850a4985",
+  "redistribution": "Model file hashes are pinned in the signed Semantic reranker asset manifest. Model bytes are not stored in this repository."
+}

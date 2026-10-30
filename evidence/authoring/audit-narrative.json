@@ -1,0 +1,480 @@
+{
+  "schema": "proprium.authoring.feature-audit/v1",
+  "base_sha": "75816593cec3dbca9080ec7073679ab3998993a7",
+  "features": [
+    {
+      "feature_id": "NAR-01",
+      "plugin_id": "proprium.narrative",
+      "requirement": "Recognize the existing work hierarchy and keep non-work repositories in generic Files mode.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/narrative/src/actions.ts",
+        "plugins/narrative/src/workspace.ts",
+        "plugins/narrative/plugin.json",
+        "app/src/browser/proprium/host/authoring/WorkspaceAuthoringPanels.tsx",
+        "app/src/browser/proprium/host/HostApp.tsx"
+      ],
+      "host_path": "Host authoring dispatch invokes proprium.narrative.work.detect and hierarchy.outline over the active workspace snapshot; Host keeps the generic Files panel available.",
+      "ui_path": "Work Outline contribution; 認識と診断 tab shows recognized/unrecognized/malformed state and hierarchy diagnostics.",
+      "existing_tests": [
+        "plugins/narrative/src/actions.test.ts: outline exposes recognition state and diagnostics for unrecognized and malformed repositories",
+        "plugins/narrative/src/actions.test.ts: known but unusable hierarchy paths diagnose malformed work and do not return an empty root tree",
+        "tests/browser/authoring-official.acceptance.spec.ts: signed Narrative installs and navigates a large work in the real Host",
+        "tests/browser/authoring-official.acceptance.spec.ts: signed Narrative explains an unrecognized repository and leaves generic Files available"
+      ],
+      "gaps": [
+        "A current signed browser run opened a workspace containing 604 local Git files, but the Narrative structure panel showed no work items for a seeded “Volume One” before its later checks could run. The exact cause and repeat on the current signed Narrative artifact remain under investigation. Generic Files stays available; no acceptance PASS is inferred."
+      ],
+      "required_fixes": [
+        "Trace the seeded workspace through Narrative recognition, hierarchy.tree, Host paging and the visible Work Outline; repair the first failing boundary and rerun the signed Desktop and Mobile flow."
+      ],
+      "dependencies": [
+        "workspace.identity.read",
+        "workspace.file.list",
+        "workspace.file.read",
+        "workspace.ui.contribute"
+      ],
+      "priority": "P0",
+      "verification": [
+        "FAIL: Current Host browser flow with the 855a44e signed plugin fixture reached an empty Narrative structure despite the seeded file tree; the volume assertion timed out on Desktop and Mobile before subsequent acceptance steps. Retest the current signed artifact."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "NAR-02",
+      "plugin_id": "proprium.narrative",
+      "requirement": "Browse ordered volumes, chapters and scenes; select a scene and reach the exact linked manuscript.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/narrative/src/actions.ts",
+        "plugins/narrative/src/workspace.ts",
+        "plugins/narrative/plugin.json",
+        "app/src/browser/proprium/host/authoring/WorkspaceAuthoringPanels.tsx",
+        "app/src/browser/proprium/host/HostApp.tsx",
+        "app/src/browser/proprium/host/RestoredEditor.tsx"
+      ],
+      "host_path": "The Work Outline calls paged hierarchy.tree and scene.open; Host resolves the explicit manuscript path and routes it through the existing guarded CodeMirror editor.",
+      "ui_path": "Work Outline volume/chapter/scene tree and Host editor panel.",
+      "existing_tests": [
+        "plugins/narrative/src/actions.test.ts: tree pages more than 256 hierarchy files and opens the explicit manuscript link",
+        "tests/browser/authoring-official.acceptance.spec.ts: signed Narrative installs and navigates a large work in the real Host"
+      ],
+      "gaps": [
+        "The current signed large-work browser scenario did not show its seeded volume in the Work Outline, so scene paging/navigation and linked manuscript-open assertions did not execute. Unit action tests do not establish the Host path."
+      ],
+      "required_fixes": [
+        "Repair the observed empty Outline path; rerun the signed large-work scenario and verify exact linked manuscript bytes open without eager manuscript reads."
+      ],
+      "dependencies": [
+        "NAR-01",
+        "workspace.file.list",
+        "workspace.file.read",
+        "workspace.navigation"
+      ],
+      "priority": "P0",
+      "verification": [
+        "NOT_CHECKED after the earlier NAR-01 failure: hierarchy tree and scene navigation assertions were not reached."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "NAR-03",
+      "plugin_id": "proprium.narrative",
+      "requirement": "Continue from the current browser's last recoverable scene and cursor without opening another repository's draft.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/narrative/src/actions.ts",
+        "app/src/browser/proprium/host/writing-resume.ts",
+        "app/src/browser/proprium/host/writing-resume.test.ts",
+        "app/src/browser/proprium/host/RestoredEditor.tsx",
+        "app/src/browser/proprium/host/HostApp.tsx",
+        "plugins/narrative/plugin.json"
+      ],
+      "host_path": "Host-scoped WritingResume and Draft journal are validated through scene.continue before Host restores the existing editor position.",
+      "ui_path": "Continue writing command, Resume status and Open saved scene tabs, plus the existing editor.",
+      "existing_tests": [
+        "app/src/browser/proprium/host/writing-resume.test.ts",
+        "app/src/browser/proprium/host/authoring/NarrativePortableResume.test.ts: portable position validation",
+        "tests/browser/authoring-resume.acceptance.ts: saved scene resumes the exact Japanese selection and viewport after reopen",
+        "tests/browser/authoring-resume.acceptance.ts: stale and foreign workspace variants preserve an unrelated selection"
+      ],
+      "gaps": [
+        "The full reload, stale and foreign-workspace browser cases have not been freshly executed on the integrated current worktree."
+      ],
+      "required_fixes": [
+        "Run the resume browser suite in Chromium and mobile WebKit and retain the text, selection, scroll and no-cross-workspace assertions."
+      ],
+      "dependencies": [
+        "NAR-02",
+        "Host WritingResume scope validation",
+        "Host Draft recovery journal",
+        "workspace.navigation"
+      ],
+      "priority": "P0",
+      "verification": [
+        "PASS: Narrative component and guest validation tests",
+        "NOT_RUN: fresh reload/stale/foreign browser acceptance"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "NAR-04",
+      "plugin_id": "proprium.narrative",
+      "requirement": "Create the first volume, chapters and scenes; a scene creation proposes its metadata and empty linked manuscript together.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/narrative/src/actions.ts",
+        "plugins/narrative/src/yaml-source.ts",
+        "plugins/narrative/plugin.json",
+        "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx",
+        "app/src/browser/proprium/host/authoring/WorkspaceAuthoringPanels.tsx",
+        "app/src/browser/proprium/host/HostApp.tsx"
+      ],
+      "host_path": "Declarative create forms invoke structure.create; proposals are returned to Host AuthoringReview for explicit local apply.",
+      "ui_path": "Work Outline root/parent add actions and create forms; scene creation includes its linked Markdown body in one reviewed unit.",
+      "existing_tests": [
+        "plugins/narrative/src/actions.test.ts: scene creation proposes body, metadata and reordered siblings in one unit",
+        "plugins/narrative/src/actions.test.ts: new volume order follows the highest finite order",
+        "tests/browser/authoring-official.acceptance.spec.ts: signed Narrative proposes and applies a reviewed volume"
+      ],
+      "gaps": [
+        "The current browser test verifies volume creation; no fresh browser evidence verifies chapter and scene creation together with the linked empty body."
+      ],
+      "required_fixes": [
+        "Run or add signed browser assertions for first-volume, chapter and scene creation and review the scene metadata/body unit boundary."
+      ],
+      "dependencies": [
+        "NAR-01",
+        "workspace.change.propose",
+        "Host AuthoringReview and apply"
+      ],
+      "priority": "P0",
+      "verification": [
+        "PASS: Narrative action tests for scene metadata/body proposal",
+        "NOT_RUN: fresh signed creation browser acceptance"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "NAR-05",
+      "plugin_id": "proprium.narrative",
+      "requirement": "Reorder chapters within one volume and scenes within one chapter by accessible controls.",
+      "status": "PARTIAL",
+      "implementation_files": [
+        "plugins/narrative/src/actions.ts",
+        "plugins/narrative/src/yaml-source.ts",
+        "plugins/narrative/plugin.json",
+        "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx",
+        "app/src/browser/proprium/host/authoring/WorkspaceAuthoringPanels.tsx"
+      ],
+      "host_path": "The accessible ordered-list controls in app/src/browser/proprium/host/authoring/AuthoringSurface.tsx submit the complete sibling set and expected tree revision through structure.reorder; the Host reviews and applies the resulting ChangeSet.",
+      "ui_path": "Work Outline declarative reorder fields expose labeled up/down buttons; user reviews the proposed sibling ordering in Host AuthoringReview.",
+      "existing_tests": [
+        "plugins/narrative/src/actions.test.ts: manifest action inventory and closed output schemas match the guest contract",
+        "plugins/narrative/src/actions.test.ts: hierarchy keeps tied and missing order rows accessible with diagnostics",
+        "app/src/browser/proprium/host/authoring/AuthoringSurface.test.ts: ordered-list controls expose accessible adjacent moves and retain complete IDs (companion Host commit 966b44bbf217480d0f15e464e62fe4c6fdb66b1d)",
+        "tests/browser/authoring-official.acceptance.spec.ts: signed Narrative reorders chapters and scenes with accessible move controls"
+      ],
+      "gaps": [
+        "Ordered-list controls are integrated in the current Host source, but the signed browser run failed on the empty Work Outline before the reorder flow was reached. Review/apply and persisted order remain unverified."
+      ],
+      "required_fixes": [
+        "Repair the observed empty Work Outline path, then run the signed browser acceptance for accessible chapter and scene ordering, review and saved order."
+      ],
+      "dependencies": [
+        "NAR-02",
+        "workspace.change.propose",
+        "Host AuthoringReview and apply"
+      ],
+      "priority": "P0",
+      "verification": [
+        "NOT_CHECKED: Playwright collection succeeds; the current Desktop/Mobile run fails earlier at the seeded volume visibility assertion and never reaches reorder."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "NAR-06",
+      "plugin_id": "proprium.narrative",
+      "requirement": "Read scene breadcrumbs, title and explicit manuscript reference; edit structural title or relink to an existing body path while Knowledge owns semantic metadata.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/narrative/src/actions.ts",
+        "plugins/narrative/src/yaml-source.ts",
+        "plugins/narrative/plugin.json",
+        "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx",
+        "app/src/browser/proprium/host/authoring/WorkspaceAuthoringPanels.tsx",
+        "app/src/browser/proprium/host/HostApp.tsx"
+      ],
+      "host_path": "Scene context reads structural metadata; title/relink proposal is reviewed by Host, and scene.open uses the selected explicit path after navigation guards.",
+      "ui_path": "Work Outline selected-scene context, rename and relink forms, and Host editor.",
+      "existing_tests": [
+        "plugins/narrative/src/actions.test.ts: outline selects a scene for revision-guarded rename and relink",
+        "tests/browser/authoring-official.acceptance.spec.ts: signed Narrative reviews and applies a scene title",
+        "tests/browser/authoring-official.acceptance.spec.ts: signed Narrative reviews and applies a scene manuscript link"
+      ],
+      "gaps": [
+        "Fresh signed browser evidence has not been recorded for exact diff, unrelated YAML preservation and opening the newly linked existing file."
+      ],
+      "required_fixes": [
+        "Run current title/relink browser flows and verify old/new links, body bytes and Knowledge-owned fields remain untouched."
+      ],
+      "dependencies": [
+        "NAR-02",
+        "Knowledge semantic metadata ownership",
+        "workspace.file.list",
+        "workspace.change.propose"
+      ],
+      "priority": "P0",
+      "verification": [
+        "PASS: Narrative guest tests for guarded rename/relink",
+        "NOT_RUN: fresh signed title/relink browser acceptance"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "NAR-07",
+      "plugin_id": "proprium.narrative",
+      "requirement": "Keep Japanese editing, Draft recovery, IME, caret, selection, undo and scroll intact while a structure or panel action occurs.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "app/src/browser/proprium/host/RestoredEditor.tsx",
+        "app/src/browser/proprium/host/HostApp.tsx",
+        "app/src/browser/proprium/host/writing-resume.ts",
+        "app/src/browser/proprium/host/authoring/WorkspaceAuthoringPanels.tsx",
+        "app/src/browser/proprium/host/authoring/AuthoringSurface.tsx"
+      ],
+      "host_path": "The Host retains the editor instance and journal while authoring panels and structure actions use shared Host navigation/recovery guards.",
+      "ui_path": "Existing Desktop/Mobile shells, CodeMirror editor and authoring panels; no replacement editor surface.",
+      "existing_tests": [
+        "app/src/browser/proprium/host/writing-resume.test.ts",
+        "tests/browser/authoring-resume.acceptance.ts: saved Japanese selection and viewport after reopen",
+        "tests/browser/authoring-navigation.acceptance.ts: dirty draft prevents navigation without losing editor text",
+        "tests/browser/authoring-official.acceptance.spec.ts: local authoring edits, reviews, commits and recovers a large work"
+      ],
+      "gaps": [
+        "NAR-A07's active IME composition, undo history and panel round-trip is not fully exercised by the current browser cases.",
+        "No fresh Chromium and mobile WebKit execution has been recorded for this branch."
+      ],
+      "required_fixes": [
+        "Run the integrated desktop/mobile editor continuity acceptance; add a focused assertion for composition, undo and panel return if the existing suite lacks it."
+      ],
+      "dependencies": [
+        "Host CodeMirror lifecycle",
+        "Host Draft journal",
+        "workspace.navigation"
+      ],
+      "priority": "P0",
+      "verification": [
+        "PASS: existing targeted Host writing-resume unit tests in repository history; not rerun as full suite for this branch",
+        "NOT_RUN: fresh NAR-A07 desktop/mobile browser acceptance"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "NAR-08",
+      "plugin_id": "proprium.narrative",
+      "requirement": "On Mobile, offer quick append, next-scene reading navigation and a local scratch capture route while retaining the full editor.",
+      "status": "PARTIAL",
+      "implementation_files": [
+        "app/src/browser/proprium/host/authoring/NarrativeQuickAppend.tsx",
+        "app/src/browser/proprium/host/authoring/NarrativeNavigation.tsx",
+        "app/src/browser/proprium/host/authoring/NarrativeQuickAppend.test.ts",
+        "app/src/browser/proprium/host/RestoredEditor.tsx",
+        "app/src/browser/proprium/host/HostApp.tsx",
+        "tests/browser/authoring-navigation.acceptance.ts"
+      ],
+      "host_path": "HostApp registers the existing editor quick-append callback with the durable BrowserJournal and mounts NarrativeQuickAppend for a clean selected manuscript; next-scene navigation remains Host-guarded. Scratch position and quota are Host-owned.",
+      "ui_path": "Mounted NarrativeQuickAppend shows read-only recent paragraphs and an IME-capable append field for the clean selected scene; Work Outline exposes next-scene navigation.",
+      "existing_tests": [
+        "app/src/browser/proprium/host/authoring/NarrativeNavigation.test.ts",
+        "app/src/browser/proprium/host/authoring/NarrativeQuickAppend.test.ts",
+        "tests/browser/authoring-navigation.acceptance.ts: next scene opens the pinned next scene and reports the end",
+        "tests/browser/authoring-navigation.acceptance.ts: Mobile quick append writes to the existing editor and keeps the exact text locally"
+      ],
+      "gaps": [
+        "Quick append is mounted in current HostApp source. The signed run failed earlier at the empty Work Outline and did not reach append/navigation. Scratch reload, current-scene binding, camera quota and unsupported voice checks also remain unverified."
+      ],
+      "required_fixes": [
+        "Repair the observed empty Work Outline path; run signed Mobile append/navigation, then verify scratch reload/binding, camera capacity and unsupported voice behavior in Host acceptance."
+      ],
+      "dependencies": [
+        "Host RestoredEditor append operation",
+        "Host BrowserJournal",
+        "NAR-02",
+        "Host scratch capture and attachment quota controls"
+      ],
+      "priority": "P0",
+      "verification": [
+        "NOT_CHECKED: Current signed browser run failed before the quick-append control was reached."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "NAR-09",
+      "plugin_id": "proprium.narrative",
+      "requirement": "Recover from malformed, missing, duplicate, stale, disabled, offline and partially available hierarchy data without losing prose.",
+      "status": "UNVERIFIED",
+      "implementation_files": [
+        "plugins/narrative/src/actions.ts",
+        "plugins/narrative/src/workspace.ts",
+        "plugins/narrative/src/yaml-source.ts",
+        "plugins/narrative/guest.ts",
+        "app/src/browser/proprium/host/authoring/WorkspaceAuthoringPanels.tsx",
+        "app/src/browser/proprium/host/HostApp.tsx",
+        "app/src/browser/proprium/host/authoring/AuthoringReview.tsx"
+      ],
+      "host_path": "Typed guest errors/diagnostics and Host error, cancellation, disable and proposal-preservation paths protect local source and Draft state.",
+      "ui_path": "Work Outline recognition/diagnostics, Host review, Files/editor fallback and plugin manager lifecycle controls.",
+      "existing_tests": [
+        "plugins/narrative/src/actions.test.ts: more than 256 hierarchy files, malformed work, duplicate/order diagnostics and malformed reading-mark preservation",
+        "tests/browser/authoring-official.acceptance.spec.ts: signed Narrative installs and navigates a large work in the real Host",
+        "tests/browser/authoring-navigation.acceptance.ts: dirty draft prevents navigation without losing editor text"
+      ],
+      "gaps": [
+        "NAR-A09 spans failure injection, plugin disable/re-enable, offline reads, storage errors and scale; no fresh integrated browser matrix has been executed.",
+        "No current evidence covers all failure cases while proving proposal and Draft byte preservation."
+      ],
+      "required_fixes": [
+        "Run the NAR-A09 acceptance matrix in the current Host and record each case as PASS, FAIL or NOT_CHECKED; add missing browser failure injection where a Host path exists."
+      ],
+      "dependencies": [
+        "NAR-01",
+        "NAR-02",
+        "NAR-07",
+        "Host plugin manager and WASM sandbox",
+        "Host offline Git and Draft journal"
+      ],
+      "priority": "P0",
+      "verification": [
+        "PASS: targeted Narrative guest malformed, scale and preservation tests",
+        "NOT_RUN: full current Host failure/disable/offline browser matrix"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "NAR-10",
+      "plugin_id": "proprium.narrative",
+      "requirement": "Preserve and compile structural parts of a legacy NarrativeChangeSet through the typed owner compiler for Paired Writing; split mixed scene patches without a second writer or lost fields.",
+      "status": "FROZEN",
+      "implementation_files": [
+        "plugins/narrative/src/change-compiler.ts",
+        "plugins/narrative/src/actions.ts",
+        "plugins/narrative/src/contracts.ts",
+        "plugins/narrative/src/actions.test.ts",
+        "plugins/narrative/plugin.json",
+        "docs/canon/plugins/NARRATIVE.md"
+      ],
+      "host_path": "The existing guest changes.compile action exposes the Narrative owner compiler; Paired Writing staging/finalization and cross-owner integration are outside active Narrative acceptance while frozen.",
+      "ui_path": "No author-facing Narrative workflow. This is Paired Writing compiler compatibility only.",
+      "existing_tests": [
+        "plugins/narrative/src/actions.test.ts: changes.compile emits a source-mapped scene metadata/body unit and complete sibling insert",
+        "plugins/narrative/src/actions.test.ts: changes.compile splits Narrative scene fields from semantic fields and verifies UTF-16 mark evidence",
+        "plugins/narrative/src/actions.test.ts: changes.compile reads staged YAML but keeps source preconditions and read_set on the original snapshot"
+      ],
+      "gaps": [
+        "The Paired-specific compiler acceptance remains incomplete/unverified: staging lease lifecycle, Paired final inseparable unit, full pinned legacy fixture matrix and unknown-response idempotency are not established by these guest tests.",
+        "FROZEN is not PASS; the implementation and test gaps stay visible and become active only after explicit product decision."
+      ],
+      "required_fixes": [
+        "None while frozen. If product explicitly resumes this feature, first complete NAR-A10 and its Paired integration tests without changing the shared Narrative gates."
+      ],
+      "dependencies": [
+        "Paired Writing",
+        "workspace.change.stage",
+        "Host staging lease and review/apply",
+        "Knowledge owner compiler"
+      ],
+      "priority": "FROZEN (P1 Paired Writing-specific)",
+      "verification": [
+        "PASS: targeted Narrative compiler unit tests listed above",
+        "FROZEN: NAR-A10 full Paired integration acceptance not run and not counted as PASS"
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "NAR-11",
+      "plugin_id": "proprium.narrative",
+      "requirement": "Preserve, display, add and remove sentence reading marks on a scene without writing prose or silently relocating a stale mark.",
+      "status": "PARTIAL",
+      "implementation_files": [
+        "plugins/narrative/src/actions.ts",
+        "plugins/narrative/src/yaml-source.ts",
+        "plugins/narrative/plugin.json",
+        "app/src/browser/proprium/host/authoring/NarrativeReadingMarkCapture.tsx",
+        "app/src/browser/proprium/host/authoring/NarrativeReadingMarkCapture.test.ts",
+        "app/src/browser/proprium/host/HostApp.tsx",
+        "tests/browser/authoring-readingmarks.acceptance.ts"
+      ],
+      "host_path": "HostApp wires selected reading-mark removal through an exact selected-range resolver and checks scene identity, saved bytes, captured revisions, clean Draft and composition state before proposing; Host Writer still controls application.",
+      "ui_path": "Reader list/jump and selected-mark removal use the existing editor selection; the Host presents the revision-bound proposal for review.",
+      "existing_tests": [
+        "plugins/narrative/src/actions.test.ts: reading marks preserve malformed rows, YAML comments and unknown fields with UTF-16 spans",
+        "plugins/narrative/src/actions.test.ts: reading mark navigation validates saved UTF-16 range and rejects stale marks",
+        "app/src/browser/proprium/host/authoring/NarrativeReadingMarkCapture.test.ts: exact current match, duplicate rejection and revision change rejection",
+        "tests/browser/authoring-readingmarks.acceptance.ts: add, list, jump and selected-range removal browser flow"
+      ],
+      "gaps": [
+        "Selected-range removal callback and stale guards exist in current HostApp; the signed run failed earlier at the empty Work Outline and did not reach this UI. Dirty Draft, malformed legacy rows, stale removal and full Desktop/Mobile review remain unverified."
+      ],
+      "required_fixes": [
+        "Repair the observed empty Work Outline; run the signed browser review/apply/reject, stale-source, malformed-row and dirty-Draft cases and verify source bytes and editor selection."
+      ],
+      "dependencies": [
+        "NAR-02",
+        "workspace.file.read",
+        "workspace.change.propose",
+        "Host CodeMirror selection and reading-mark renderer",
+        "Host AuthoringReview and apply"
+      ],
+      "priority": "P1",
+      "verification": [
+        "NOT_CHECKED: Current signed browser run failed before the reading-mark flow was reached."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    },
+    {
+      "feature_id": "NAR-12",
+      "plugin_id": "proprium.narrative",
+      "requirement": "Preserve the local resume intent through optional author-approved Git state; after explicit publication and synchronization another device can offer the same validated scene and position, while local continue never waits on a marker.",
+      "status": "PARTIAL",
+      "implementation_files": [
+        "plugins/narrative/src/resume.ts",
+        "plugins/narrative/src/actions.ts",
+        "plugins/narrative/plugin.json",
+        "app/src/browser/proprium/host/authoring/NarrativePortableResume.tsx",
+        "app/src/browser/proprium/host/authoring/NarrativePortableResume.test.ts",
+        "app/src/browser/proprium/host/HostApp.tsx",
+        "tests/browser/authoring-navigation.acceptance.ts"
+      ],
+      "host_path": "HostApp captures only the current saved clean manuscript position, revalidates scene/revision/cursor identity on proposal and sends the marker through the normal Narrative Host proposal broker; publication remains a separate explicit action.",
+      "ui_path": "The mounted Narrative portable-resume surface lists, validates and opens per-device positions and offers a reviewed marker proposal; Host Review controls local apply.",
+      "existing_tests": [
+        "plugins/narrative/src/actions.test.ts: resume.marks.list pages scoped markers and checks linked body revisions",
+        "plugins/narrative/src/actions.test.ts: resume.mark.propose updates/creates only this device marker and preserves unknown YAML",
+        "app/src/browser/proprium/host/authoring/NarrativePortableResume.test.ts: marker proposal reads current source revision and binds Host captured position",
+        "tests/browser/authoring-navigation.acceptance.ts: portable marker validates saved body and opens the scene",
+        "tests/browser/authoring-navigation.acceptance.ts: portable marker creation is reviewed and remains local until explicit publication"
+      ],
+      "gaps": [
+        "Host capture/propose and mounted UI exist in current source. The signed run failed earlier at the empty Work Outline and did not reach this flow. Two-profile publish/sync, rejected/stale proposal and offline behavior remain unverified."
+      ],
+      "required_fixes": [
+        "Repair the observed empty Work Outline; run signed local-only, reject/stale, duplicate-marker and offline scenarios, then verify cross-profile visibility only after explicit publish/sync."
+      ],
+      "dependencies": [
+        "NAR-03",
+        "workspace.identity.read",
+        "workspace.change.propose",
+        "Host publication provenance and GitHub publish boundary"
+      ],
+      "priority": "P1",
+      "verification": [
+        "NOT_CHECKED: Current signed browser run failed before the portable-resume flow was reached."
+      ],
+      "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7"
+    }
+  ],
+  "assessment_source_sha": "b25d7e33f020d748c7328378bdfbbf1f4d1c70e7",
+  "assessed_at": "2026-10-29",
+  "assessment_scope": "Reconciled against this source snapshot. Prior base_sha is retained as the original audit anchor. Implementation status does not substitute for the current R01–R14 acceptance result. Browser failures and unsupported coverage remain explicit."
+}

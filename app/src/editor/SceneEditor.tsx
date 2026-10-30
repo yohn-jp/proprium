@@ -4,6 +4,7 @@ import { snapshotKey, type SnapshotId } from "@scriptorium/contracts";
 import type { JournalEntry } from "../storage/journal";
 import { MobileReadingPager } from "./MobileReadingPager";
 import { ManuscriptInput, type ManuscriptInputHandle } from "./ManuscriptInput";
+import type { DiagnosticDecision, DiagnosticsMarginMarker } from "./cm/diagnosticMargin";
 import { RubyText } from "./ruby";
 import { TermAwareRubyText } from "./TermAwareRubyText";
 import type { ResolveEditorTerms } from "./terms";
@@ -175,11 +176,15 @@ export function SceneEditor({
   hostNavigationSelection,
   onHostNavigationSelectionApplied,
   onCompositionChange,
+  diagnosticMarkers,
+  onDiagnosticMarkerSelect,
+  onDiagnosticMarkerDecision,
   scratchEntries,
   onDraftScratch,
   onCheckpointScratch,
   registerScratchFlush,
   registerNavigationFlush,
+  registerQuickAppend,
   scratchBusy,
   pendingCount,
 }: {
@@ -228,11 +233,15 @@ export function SceneEditor({
   hostNavigationSelection?: { readonly requestId: string; readonly start: number; readonly end: number };
   onHostNavigationSelectionApplied?: (requestId: string) => void;
   onCompositionChange?: (composing: boolean) => void;
+  diagnosticMarkers?: readonly DiagnosticsMarginMarker[];
+  onDiagnosticMarkerSelect?: (event: Event, findingFingerprint: string) => void;
+  onDiagnosticMarkerDecision?: (event: Event, finding: DiagnosticsMarginMarker, decision: DiagnosticDecision) => void;
   scratchEntries: JournalEntry[];
   onDraftScratch: (draft: ScratchDraftPayload, binding: ScratchDraftBinding) => Promise<JournalEntry | null>;
   onCheckpointScratch: (entry: JournalEntry) => Promise<void>;
   registerScratchFlush: (flush: (() => Promise<JournalEntry | null>) | null) => void;
   registerNavigationFlush: (flush: (() => Promise<string | null>) | null) => void;
+  registerQuickAppend?: (append: ((text: string) => string | null) | null) => void;
   scratchBusy: boolean;
   pendingCount: number;
 }) {
@@ -270,6 +279,12 @@ export function SceneEditor({
     registerNavigationFlush(() => editorRef.current?.flushComposition() ?? Promise.resolve(null));
     return () => registerNavigationFlush(null);
   }, [registerNavigationFlush]);
+
+  useEffect(() => {
+    if (!registerQuickAppend) return;
+    registerQuickAppend(text => editorRef.current?.appendAtEnd(text) ?? null);
+    return () => registerQuickAppend(null);
+  }, [registerQuickAppend]);
 
   const onEditorTextChange = useCallback((next: string) => {
     pendingEditorTextRef.current = next;
@@ -457,6 +472,9 @@ export function SceneEditor({
               resolveTerms={reading ? undefined : resolveTerms}
               onTermNavigate={onTermNavigate}
               onCompositionChange={onCompositionChange}
+              diagnosticMarkers={diagnosticMarkers}
+              onDiagnosticMarkerSelect={onDiagnosticMarkerSelect}
+              onDiagnosticMarkerDecision={onDiagnosticMarkerDecision}
               termResolutionKey={`${repositoryKey}:${snapshotIdentity}:${scene.id}:${path}`}
               labelledBy="manuscript-label"
               placeholder="物語の続きを書く"

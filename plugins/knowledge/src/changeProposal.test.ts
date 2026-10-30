@@ -8,9 +8,9 @@ test("Knowledge proposes Japanese evidence using UTF-16 source spans", () => {
   const source = "第一章📚の本文";
   const revision = "a".repeat(64);
   const host: GuestHost = {
-    *request(operation, payload): Generator<HostCall, unknown, unknown> {
+    *request<T = unknown>(operation: string, payload: Record<string, unknown>): Generator<HostCall, T, unknown> {
       yield { kind: "host_call", call_id: "test", operation, payload };
-      return { proposal_id: "receipt-1", status: "proposed", preview: {} };
+      return { proposal_id: "receipt-1", status: "proposed", preview: {} } as T;
     },
   };
   const context = {

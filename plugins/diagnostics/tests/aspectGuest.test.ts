@@ -51,3 +51,21 @@ test("chapter aspect review reads pinned prose and remains useful when Knowledge
   assert.ok(result.value.findings.some((item: { evidence: unknown[] }) => item.evidence.length > 0));
   guest.dispose();
 });
+
+test("chapter aspect review and no-provider preview are reachable from a validated Diagnostics panel", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { assertAuthoringDeclarations } = await import("../../../scripts/authoring-manifest-schema.mjs");
+  const manifest = JSON.parse(await readFile(new URL("../plugin.json", import.meta.url), "utf8"));
+  await assertAuthoringDeclarations(manifest.id, manifest.capabilities, manifest.actions, manifest.ui);
+  const surface = manifest.ui.find((item: { id: string }) => item.id === "diagnostics.chapter-aspects");
+  assert.ok(surface);
+  const preview = surface.body.tabs.find((item: { id: string }) => item.id === "preview").body.tabs[0].body;
+  const review = surface.body.tabs.find((item: { id: string }) => item.id === "review").body;
+  const form = review.tabs.find((item: { id: string }) => item.id === "review-request").body;
+  const findings = review.tabs.find((item: { id: string }) => item.id === "findings").body;
+  assert.equal(preview.submit.action_id, "proprium.diagnostics.chapter.aspects.preview.v1");
+  assert.equal(form.submit.action_id, "proprium.diagnostics.chapter.aspects.review.v1");
+  assert.equal(findings.next_action.action_id, "proprium.diagnostics.chapter.aspects.review.v1");
+  assert.equal(findings.next_action_when.data_key, "last_action_result.nextCursor");
+  assert.equal(findings.item_navigation.target.span.revision.data_key, "item.evidence.0.revision");
+});
