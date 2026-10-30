@@ -662,7 +662,11 @@ export class BrowserAuthoringService {
         return await this.options.backends.changeTimestamp(request) as T;
       case "workspace.asset.read":
         if (!this.options.backends.assetRead) throw missing(operation);
-        return await this.options.backends.assetRead(pluginId, operationContext?.caller ?? "ui", request.scope, payload as unknown as AssetReadRequest) as T;
+        if (!operationContext || operationContext.plugin_id !== pluginId || request.plugin_id !== pluginId) {
+          throw Object.assign(new Error("Asset reads require a verified plugin Host call"), { code: "capability_denied" });
+        }
+        // The action may originate in UI/MCP; its validated guest is the asset consumer.
+        return await this.options.backends.assetRead(pluginId, "plugin", request.scope, payload as unknown as AssetReadRequest) as T;
       default: throw Object.assign(new Error("Host operation is not available in Proprium"), { code: "capability_denied" });
     }
   }
