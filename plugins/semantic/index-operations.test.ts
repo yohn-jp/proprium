@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { sourceTextDecoder } from '../../app/src/browser/proprium/authoring/source-text.ts';
 import { releaseSemanticIndex, startIndexBuild, stepIndexBuild, queryIndex } from './index-operations.ts';
 const snapshot = { id: 's', local_commit: null, worktree_generation: 'w', draft_generation: null };
 const scope = { workspace_id: 'w', repository_id: 1, branch: 'main', generation: 'g' };
@@ -61,6 +62,32 @@ test('rebuild starts quickly; bounded steps store only hashed metadata and query
  assertValue(manifest.actions.find((action: any) => action.action_id === 'proprium.semantic.index.step').output_schema, result.output);
  assertValue(manifest.actions.find((action: any) => action.action_id === 'proprium.semantic.passages.query').output_schema, query);
  assert.equal(build('t2').reused, 1);
+});
+test('BOM manuscript indexing and query evidence use Host UTF-16 offsets with exact CRLF front matter quotes', () => {
+ reset();
+ const previousFiles = { ...files };
+ const manuscript = '\uFEFF---\r\ntitle: 🌸 Station\r\ndescription: "旅人は駅へ着いた。"\r\n---\r\n\r\n🧭 星が見える。次の場面。\r\n';
+ const hostText = sourceTextDecoder().decode(new TextEncoder().encode(manuscript));
+ files['plot/scenes/a.yaml'] = '\uFEFFid: scene-a\r\ntype: scene\r\nmanuscript: manuscript/custom.md\r\n';
+ files['manuscript/custom.md'] = manuscript;
+ try {
+  const result = build('bom-utf16');
+  assert.equal(result.state, 'complete');
+  const passages = publishedPassages().filter(item => item.sourcePath === 'manuscript/custom.md');
+  assert.equal(passages.length, 3, 'front matter description and two manuscript sentences are indexed');
+  const query = run(queryIndex({ query:'星', granularity:'sentence', limit:10 }, context, host, engine));
+  const results = query.results.filter((item: any) => item.sourcePath === 'manuscript/custom.md');
+  assert.deepEqual(results.map((item: any) => item.quote).sort(), ['次の場面。', '旅人は駅へ着いた。', '🧭 星が見える。'].sort());
+  for (const item of results) {
+   const span = item.evidence[0];
+   assert.equal(item.quote, hostText.slice(span.start, span.end));
+   assert.equal(span.start, hostText.indexOf(item.quote));
+  }
+ } finally {
+  for (const key of Object.keys(files)) delete files[key];
+  Object.assign(files, previousFiles);
+  reset();
+ }
 });
 test('fresh builds accept the Host first step sequence and still reject skipped checkpoints', () => {
  reset();

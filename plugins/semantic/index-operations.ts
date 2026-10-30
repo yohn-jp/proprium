@@ -29,7 +29,7 @@ const INDEX_PUBLISH_PAGES_PER_STEP = 4;
 const INDEX_PAGE_CALL_BUDGET = 850_000;
 const INDEX_GENERATION_BYTE_LIMIT = 60 * 1024 * 1024;
 const INDEX_CHECKPOINT_BYTE_LIMIT = 1024 * 1024;
-const INDEX_CONFIG_DIGEST = sha256Text('proprium.semantic/index-v3/arcadia-source-v1/japanese-sentence-boundaries-v1/f32le384-v1');
+const INDEX_CONFIG_DIGEST = sha256Text('proprium.semantic/index-v3/arcadia-source-v2-bom-preserving-utf16-v1/japanese-sentence-boundaries-v1/f32le384-v1');
 interface IndexBuildCheckpoint {
  version: 1;
  mode: 'build' | 'warm';
@@ -593,7 +593,7 @@ export function* queryIndex(input: { query: string; granularity: 'scene' | 'sent
    let text = sources.get(cacheKey);
    if (text === undefined) {
      const file = yield* readFileVersioned(host, request.snapshot, item.sourcePath, item.sourceRevision);
-     try { text = new TextDecoder('utf-8', { fatal: true }).decode(file.bytes); } catch { throw failure('unsupported_format', `Invalid UTF-8: ${item.sourcePath}`); }
+     try { text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(file.bytes); } catch { throw failure('unsupported_format', `Invalid UTF-8: ${item.sourcePath}`); }
      sources.set(cacheKey, text);
    }
    const parsed = parseSemanticSourceFile(item.sourcePath, item.sourceRevision, text, item.type === 'manuscript' ? { entityId: item.entityId, type: 'manuscript' } : undefined);

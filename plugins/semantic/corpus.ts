@@ -33,7 +33,7 @@ export function* collectSemanticCorpus(host: GuestHost, request: ActionRequest):
     totalBytes += entry.byte_length; if (totalBytes > MAX_BYTES) throw failure('capacity', 'Semantic source bytes exceed the limit');
     const file = yield* readFileVersioned(host, request.snapshot, path, entry.revision);
     if (file.bytes.length !== entry.byte_length) throw failure('snapshot_stale', `Source length changed: ${path}`);
-    try { return new TextDecoder('utf-8', { fatal: true }).decode(file.bytes); } catch { throw failure('unsupported_format', `Source is not UTF-8: ${path}`); }
+    try { return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(file.bytes); } catch { throw failure('unsupported_format', `Source is not UTF-8: ${path}`); }
   }
   for (const path of [...entries.keys()].sort()) {
     if (!(path.startsWith("bible/") || path.startsWith("plot/")) || !isSemanticSourcePath(path) || !/\.ya?ml$/iu.test(path)) continue;

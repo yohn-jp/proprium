@@ -57,7 +57,7 @@ function* validateRerankEvidence(candidates: readonly RerankInputCandidate[], sn
     const file = yield* readFileVersioned(host, snapshot, path, entry.revision);
     if (file.bytes.byteLength !== entry.byte_length) throw fail("snapshot_stale", "Rerank source length changed");
     let text: string;
-    try { text = new TextDecoder("utf-8", { fatal: true }).decode(file.bytes); }
+    try { text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(file.bytes); }
     catch { throw fail("unsupported_format", "A rerank source file is not valid UTF-8"); }
     let entity: ReturnType<typeof parseSemanticSourceFile>;
     try { entity = parseSemanticSourceFile(path, file.revision, text); }
@@ -116,9 +116,9 @@ const indexStatus: Handler = function* (raw, context, host) {
   try { index = yield* loadIndex(context as ActionRequest, host); }
   catch (error) {
     if ((error as { code?: string })?.code !== "cache_corrupt" && (error as { code?: string })?.code !== "index_stale") throw error;
-    return { snapshot: context.snapshot, model: unavailableModel("embedding"), index: { state: "stale", passageCount: 0, sourceGeneration: context.snapshot.worktree_generation, indexedAt: null }, resources: { modelLoaded: embeddingLoaded(), rerankerLoaded: false, locality: "local", downloadRequired: !embeddingLoaded() }, activeTasks: semanticTasks() };
+    return { snapshot: context.snapshot, model: unavailableModel("embedding"), index: { state: "stale", passageCount: 0, sourceGeneration: context.snapshot.worktree_generation, indexedAt: null }, resources: { modelLoaded: embeddingLoaded(), rerankerLoaded: bgeRerankerLoaded(), locality: "local", downloadRequired: !embeddingLoaded() }, activeTasks: semanticTasks() };
   }
-  return { snapshot: context.snapshot, model: unavailableModel("embedding"), index: { state: index ? "ready" : "missing", passageCount: index?.passages.length ?? 0, sourceGeneration: context.snapshot.worktree_generation, indexedAt: null }, resources: { modelLoaded: embeddingLoaded(), rerankerLoaded: false, locality: "local", downloadRequired: !embeddingLoaded() }, activeTasks: semanticTasks() };
+  return { snapshot: context.snapshot, model: unavailableModel("embedding"), index: { state: index ? "ready" : "missing", passageCount: index?.passages.length ?? 0, sourceGeneration: context.snapshot.worktree_generation, indexedAt: null }, resources: { modelLoaded: embeddingLoaded(), rerankerLoaded: bgeRerankerLoaded(), locality: "local", downloadRequired: !embeddingLoaded() }, activeTasks: semanticTasks() };
 };
 const indexRebuild: Handler = function* (raw, context, host) {
   const input = exactObject(raw, ["taskId"], "input");

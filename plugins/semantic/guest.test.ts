@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
+import { sourceTextDecoder } from "../../app/src/browser/proprium/authoring/source-text.ts";
 import { guest } from "./guest.ts";
 import { parseSemanticSourceFile } from "./source.ts";
 
@@ -200,9 +201,16 @@ test("BGE reranking rereads and verifies the exact current UTF-16 source evidenc
 
   const bomText = `\uFEFF${rerankSourceText}`;
   const bomRevision = revisionFor(bomText);
-  const bomEvidence = rerankAfterHostReads({ ...validRerankCandidate, sourceRevision: bomRevision,
+  const bomHostText = sourceTextDecoder().decode(new TextEncoder().encode(bomText));
+  const bomPassage = parseSemanticSourceFile(rerankSourcePath, bomRevision, bomHostText)!.passages[0]!;
+  assert.equal(bomPassage.evidence.quote, bomHostText.slice(bomPassage.evidence.start, bomPassage.evidence.end));
+  assert.equal(bomPassage.evidence.start, bomHostText.indexOf(bomPassage.evidence.quote));
+  const shiftedEvidence = rerankAfterHostReads({ ...validRerankCandidate, sourceRevision: bomRevision,
     evidence: validRerankCandidate.evidence.map(span => ({ ...span, revision: bomRevision })) }, bomText, bomRevision);
-  assert.equal(bomEvidence.result.error.code, "provider_unavailable", "BOM stripping must preserve indexed UTF-16 offsets");
+  assert.equal(shiftedEvidence.result.error.code, "snapshot_stale", "offsets from BOM-stripped text must be rejected against original Host text");
+  const bomEvidence = rerankAfterHostReads({ ...validRerankCandidate, sourceRevision: bomRevision, text: bomPassage.text,
+    sentenceIndex: bomPassage.sentenceIndex, evidence: [bomPassage.evidence] }, bomText, bomRevision);
+  assert.equal(bomEvidence.result.error.code, "provider_unavailable", "correct original UTF-16 offsets must advance to the unavailable model");
 
   const missingQuote = rerankAfterHostReads({ ...validRerankCandidate, evidence: [{ ...validRerankCandidate.evidence[0]!, quote: undefined as unknown as string }] });
   assert.equal(missingQuote.result.error.code, "invalid_input");
