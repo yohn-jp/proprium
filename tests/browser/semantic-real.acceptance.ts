@@ -10,6 +10,7 @@ const QUERY = '暗い海を航行する船に方角を示して安全を支え�
 const HYBRID_QUERY = '沖を進む船を夜の光が導く';
 const fixture: Record<string, string> = {
   'meta/project.yaml': 'title: 海辺の記録\n',
+  'plot/scenes/lighthouse.yaml': 'id: scene-lighthouse\ntype: scene\nmanuscript: manuscript/lighthouse.md\n',
   [TARGET_PATH]: `${TARGET_TEXT}\n`,
   'manuscript/library.md': '雨音を聞きながら、少女は机に広げた古い地図を読み返した。\n',
   'manuscript/garden.md': '春の朝、庭の梅に白い花がいくつも咲いていた。\n',
@@ -37,7 +38,8 @@ test.afterEach(async ({ page }, testInfo) => {
       if (!db.objectStoreNames.contains('tasks')) { db.close(); resolve([]); return; }
       const read = db.transaction('tasks', 'readonly').objectStore('tasks').getAll();
       read.onsuccess = () => { db.close(); resolve(read.result.map(row => ({
-        state: row.progress?.state, phase: row.progress?.phase, failure_code: row.failure_code,
+        state: row.progress?.state, phase: row.progress?.phase, completed: row.progress?.completed,
+        total: row.progress?.total, failure_code: row.failure_code,
       }))); };
       read.onerror = () => { db.close(); resolve([]); };
     };
@@ -243,11 +245,14 @@ test('signed E5 admission gates by real device capacity; semantic search works l
   const cancel = tasks.getByRole('button', { name: 'キャンセル', exact: true });
   await expect(cancel).toBeVisible();
   await cancel.click();
-  await expect(tasks.getByRole('status').last()).toContainText('キャンセル', { timeout: 90_000 });
+  const cancelledTask = tasks.getByRole('status').filter({ hasText: /:\s*cancelled\b/u });
+  await expect(cancelledTask).toBeVisible({ timeout: 90_000 });
   const resume = tasks.getByRole('button', { name: /再開/u });
   await expect(resume).toBeVisible({ timeout: 90_000 });
   await resume.click();
-  await expect(tasks.getByRole('status').filter({ hasText: /:\s*complete\b/u })).toBeVisible({ timeout: 12 * 60_000 });
+  const completedTask = tasks.getByRole('status').filter({ hasText: /:\s*complete\b/u });
+  await expect(completedTask).toBeVisible({ timeout: 12 * 60_000 });
+  await expect(completedTask).toContainText(/complete · complete \([1-9]\d*\/[1-9]\d*\)/u);
   metrics.indexBuildAndResumeMs = Date.now() - buildStart;
   await attachMetrics(testInfo, 'index-complete', metrics);
 
@@ -269,6 +274,21 @@ test('signed E5 admission gates by real device capacity; semantic search works l
   await openWorkspace(page, identity);
   await page.context().setOffline(true);
   network.markOffline();
+  const offlineTasks = page.getByRole('region', { name: 'Semantic タスク' });
+  await expect(offlineTasks).toBeVisible();
+  await expect(offlineTasks.getByRole('status').first()).toBeVisible({ timeout: 90_000 });
+  const priorOfflineTask = await offlineTasks.getByRole('status').first().innerText();
+  const priorOfflineTaskId = /^([A-Za-z0-9_-]+):/u.exec(priorOfflineTask)?.[1];
+  expect(priorOfflineTaskId, 'Completed online Semantic task should be available after reload').toBeTruthy();
+  const prepareOffline = offlineTasks.getByRole('button', { name: 'インデックスを構築・検索モデルを準備', exact: true });
+  await expect(prepareOffline).toBeVisible({ timeout: 90_000 });
+  const offlineWarmStart = Date.now();
+  await prepareOffline.click();
+  await expect(offlineTasks.getByRole('status').first()).not.toContainText(priorOfflineTaskId!, { timeout: 90_000 });
+  const offlineWarm = offlineTasks.getByRole('status').filter({ hasText: /:\s*complete\b/u });
+  await expect(offlineWarm).toBeVisible({ timeout: 12 * 60_000 });
+  await expect(offlineWarm).toContainText(/complete · complete \([1-9]\d*\/[1-9]\d*\)/u);
+  metrics.offlineWarmMs = Date.now() - offlineWarmStart;
   const offlineStart = Date.now();
   const offlineSearch = await search(page, 'semantic', QUERY);
   await assertSourceNavigation(page, offlineSearch, TARGET_PATH, TARGET_TEXT);
