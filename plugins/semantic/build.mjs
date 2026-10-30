@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -11,6 +11,7 @@ const repositoryRoot = resolve(packageDirectory, "../..");
 const sourceDirectory = resolve(process.env.PROPRIUM_PLUGIN_SOURCE_DIR ?? packageDirectory);
 const output = resolve(process.env.PROPRIUM_PLUGIN_BUILD_OUTPUT ?? join(packageDirectory, "dist/plugin.component.wasm"));
 const assetOutput = resolve(process.env.PROPRIUM_PLUGIN_ASSET_OUTPUT_DIR ?? join(packageDirectory, "dist/plugin-assets"));
+const modelSourceCache = process.env.PROPRIUM_SEMANTIC_MODEL_SOURCE_CACHE;
 const declaredWorld = process.env.PROPRIUM_PLUGIN_V2_WORLD ?? "proprium:plugin/plugin@2.0.0";
 if (declaredWorld !== "proprium:plugin/plugin@2.0.0") throw new Error(`Unsupported Semantic world: ${declaredWorld}`);
 
@@ -41,6 +42,22 @@ async function findComponent(directory, expected) {
   throw new Error(`cargo-component did not emit ${expected} under ${targetDirectory}`);
 }
 
+/** Cached bytes undergo the same pinned file/chunk checks as downloaded bytes. */
+async function openModelSource(modelDirectory, relativePath, upstream) {
+  if (modelSourceCache) {
+    const path = join(resolve(modelSourceCache), modelDirectory, relativePath);
+    try {
+      await access(path);
+      return createReadStream(path);
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  const response = await fetch(new URL(relativePath, upstream));
+  if (!response.ok || !response.body) throw new Error(`Pinned Semantic asset download failed (${response.status}): ${modelDirectory}/${relativePath}`);
+  return response.body;
+}
+
 try {
   const metadata = JSON.parse(await readFile(join(sourceDirectory, "plugin.json"), "utf8"));
   const group = metadata.asset_groups?.find(item => item.id === "proprium.semantic.embedding.e5-small");
@@ -55,9 +72,7 @@ try {
     if (relativePath === "provenance.json") return createReadStream(join(sourceDirectory, "embedding/e5-small/provenance.json"));
     const allowed = new Set(["onnx/model.onnx", "tokenizer.json", "sentencepiece.bpe.model", "config.json", "tokenizer_config.json", "special_tokens_map.json"]);
     if (!path.startsWith(sourcePrefix) || !allowed.has(relativePath)) throw new Error(`Unsupported Semantic asset source: ${path}`);
-    const response = await fetch(new URL(relativePath, upstream));
-    if (!response.ok || !response.body) throw new Error(`Semantic asset download failed (${response.status}): ${relativePath}`);
-    return response.body;
+    return openModelSource("embedding/e5-small", relativePath, upstream);
   } });
   const rerankerManifestBytes = await readFile(join(sourceDirectory, rerankerGroup.manifest_path.slice("proprium/semantic/".length)));
   const rerankerPrefix = "proprium/semantic/reranker/bge-reranker-v2-m3/";
@@ -69,9 +84,7 @@ try {
     if (!path.startsWith(rerankerPrefix)) throw new Error(`Unsupported BGE asset source: ${path}`);
     if (relativePath === "provenance.json") return createReadStream(join(sourceDirectory, "reranker/provenance.json"));
     if (!rerankerPaths.has(relativePath)) throw new Error(`Unsupported pinned BGE asset source: ${relativePath}`);
-    const response = await fetch(new URL(relativePath, rerankerUpstream));
-    if (!response.ok || !response.body) throw new Error(`BGE asset download failed (${response.status}): ${relativePath}`);
-    return response.body;
+    return openModelSource("reranker/bge-reranker-v2-m3", relativePath, rerankerUpstream);
   } });
   await mkdir(dirname(output), { recursive: true });
   await mkdir(dirname(cargoTargetDirectory), { recursive: true });
