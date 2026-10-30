@@ -4127,7 +4127,7 @@
           "id": "accept-res-a013",
           "canon_title": null,
           "canon_reference": "#accept-res-a013",
-          "canon_requirement": "Switch repository, branch, overlay and active text revision during concurrent index/analysis; cancel one of two identical searches; disable/re-enable Research; evict/corrupt cache; interrupt the network during optional artifact/model transfer; suspend mobile tab. | No old result is displayed as current or repopulated after disable; one caller's cancel does not cancel another; corrupt cache rebuilds only from current snapshot; interrupted transfer leaves no active partial artifact and cached verified bytes still work offline; missing cache/Worker status is truthful; editor and local draft remain intact.",
+          "canon_requirement": "Switch repository, branch, overlay and active text revision during concurrent index/analysis; cancel and explicitly resume an index task mid-scan, mid-build and mid-publication; recreate the Guest and resume the same pinned task; cancel one of two identical searches; disable/re-enable Research; evict/corrupt cache; interrupt the network during optional artifact/model transfer; suspend mobile tab. | Each task step lists at most one 256-entry page, reads at most one source file, or publishes at most 64 records / 256 KiB; source-scan progress remains indeterminate until listing completes. Same-session resume continues its cursor. Guest reload truthfully restarts from the same pinned Git snapshot, discards only partial staged chunks, and never exposes a partial manifest. No old result is displayed as current or repopulated after disable; one search caller's cancel does not cancel another; corrupt cache rebuilds only from current snapshot; interrupted transfer leaves no active partial artifact and cached verified bytes still work offline; missing cache/Worker status is truthful; editor and local draft remain intact.",
           "feature_ids": [
             "RES-013"
           ],
@@ -4148,7 +4148,15 @@
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null,
-          "lifecycle": "ACTIVE"
+          "lifecycle": "ACTIVE",
+          "canon_metadata_history": [
+            {
+              "ledger_revision": "8a8748257f46f6907d7a5400dfbc9f22c281381d",
+              "fields": {
+                "canon_requirement": "Switch repository, branch, overlay and active text revision during concurrent index/analysis; cancel one of two identical searches; disable/re-enable Research; evict/corrupt cache; interrupt the network during optional artifact/model transfer; suspend mobile tab. | No old result is displayed as current or repopulated after disable; one caller's cancel does not cancel another; corrupt cache rebuilds only from current snapshot; interrupted transfer leaves no active partial artifact and cached verified bytes still work offline; missing cache/Worker status is truthful; editor and local draft remain intact."
+              }
+            }
+          ]
         }
       ],
       "features": [
@@ -4726,7 +4734,7 @@
         {
           "feature_id": "RES-013",
           "source_anchor_state": "UNMAPPED",
-          "author_visible_result": "Cache index and NLP results by exact workspace snapshot/config; invalidate on revision, branch, overlay, deletion, provider or plugin lifecycle change. Report progress/cancel/failure without affecting typing.",
+          "author_visible_result": "Cache index and NLP results by exact workspace snapshot/config; invalidate on revision, branch, overlay, deletion, provider or plugin lifecycle change. Build tasks page source metadata and publish cache data in bounded Host steps, report progress/cancel/failure, and never affect typing.",
           "source_disposition": "RECOVERY cache; explicit status/rebuild actions and persistent Host cache/lifecycle are DESIGN_TARGET",
           "canon_source_revisions": [
             "95a66c2c985a66bc2d535392dcc450d8c9df18d5",
@@ -4750,7 +4758,15 @@
           "artifact": null,
           "evidence_ref": "evidence/authoring/validation/results.json",
           "blocker": null,
-          "lifecycle": "ACTIVE"
+          "lifecycle": "ACTIVE",
+          "canon_metadata_history": [
+            {
+              "ledger_revision": "8a8748257f46f6907d7a5400dfbc9f22c281381d",
+              "fields": {
+                "author_visible_result": "Cache index and NLP results by exact workspace snapshot/config; invalidate on revision, branch, overlay, deletion, provider or plugin lifecycle change. Report progress/cancel/failure without affecting typing."
+              }
+            }
+          ]
         }
       ],
       "lifecycle": "ACTIVE"
