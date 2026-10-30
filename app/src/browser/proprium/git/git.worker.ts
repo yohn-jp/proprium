@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { createIgnoreReadCache } from "./ignore-read-cache.js";
+import { AuthoringSnapshotLeases, verifyAndRenewAuthoringSnapshot } from "./authoring-snapshot-lease.js";
 import { WorkspaceOperationQueue } from "./operation-queue.js";
 import { Buffer } from "buffer";
 import LightningFS from "@isomorphic-git/lightning-fs";
@@ -30,6 +31,7 @@ const knownHeads = new Map<string, string | null>();
 const authoringMutationGenerations = new Map<string, number>();
 const authoringSnapshots = new Map<string, PinnedAuthoringSnapshot>();
 const AUTHORING_SNAPSHOT_TTL_MS = 5 * 60 * 1000;
+const authoringSnapshotLeases = new AuthoringSnapshotLeases(AUTHORING_SNAPSHOT_TTL_MS);
 const AUTHORING_SNAPSHOT_LIMIT = 8;
 const AUTHORING_ORIGINAL_BYTES_LIMIT = 4 * 1024 * 1024;
 const AUTHORING_CURSOR_LIMIT = 4096;
@@ -58,7 +60,6 @@ interface PinnedAuthoringSnapshot {
   readonly revisions: Map<string, string>;
   readonly original_bytes: { used: number; files: Map<string, Uint8Array> };
   readonly cursors: Map<string, { readonly prefix: string; readonly index: number; readonly expires_at: number }>;
-  readonly expires_at: number;
 }
 
 function requireGitHubIdentity(workspace: WorkspaceIdentity): asserts workspace is GitHubWorkspaceIdentity {
@@ -716,29 +717,41 @@ async function authoringGeneration(dir: string, branch: string, lock: string): P
 }
 
 function pruneAuthoringSnapshots(): void {
-  const current = Date.now();
-  for (const [id, snapshot] of authoringSnapshots) if (snapshot.expires_at <= current) authoringSnapshots.delete(id);
+  for (const id of authoringSnapshotLeases.pruneExpired()) authoringSnapshots.delete(id);
+}
+
+function discardAuthoringSnapshot(id: string): void {
+  authoringSnapshots.delete(id);
+  authoringSnapshotLeases.release(id);
 }
 
 function requirePinnedAuthoringSnapshot(snapshotId: string, paths: { dir: string; lock: string }, workspace: WorkspaceIdentity): PinnedAuthoringSnapshot {
   if (typeof snapshotId !== "string" || !/^[A-Za-z0-9-]{16,128}$/u.test(snapshotId)) failure("invalid_input", "Authoring snapshot identifier is invalid.");
   const snapshot = authoringSnapshots.get(snapshotId);
-  if (!snapshot || snapshot.expires_at <= Date.now() || snapshot.directory !== paths.dir || snapshot.workspace_id !== workspace.localWorkspaceId || snapshot.branch !== workspace.branch) {
-    authoringSnapshots.delete(snapshotId);
+  if (!snapshot || !authoringSnapshotLeases.isActive(snapshotId) || snapshot.directory !== paths.dir || snapshot.workspace_id !== workspace.localWorkspaceId || snapshot.branch !== workspace.branch) {
+    discardAuthoringSnapshot(snapshotId);
     failure("snapshot_stale", "The authoring snapshot is unavailable or belongs to a different workspace.");
   }
   return snapshot!;
 }
 
 async function assertPinnedAuthoringSnapshot(snapshot: PinnedAuthoringSnapshot): Promise<void> {
-  if (authoringSnapshots.get(snapshot.id) !== snapshot || snapshot.expires_at <= Date.now()) {
-    authoringSnapshots.delete(snapshot.id);
+  const renewed = await verifyAndRenewAuthoringSnapshot(
+    authoringSnapshotLeases,
+    snapshot.id,
+    () => authoringSnapshots.get(snapshot.id) === snapshot,
+    async () => {
+      const current = await authoringGeneration(snapshot.directory, snapshot.branch, snapshot.lock);
+      return current.mutation_generation === snapshot.mutation_generation && current.local_commit === snapshot.local_commit &&
+        current.worktree_generation === snapshot.worktree_generation;
+    },
+  );
+  if (renewed === "expired") {
+    discardAuthoringSnapshot(snapshot.id);
     failure("snapshot_stale", "The authoring snapshot expired or was released.");
   }
-  const current = await authoringGeneration(snapshot.directory, snapshot.branch, snapshot.lock);
-  if (authoringSnapshots.get(snapshot.id) !== snapshot || snapshot.expires_at <= Date.now() || current.mutation_generation !== snapshot.mutation_generation ||
-      current.local_commit !== snapshot.local_commit || current.worktree_generation !== snapshot.worktree_generation) {
-    authoringSnapshots.delete(snapshot.id);
+  if (renewed === "source_changed") {
+    discardAuthoringSnapshot(snapshot.id);
     failure("snapshot_stale", "The workspace changed after this authoring snapshot was pinned. Refresh it before continuing.");
   }
 }
@@ -763,8 +776,8 @@ async function pinAuthoringSnapshot(workspace: WorkspaceIdentity, paths: { dir: 
     revisions: new Map(),
     original_bytes: { used: 0, files: new Map() },
     cursors: new Map(),
-    expires_at: Date.now() + AUTHORING_SNAPSHOT_TTL_MS,
   });
+  authoringSnapshotLeases.start(id);
   authoringSnapshots.set(id, snapshot);
   return { snapshot_id: id, local_commit: snapshot.local_commit, worktree_generation: snapshot.worktree_generation };
 }
@@ -773,21 +786,21 @@ async function authoringSnapshotFile(snapshot: PinnedAuthoringSnapshot, file: Pi
   const before = await fs.lstat(`${snapshot.directory}/${file.path}`);
   if (!before.isFile() || before.size !== file.byte_length || Number(before.mtimeMs) !== file.mtime_ms ||
       Number(before.ctimeMs) !== file.ctime_ms || Number(before.ino) !== file.inode) {
-    authoringSnapshots.delete(snapshot.id);
+    discardAuthoringSnapshot(snapshot.id);
     failure("snapshot_stale", `File ${file.path} changed after the authoring snapshot was pinned.`);
   }
   let revision = snapshot.revisions.get(file.path);
   if (!revision) {
     const bytes = new Uint8Array(await fs.readFile(`${snapshot.directory}/${file.path}`));
     if (bytes.byteLength !== file.byte_length) {
-      authoringSnapshots.delete(snapshot.id);
+      discardAuthoringSnapshot(snapshot.id);
       failure("snapshot_stale", `File ${file.path} changed after the authoring snapshot was pinned.`);
     }
     revision = await digestBytes(bytes);
     const after = await fs.lstat(`${snapshot.directory}/${file.path}`);
     if (!after.isFile() || after.size !== file.byte_length || Number(after.mtimeMs) !== file.mtime_ms ||
         Number(after.ctimeMs) !== file.ctime_ms || Number(after.ino) !== file.inode) {
-      authoringSnapshots.delete(snapshot.id);
+      discardAuthoringSnapshot(snapshot.id);
       failure("snapshot_stale", `File ${file.path} changed while its authoring revision was being read.`);
     }
     snapshot.revisions.set(file.path, revision);
@@ -1493,13 +1506,13 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
     const expected = snapshot.revisions.get(request.path) ?? (await authoringSnapshotFile(snapshot, fileMetadata)).revision;
     const data = new Uint8Array(await fs.readFile(`${snapshot.directory}/${request.path}`));
     if (data.byteLength !== fileMetadata.byte_length || await digestBytes(data) !== expected) {
-      authoringSnapshots.delete(snapshot.id);
+      discardAuthoringSnapshot(snapshot.id);
       failure("snapshot_stale", `Pinned bytes for ${request.path} no longer match the authoring snapshot.`);
     }
     const after = await fs.lstat(`${snapshot.directory}/${request.path}`);
     if (!after.isFile() || after.size !== fileMetadata.byte_length || Number(after.mtimeMs) !== fileMetadata.mtime_ms ||
         Number(after.ctimeMs) !== fileMetadata.ctime_ms || Number(after.ino) !== fileMetadata.inode) {
-      authoringSnapshots.delete(snapshot.id);
+      discardAuthoringSnapshot(snapshot.id);
       failure("snapshot_stale", `File ${request.path} changed while its authoring range was read.`);
     }
     await assertPinnedAuthoringSnapshot(snapshot);
@@ -1508,7 +1521,7 @@ async function operation(request: LocalGitRequest): Promise<unknown> {
   }
   if (request.operation === "authoring-snapshot-release") {
     const snapshot = requirePinnedAuthoringSnapshot(request.snapshotId, paths, request.workspace);
-    authoringSnapshots.delete(snapshot.id);
+    discardAuthoringSnapshot(snapshot.id);
     return undefined;
   }
   if (request.operation === "list-files") {
