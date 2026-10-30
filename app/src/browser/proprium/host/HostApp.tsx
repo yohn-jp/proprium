@@ -1256,17 +1256,17 @@ export function HostApp(): ReactElement {
       read={async(actionId,input,signal)=>{const result=await authoring.invokeRead("proprium.narrative",actionId,input,signal);if(!result.ok)throw new Error(`${result.error.code}: ${result.error.message}`);return result.value;}}
       capture={capturePortableResume} propose={proposePortableResume}
       open={async(event,position)=>{const result=await invokeAuthoring(event,"proprium.narrative","proprium.narrative.scene.open",{scene_id:position.scene_id},{surfaceId:"proprium.narrative.portable-resume",resume:{position,selection:null}});if(!result.action_result.ok)throw new Error(result.action_result.error.message);}} />}
-    {authoringRegistrations.some(row=>row.pluginId==="proprium.semantic"&&row.status==="ready") && <SemanticTaskControls key={`semantic:${workspaceGeneration}`} scopeKey={JSON.stringify([workspaceGeneration,workspace?.identity.localWorkspaceId,semanticRepositoryId,workspace?.identity.branch,status.head,status.entries.map(entry=>[entry.path,entry.worktree,entry.stage]),authoringRegistrations.filter(row=>row.pluginId==="proprium.semantic").map(row=>[row.manifestDigest,row.status])])}
+    {authoringRegistrations.some(row=>row.pluginId==="proprium.semantic"&&row.status==="ready") && (["embedding","reranker"] as const).map(profile=><SemanticTaskControls profile={profile} key={`semantic-${profile}:${workspaceGeneration}`} scopeKey={JSON.stringify([profile,workspaceGeneration,workspace?.identity.localWorkspaceId,semanticRepositoryId,workspace?.identity.branch,status.head,status.entries.map(entry=>[entry.path,entry.worktree,entry.stage]),authoringRegistrations.filter(row=>row.pluginId==="proprium.semantic").map(row=>[row.manifestDigest,row.status])])}
       invokeRead={(pluginId,actionId,input,signal)=>authoring.invokeRead(pluginId,actionId,input,signal)} invokeUi={(event,pluginId,actionId,input)=>authoring.invokeUi(event,pluginId,actionId,input)}
       subscribe={listener=>authoring.subscribeTaskUpdates(update=>{
-        if(update.pluginId!=="proprium.semantic"||update.profileId!=="semantic-index-v1")return;
+        if(update.pluginId!=="proprium.semantic"||update.profileId!==(profile==="embedding"?"semantic-index-v1":"semantic-reranker-v1"))return;
         const selected=workspaceRef.current;
         let repositoryId:number|null=null;
         if(selected&&isGitHubWorkspaceIdentity(selected.identity))repositoryId=selected.identity.repositoryId;
         if(selected&&update.scope.workspace_id===selected.identity.localWorkspaceId&&
           update.scope.repository_id===repositoryId&&
           update.scope.branch===selected.identity.branch&&update.scope.generation===workspaceGenerationRef.current)listener(update.task,update.snapshot.id);
-      })} />}
+      })} />)}
     {workspace && authoringRegistrations.some(row=>row.pluginId==="proprium.publishing"&&row.status==="ready") && <PublishingHostTokenRecovery
       repositoryId={isGitHubWorkspaceIdentity(workspace.identity)?workspace.identity.repositoryId:null} branch={workspace.identity.branch}
       inspect={inspectLegacyShareMap}
