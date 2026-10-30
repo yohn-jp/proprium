@@ -26,7 +26,7 @@ test("Research official manifest declares every implemented action and only acti
   const handlers = createResearchHandlers();
   const actionIds = metadata.actions.map((value) => {
     assertDescriptor(value);
-    return value.action_id;
+    return (value as { action_id: string }).action_id;
   });
   assert.equal(new Set(actionIds).size, actionIds.length);
   assert.deepEqual([...actionIds].sort(), Object.keys(handlers).sort());
@@ -72,8 +72,8 @@ test("Research index jobs use Host task IDs, bounded steps and distinct Host-own
   assert.deepEqual(rebuild.callers, ["ui"]);
   assertValue(rebuild.input_schema, {}, "Host task ID injection remains optional to declarative rebuild callers");
   assertValue(rebuild.input_schema, { taskId: "task-1" }, "Host-created rebuild task ID");
-  assertValue(rebuild.output_schema, { snapshot: hostSnapshot, taskId: "task-1", jobId: "task-1", state: "running", phase: "index_build",
-    completed: 0, total: 2, progress: { completed: 0, total: 2 } }, "start result");
+  assertValue(rebuild.output_schema, { snapshot: hostSnapshot, taskId: "task-1", jobId: "task-1", state: "running", phase: "source_scan",
+    completed: 0, total: 0, progress: { completed: 0, total: 0 } }, "start result with an indeterminate source scan");
   assert.equal(step.requires_user_gesture, false);
   assert.deepEqual(step.callers, ["ui"]);
   assertValue(step.input_schema, { taskId: "task-1", sequence: 1 }, "Host-issued Research task step");

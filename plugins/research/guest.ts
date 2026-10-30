@@ -5,6 +5,10 @@ import type { ActionRequest, ChangeSet, FileOperation } from "../../app/src/brow
 import type { GuestHost, Handler, HostCall } from "../shared/guest.js";
 import {
   buildResearchIndex,
+  MAX_DOCUMENTS,
+  MAX_INDEX_BYTES,
+  MAX_INDEX_NORMALIZATION_SPANS,
+  MAX_INDEX_TERMS,
   fuseSearchCandidates,
   filterIgnoredCandidates,
   isSearchableDocumentPath,
@@ -14,12 +18,14 @@ import {
   removeTermRegistryEntry,
   resolveTermSpans,
   TERM_REGISTRY_PATH,
+  createResearchDocument,
   updateResearchIndex,
   upsertTermRegistry,
   type ResearchIndex,
   type FusedSearchCandidate,
   type SemanticSearchCandidate,
   type ResearchDocumentInput,
+  type ResearchDocument,
   type SearchRequest,
   type TermRegistry,
 } from "./core.js";
@@ -59,6 +65,7 @@ const MAX_CHUNK = 32_768;
 const CACHE_CHUNK_BYTES = 256 * 1024;
 const CACHE_TEXT_PART_BYTES = 48 * 1024;
 const MAX_CACHE_SERIALIZED_BYTES = 47 * 1024 * 1024;
+const CACHE_PUBLISH_LINES_PER_STEP = 64;
 const INLINE_CHANGE_BYTES = 32 * 1024;
 const ARTIFACT_CHUNK_BYTES = 32 * 1024;
 const ARTIFACT_OPERATIONS = { create: "artifact.create", append: "artifact.append", seal: "artifact.seal", discard: "artifact.discard" } as const;
@@ -100,11 +107,35 @@ interface ResearchIndexTask {
   readonly entries: FileEntry[];
   readonly previous?: ResearchIndex;
   readonly previousByPath: Map<string, ResearchIndex["documents"][number]>;
-  readonly documents: ResearchDocumentInput[];
-  phase: "index_build" | "cache_publish";
+  readonly documents: ResearchDocument[];
+  readonly prefixes: string[];
+  readonly seenPaths: Set<string>;
+  phase: "source_scan" | "index_build" | "cache_publish";
+  prefixIndex: number;
+  cursor: string | null;
+  lastPath: string | null;
+  seenCursors: Set<string>;
+  scannedPages: number;
+  sourceEntryCount: number;
+  sourceBytes: number;
   completed: number;
   nextSequence: number;
   index?: ResearchIndex;
+  indexBytes: number;
+  indexTerms: number;
+  indexNormalizationSpans: number;
+  plannedSerializedBytes: number;
+  plannedChunkCount: number;
+  pendingPlanChunkBytes: number;
+  pendingPlanLineCount: number;
+  publishedBytes: number;
+  publishedChunkDigests: string[];
+  publicationReader?: Iterator<string>;
+  pendingPublicationLine?: string;
+  publicationDigest?: string;
+  preparedChunk?: { readonly index: number; readonly base64: string; readonly digest: string; readonly bytes: number; checkpointStored: boolean };
+  stalePublication?: { readonly digest: string; readonly chunkCount: number; nextChunk: number };
+  stalePublicationChecked: boolean;
 }
 
 function publicTerm(term: TermRegistry["terms"][number]): Record<string, unknown> {
@@ -460,8 +491,11 @@ function cacheKey(context: ActionRequest, scope: string | undefined, key: string
 function* cacheGet(host: GuestHost, context: ActionRequest, scope: string | undefined, key: string): Generator<HostCall, { found: boolean; value?: unknown }, unknown> {
   return yield* host.request(HOST_OPERATIONS.cacheGet, { key: cacheKey(context, scope, key) });
 }
+function* cacheEvict(host: GuestHost, context: ActionRequest, scope: string | undefined, key: string): Generator<HostCall, void, unknown> {
+  yield* host.request(HOST_OPERATIONS.cacheEvict, { key: cacheKey(context, scope, key) });
+}
 function* evictResearchCache(host: GuestHost, context: ActionRequest, scope?: string): Generator<HostCall, unknown, unknown> {
-  return yield* host.request(HOST_OPERATIONS.cacheEvict, { key: cacheKey(context, scope, "manifest") });
+  return yield* cacheEvict(host, context, scope, "manifest");
 }
 function* storeCacheValue(host: GuestHost, context: ActionRequest, scope: string | undefined, key: string, value: unknown): Generator<HostCall, void, unknown> {
   const result = object(yield* host.request(HOST_OPERATIONS.cachePut, { key: cacheKey(context, scope, key), value }), "cache receipt");
@@ -482,17 +516,116 @@ function fromBase64(value: string): Uint8Array {
 function indexDigest(entries: readonly Pick<FileEntry, "path" | "revision">[]): string {
   return sha256Text(JSON.stringify(entries.map(({ path, revision }) => [path, revision])));
 }
-function* indexCacheLines(documents: readonly ResearchDocumentInput[]): Generator<string> {
-  const encoder = new TextEncoder();
-  for (let documentIndex = 0; documentIndex < documents.length; documentIndex++) {
-    const document = documents[documentIndex]!;
+function* indexCacheLines(documents: readonly ResearchDocumentInput[], startingDocumentIndex = 0): Generator<string> {
+  for (let offset = 0; offset < documents.length; offset++) {
+    const documentIndex = startingDocumentIndex + offset;
+    const document = documents[offset]!;
     const bytes = encoder.encode(document.text);
     const partCount = Math.max(1, Math.ceil(bytes.length / CACHE_TEXT_PART_BYTES));
     for (let partIndex = 0; partIndex < partCount; partIndex++) {
       const part = bytes.subarray(partIndex * CACHE_TEXT_PART_BYTES, Math.min((partIndex + 1) * CACHE_TEXT_PART_BYTES, bytes.length));
-      yield `${JSON.stringify({ documentIndex, path: document.path, fileRevision: document.fileRevision, partIndex, partCount, textBase64: base64(part) })}\n`;
+      yield indexCacheLine(document, documentIndex, partIndex, partCount, part);
     }
   }
+}
+const encoder = new TextEncoder();
+function indexCacheLine(document: ResearchDocumentInput, documentIndex: number, partIndex: number, partCount: number, part: Uint8Array): string {
+  return `${JSON.stringify({ documentIndex, path: document.path, fileRevision: document.fileRevision, partIndex, partCount, textBase64: base64(part) })}\n`;
+}
+function researchScopePrefixes(scope?: string): string[] {
+  return scope ? [scope] : ["manuscript/", "plot/", "bible/", "meta/scratch/"];
+}
+function taskProgress(task: ResearchIndexTask): { phase: ResearchIndexTask["phase"]; completed: number; total: number } {
+  if (task.phase === "source_scan") return { phase: task.phase, completed: task.scannedPages, total: 0 };
+  if (task.phase === "index_build") return { phase: task.phase, completed: task.completed, total: task.entries.length };
+  return task.plannedSerializedBytes > 0
+    ? { phase: task.phase, completed: task.publishedBytes, total: task.plannedSerializedBytes }
+    : { phase: task.phase, completed: 0, total: 1 };
+}
+function stagingIndex(value: unknown): { digest: string; chunkCount: number } | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  if (Object.keys(row).length !== 3 || row.schemaVersion !== 1 || typeof row.digest !== "string" || !/^[a-f0-9]{64}$/u.test(row.digest) ||
+      !Number.isSafeInteger(row.chunkCount) || (row.chunkCount as number) < 0 || (row.chunkCount as number) > 256) return null;
+  return { digest: row.digest, chunkCount: row.chunkCount as number };
+}
+function planResearchDocument(task: ResearchIndexTask, document: ResearchDocument): void {
+  const indexBytes = task.indexBytes + document.bytes;
+  const indexTerms = task.indexTerms + document.tokens.size;
+  const indexNormalizationSpans = task.indexNormalizationSpans + document.normalizationSpans.length;
+  if (indexBytes > MAX_INDEX_BYTES) throw fail("capacity", "Research index exceeds its 32 MiB limit");
+  if (indexTerms > MAX_INDEX_TERMS) throw fail("capacity", "Research index contains too many distinct document terms");
+  if (indexNormalizationSpans > MAX_INDEX_NORMALIZATION_SPANS) throw fail("capacity", "Research index contains too many normalization spans");
+  let plannedSerializedBytes = task.plannedSerializedBytes;
+  let plannedChunkCount = task.plannedChunkCount;
+  let pendingPlanChunkBytes = task.pendingPlanChunkBytes;
+  let pendingPlanLineCount = task.pendingPlanLineCount;
+  const documentIndex = task.documents.length;
+  for (const line of indexCacheLines([document], documentIndex)) {
+    const size = encoder.encode(line).byteLength;
+    if (size > CACHE_CHUNK_BYTES) throw fail("capacity", "A Research cache record exceeds the bounded cache chunk size");
+    if (pendingPlanChunkBytes > 0 && (pendingPlanChunkBytes + size > CACHE_CHUNK_BYTES || pendingPlanLineCount >= CACHE_PUBLISH_LINES_PER_STEP)) {
+      plannedChunkCount++;
+      pendingPlanChunkBytes = 0; pendingPlanLineCount = 0;
+    }
+    pendingPlanChunkBytes += size;
+    pendingPlanLineCount++;
+    plannedSerializedBytes += size;
+    if (plannedSerializedBytes > MAX_CACHE_SERIALIZED_BYTES) throw fail("capacity", "Serialized Research index exceeds its Host cache bound");
+    if (Math.ceil(plannedSerializedBytes * 4 / 3) + plannedChunkCount * 2048 > 64 * 1024 * 1024) {
+      throw fail("capacity", "Research index does not fit the per-plugin Host cache quota");
+    }
+  }
+  task.indexBytes = indexBytes;
+  task.indexTerms = indexTerms;
+  task.indexNormalizationSpans = indexNormalizationSpans;
+  task.plannedSerializedBytes = plannedSerializedBytes;
+  task.plannedChunkCount = plannedChunkCount;
+  task.pendingPlanChunkBytes = pendingPlanChunkBytes;
+  task.pendingPlanLineCount = pendingPlanLineCount;
+  task.documents.push(document);
+}
+function completeResearchIndexBuild(task: ResearchIndexTask, snapshotId: string): void {
+  if (task.documents.length > MAX_DOCUMENTS) throw fail("capacity", "Research document limit exceeded");
+  if (task.pendingPlanChunkBytes > 0) task.plannedChunkCount++;
+  task.pendingPlanChunkBytes = 0; task.pendingPlanLineCount = 0;
+  if (task.plannedChunkCount > 256 || Math.ceil(task.plannedSerializedBytes * 4 / 3) + task.plannedChunkCount * 2048 > 64 * 1024 * 1024) {
+    throw fail("capacity", "Research index does not fit the per-plugin Host cache quota");
+  }
+  task.index = { snapshot: snapshotId, documents: task.documents, bytes: task.indexBytes };
+  task.phase = "cache_publish";
+  task.completed = 0;
+  task.publicationDigest = indexDigest(task.index.documents.map(({ path, fileRevision }) => ({ path, revision: fileRevision })));
+  task.publicationReader = indexCacheLines(task.index.documents);
+}
+function preparePublicationChunk(task: ResearchIndexTask): { index: number; base64: string; digest: string; bytes: number; checkpointStored: boolean } | null {
+  if (!task.index || !task.publicationReader || !task.publicationDigest) throw fail("storage_unknown", "Research publication cursor is unavailable", true);
+  let text = ""; let size = 0; let lines = 0;
+  const readNext = (): string | null => {
+    if (task.pendingPublicationLine !== undefined) {
+      const line = task.pendingPublicationLine;
+      task.pendingPublicationLine = undefined;
+      return line;
+    }
+    const next = task.publicationReader!.next();
+    if (next.done) return null;
+    return next.value;
+  };
+  while (lines < CACHE_PUBLISH_LINES_PER_STEP) {
+    const line = readNext();
+    if (line === null) break;
+    const lineSize = encoder.encode(line).byteLength;
+    if (lineSize > CACHE_CHUNK_BYTES) throw fail("capacity", "A Research cache record exceeds the bounded cache chunk size");
+    if (size > 0 && size + lineSize > CACHE_CHUNK_BYTES) {
+      task.pendingPublicationLine = line;
+      break;
+    }
+    text += line; size += lineSize; lines++;
+  }
+  if (size === 0) return null;
+  const bytes = encoder.encode(text);
+  if (bytes.byteLength !== size) throw fail("storage_unknown", "Research cache chunk size changed during publication", true);
+  return { index: task.publishedChunkDigests.length, base64: base64(bytes), digest: sha256(bytes), bytes: size, checkpointStored: false };
 }
 
 function cacheManifest(value: unknown): IndexCacheManifest | null {
@@ -866,9 +999,11 @@ export function createResearchHandlers(): Record<string, Handler> {
       if (input.scope !== undefined && (typeof input.scope !== "string" || !isSafeRelativePath(input.scope))) throw fail("invalid_path", "scope must be a safe relative path");
       const scope = input.scope as string | undefined;
       const task = [...indexTasks.values()].find(item => item.binding === snapshotCacheKey(context, scope) && item.scope === scope);
-      if (task) return { state: "indexing", coverage: { documents: task.phase === "cache_publish" ? task.entries.length : task.completed,
-        bytes: task.entries.slice(0, task.phase === "cache_publish" ? task.entries.length : task.completed).reduce((total, item) => total + item.byte_length, 0) },
-        progress: { completed: task.phase === "cache_publish" ? 0 : task.completed, total: task.phase === "cache_publish" ? 1 : task.entries.length } };
+      if (task) {
+        const progress = taskProgress(task);
+        return { state: "indexing", coverage: { documents: task.entries.length, bytes: task.sourceBytes },
+          progress: { completed: progress.completed, total: progress.total } };
+      }
       let result: { found: boolean; value?: unknown };
       try { result = yield* cacheGet(host, context, scope, "manifest"); }
       catch (error) {
@@ -891,22 +1026,20 @@ export function createResearchHandlers(): Record<string, Handler> {
         total: existing.index.documents.length, progress: { completed: existing.index.documents.length, total: existing.index.documents.length }, indexSnapshot: existing.snapshotId };
       const taskKey = researchTaskKey(context, input.taskId);
       const retained = indexTasks.get(taskKey);
-      if (retained) return { snapshot: context.snapshot, taskId: retained.taskId, jobId: retained.taskId, state: "running", phase: retained.phase, completed: retained.completed,
-        total: retained.phase === "cache_publish" ? 1 : retained.entries.length,
-        progress: { completed: retained.completed, total: retained.phase === "cache_publish" ? 1 : retained.entries.length } };
-      const entries = (yield* listSearchableEntries(host, context, scope)).filter(({ path }) => isSearchableDocumentPath(path));
-      if (entries.length > 10_000) throw fail("capacity", "Research document limit exceeded");
-      const totalBytes = entries.reduce((total, entry) => total + entry.byte_length, 0);
-      if (totalBytes > 32 * 1024 * 1024) throw fail("capacity", "Research index exceeds its 32 MiB limit");
-      if (entries.some(entry => entry.byte_length > MAX_FILE_READ)) throw fail("capacity", "A searchable file exceeds its 2 MiB limit");
+      if (retained) {
+        const progress = taskProgress(retained);
+        return { snapshot: context.snapshot, taskId: retained.taskId, jobId: retained.taskId, state: "running", ...progress,
+          progress: { completed: progress.completed, total: progress.total } };
+      }
       const previous = input.force === true ? undefined : previousIndexFor(context, scope);
       const task: ResearchIndexTask = { taskId: input.taskId, binding: snapshotCacheKey(context, scope), ...(scope ? { scope } : {}),
-        force: input.force === true, entries, previous, previousByPath: new Map((previous?.documents ?? []).map(item => [item.path, item])), documents: [],
-        phase: entries.length === 0 ? "cache_publish" : "index_build", completed: 0, nextSequence: 0,
-        ...(entries.length === 0 ? { index: buildResearchIndex([], context.snapshot.id) } : {}) };
+        force: input.force === true, entries: [], previous, previousByPath: new Map((previous?.documents ?? []).map(item => [item.path, item])), documents: [],
+        prefixes: researchScopePrefixes(scope), seenPaths: new Set(), phase: "source_scan", prefixIndex: 0, cursor: null, lastPath: null,
+        seenCursors: new Set(), scannedPages: 0, sourceEntryCount: 0, sourceBytes: 0, completed: 0, nextSequence: 0,
+        indexBytes: 0, indexTerms: 0, indexNormalizationSpans: 0, plannedSerializedBytes: 0, plannedChunkCount: 0,
+        pendingPlanChunkBytes: 0, pendingPlanLineCount: 0, publishedBytes: 0, publishedChunkDigests: [], stalePublicationChecked: false };
       indexTasks.set(taskKey, task);
-      return { snapshot: context.snapshot, taskId: input.taskId, jobId: input.taskId, state: "running", phase: task.phase, completed: 0,
-        total: task.phase === "cache_publish" ? 1 : entries.length, progress: { completed: 0, total: task.phase === "cache_publish" ? 1 : entries.length } };
+      return { snapshot: context.snapshot, taskId: input.taskId, jobId: input.taskId, state: "running", ...taskProgress(task), progress: { completed: 0, total: 0 } };
     },
     "research.index.step": function* (raw, context, host) {
       const input = object(raw); exactFields(input, ["taskId", "sequence"]);
@@ -915,37 +1048,131 @@ export function createResearchHandlers(): Record<string, Handler> {
       const task = indexTasks.get(taskKey);
       if (!task || task.binding !== snapshotCacheKey(context, task.scope)) throw fail("storage_unknown", "Research task checkpoint is unavailable; start a new rebuild", true);
       const sequence = input.sequence as number;
-      if (sequence <= task.nextSequence) return { snapshot: context.snapshot, taskId: task.taskId, state: "running", phase: task.phase,
-        completed: task.completed, total: task.phase === "cache_publish" ? 1 : task.entries.length };
+      if (sequence <= task.nextSequence) return { snapshot: context.snapshot, taskId: task.taskId, state: "running", ...taskProgress(task) };
       if (sequence !== task.nextSequence + 1) throw fail("invalid_input", "Research task step sequence is out of order");
-      task.nextSequence = sequence;
+      const running = () => {
+        task.nextSequence = sequence;
+        return { snapshot: context.snapshot, taskId: task.taskId, state: "running" as const, ...taskProgress(task) };
+      };
+      if (task.phase === "source_scan") {
+        if (!task.stalePublicationChecked) {
+          const stale = yield* cacheGet(host, context, task.scope, "staging-manifest");
+          if (stale?.found) {
+            const staging = stagingIndex(stale.value);
+            if (!staging) {
+              // A corrupt disposable marker has no safe cleanup cursor. Forget
+              // it and resume from the pinned source on the next bounded step.
+              yield* cacheEvict(host, context, task.scope, "staging-manifest");
+              task.stalePublicationChecked = true;
+              return running();
+            }
+            const committed = yield* cacheGet(host, context, task.scope, "manifest");
+            const manifest = committed?.found ? cacheManifest(committed.value) : null;
+            const stalePublication = { digest: staging.digest, chunkCount: staging.chunkCount, nextChunk: 0 };
+            if (manifest?.sha256 === staging.digest && manifest.chunkCount === staging.chunkCount) {
+              stalePublication.nextChunk = staging.chunkCount;
+            } else if (manifest?.sha256 === staging.digest) {
+              yield* evictResearchCache(host, context, task.scope);
+            }
+            task.stalePublication = stalePublication;
+          }
+          task.stalePublicationChecked = true;
+        }
+        if (task.stalePublication) {
+          const stale = task.stalePublication;
+          if (stale.nextChunk < stale.chunkCount) {
+            yield* cacheEvict(host, context, task.scope, `data:${stale.digest}:${stale.nextChunk}`);
+            stale.nextChunk++;
+          } else {
+            // A matching manifest means publication committed before an earlier
+            // worker stopped. Keep that derived index and only clear its marker.
+            yield* cacheEvict(host, context, task.scope, "staging-manifest");
+            task.stalePublication = undefined;
+          }
+          return running();
+        }
+        if (task.prefixIndex < task.prefixes.length) {
+          const prefix = task.prefixes[task.prefixIndex]!;
+          const page: FilePage = yield* host.request<FilePage>(HOST_OPERATIONS.list,
+            { snapshot: context.snapshot, prefix, ...(task.cursor ? { cursor: task.cursor } : {}), limit: 256 });
+          if (!page || !Array.isArray(page.entries) || page.entries.length > 256 || !(page.next_cursor === null || typeof page.next_cursor === "string")) {
+            throw fail("storage_unknown", "Host returned an invalid file page");
+          }
+          for (const entry of page.entries) {
+            if (!entry || typeof entry.path !== "string" || !entry.path.startsWith(prefix) || !isSafeRelativePath(entry.path) || !validRevision(entry.revision) ||
+                !Number.isSafeInteger(entry.byte_length) || entry.byte_length < 0 || typeof entry.media_type !== "string") throw fail("storage_unknown", "Host returned invalid file metadata");
+            if (task.lastPath !== null && utf8PathCompare(task.lastPath, entry.path) >= 0) throw fail("storage_unknown", "Host file pages are not in strict UTF-8 order");
+            task.lastPath = entry.path;
+            const inScope = !task.scope || entry.path === task.scope || entry.path.startsWith(`${task.scope}/`);
+            if (!inScope || !isSearchableDocumentPath(entry.path)) continue;
+            if (task.seenPaths.has(entry.path)) throw fail("snapshot_stale", "Host listing repeated a Research path", true);
+            if (entry.byte_length > MAX_FILE_READ) throw fail("capacity", `Searchable file exceeds its 2 MiB limit: ${entry.path}`, false, { path: entry.path });
+            if (task.entries.length >= MAX_DOCUMENTS) throw fail("capacity", "Research document limit exceeded");
+            task.sourceBytes += entry.byte_length;
+            if (task.sourceBytes > 32 * 1024 * 1024) throw fail("capacity", "Research index exceeds its 32 MiB limit");
+            task.seenPaths.add(entry.path); task.entries.push(entry);
+          }
+          task.sourceEntryCount += page.entries.length;
+          if (task.sourceEntryCount > MAX_SOURCE_PATHS) throw fail("capacity", "Research source path limit exceeded");
+          task.scannedPages++;
+          if (page.next_cursor !== null) {
+            if (page.entries.length === 0 || !page.next_cursor || task.seenCursors.has(page.next_cursor)) throw fail("snapshot_stale", "Research file-list cursor did not advance", true);
+            task.seenCursors.add(page.next_cursor); task.cursor = page.next_cursor;
+          } else {
+            task.prefixIndex++; task.cursor = null; task.lastPath = null; task.seenCursors.clear();
+          }
+        }
+        if (task.prefixIndex === task.prefixes.length) {
+          task.entries.sort((left, right) => utf8PathCompare(left.path, right.path));
+          task.phase = "index_build";
+          if (task.entries.length === 0) completeResearchIndexBuild(task, context.snapshot.id);
+        }
+        return running();
+      }
       if (task.phase === "index_build") {
         const entry = task.entries[task.completed];
         if (entry) {
           const previous = task.previousByPath.get(entry.path);
+          let document: ResearchDocument;
           if (!previous || task.force || previous.fileRevision !== entry.revision || previous.bytes !== entry.byte_length) {
             const text = yield* readEntryText(host, context, entry);
-            task.documents.push({ path: entry.path, fileRevision: entry.revision, text });
-          }
+            document = createResearchDocument({ path: entry.path, fileRevision: entry.revision, text });
+          } else document = previous;
+          planResearchDocument(task, document);
           task.completed++;
         }
         if (task.completed === task.entries.length) {
-          const current = task.entries.map(item => ({ path: item.path, fileRevision: item.revision, byteLength: item.byte_length }));
-          task.index = task.previous && !task.force
-            ? updateResearchIndex(task.previous, current, task.documents, context.snapshot.id)
-            : buildResearchIndex(task.documents, context.snapshot.id);
-          task.phase = "cache_publish";
-          task.completed = 0;
+          completeResearchIndexBuild(task, context.snapshot.id);
         }
-        return { snapshot: context.snapshot, taskId: task.taskId, state: "running", phase: task.phase,
-          completed: task.completed, total: task.phase === "cache_publish" ? 1 : task.entries.length };
+        return running();
       }
-      if (!task.index) throw fail("storage_unknown", "Research index build was not prepared for publication", true);
-      yield* storeIndexSources(host, context, task.scope, task.index);
-      const entry = rememberIndex(context, task.index, task.scope);
+      if (!task.index || !task.publicationDigest) throw fail("storage_unknown", "Research index build was not prepared for publication", true);
+      if (!task.preparedChunk) task.preparedChunk = preparePublicationChunk(task) ?? undefined;
+      const chunk = task.preparedChunk;
+      if (chunk) {
+        if (!chunk.checkpointStored) {
+          yield* storeCacheValue(host, context, task.scope, "staging-manifest",
+            { schemaVersion: 1, digest: task.publicationDigest, chunkCount: chunk.index + 1 });
+          chunk.checkpointStored = true;
+        }
+        yield* storeCacheValue(host, context, task.scope, `data:${task.publicationDigest}:${chunk.index}`, { base64: chunk.base64 });
+        task.publishedChunkDigests.push(chunk.digest);
+        task.publishedBytes += chunk.bytes;
+        task.preparedChunk = undefined;
+        return running();
+      }
+      if (task.publishedBytes !== task.plannedSerializedBytes || task.publishedChunkDigests.length !== task.plannedChunkCount) {
+        throw fail("storage_unknown", "Research publication does not match its bounded serialization plan", true);
+      }
+      const manifest: IndexCacheManifest = { schemaVersion: 1, snapshotId: context.snapshot.id, scope: task.scope ?? null,
+        documentCount: task.index.documents.length, sourceBytes: task.index.bytes, serializedBytes: task.plannedSerializedBytes,
+        chunkCount: task.publishedChunkDigests.length, sha256: task.publicationDigest, chunkDigests: task.publishedChunkDigests };
+      yield* storeCacheValue(host, context, task.scope, "manifest", manifest);
+      yield* cacheEvict(host, context, task.scope, "staging-manifest");
+      const published = rememberIndex(context, task.index, task.scope);
+      task.nextSequence = sequence;
       indexTasks.delete(taskKey);
-      return { snapshot: context.snapshot, taskId: task.taskId, state: "complete", phase: "complete", completed: 1,
-        total: 1, indexSnapshot: entry.snapshotId };
+      return { snapshot: context.snapshot, taskId: task.taskId, state: "complete", phase: "complete", completed: 1, total: 1, indexSnapshot: published.snapshotId };
     },
     "research.task.status": () => { throw fail("capability_denied", "Research task status is owned by the Host"); },
     "research.task.cancel": () => { throw fail("capability_denied", "Research task cancellation is owned by the Host"); },
