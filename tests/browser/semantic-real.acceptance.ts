@@ -10,6 +10,7 @@ const QUERY = '暗い海を航行する船に方角を示して安全を支え�
 const HYBRID_QUERY = '沖を進む船を夜の光が導く';
 const fixture: Record<string, string> = {
   'meta/project.yaml': 'title: 海辺の記録\n',
+  'plot/scenes/lighthouse.yaml': 'id: scene-lighthouse\ntype: scene\nmanuscript: manuscript/lighthouse.md\n',
   [TARGET_PATH]: `${TARGET_TEXT}\n`,
   'manuscript/library.md': '雨音を聞きながら、少女は机に広げた古い地図を読み返した。\n',
   'manuscript/garden.md': '春の朝、庭の梅に白い花がいくつも咲いていた。\n',
@@ -37,7 +38,8 @@ test.afterEach(async ({ page }, testInfo) => {
       if (!db.objectStoreNames.contains('tasks')) { db.close(); resolve([]); return; }
       const read = db.transaction('tasks', 'readonly').objectStore('tasks').getAll();
       read.onsuccess = () => { db.close(); resolve(read.result.map(row => ({
-        state: row.progress?.state, phase: row.progress?.phase, failure_code: row.failure_code,
+        state: row.progress?.state, phase: row.progress?.phase, completed: row.progress?.completed,
+        total: row.progress?.total, failure_code: row.failure_code,
       }))); };
       read.onerror = () => { db.close(); resolve([]); };
     };
@@ -164,6 +166,7 @@ async function attachMetrics(testInfo: TestInfo, stage: string, value: Record<st
 
 test('signed E5 admission gates by real device capacity; semantic search works locally and WebKit keeps lexical fallback', async ({ page, browserName }, testInfo) => {
   const metrics: Record<string, unknown> = { project: testInfo.project.name, browserName, startedAt: new Date().toISOString() };
+  const transferProbe = process.env.PROPRIUM_SEMANTIC_TRANSFER_PROBE === '1';
   const { allowedOrigins } = await routeSignedRegistry(page);
   const network = watchNetwork(page, allowedOrigins);
   const identity = { provider: 'local' as const, name: 'semantic-real', branch: 'main', localWorkspaceId: `semantic-real-${Date.now()}` };
@@ -230,24 +233,49 @@ test('signed E5 admission gates by real device capacity; semantic search works l
   const rebuild = tasks.getByRole('button', { name: /モデルを準備|インデックスを(作成|再構築|構築)/u });
   await expect(rebuild).toBeVisible();
   const buildStart = Date.now();
+  if (transferProbe) {
+    page.on('console', message => {
+      if (message.text().startsWith('SEMANTIC_TASK_PULSE ')) console.log(message.text());
+    });
+    await page.evaluate(startedAt => {
+      window.setInterval(() => {
+        const region = document.querySelector("section[aria-label='Semantic タスク']");
+        const progress = region?.querySelector('progress');
+        const status = region?.textContent?.replace(/\s+/gu, ' ').trim() ?? 'none';
+        console.log(`SEMANTIC_TASK_PULSE ${Date.now() - startedAt}ms ${progress?.value ?? 0}/${progress?.max ?? 0} ${status.slice(0, 200)}`);
+      }, 30_000);
+    }, buildStart);
+  }
   await rebuild.click();
   const progress = tasks.getByRole('progressbar').first();
   await expect(progress).toBeVisible({ timeout: 90_000 });
-  await page.waitForFunction(() => {
+  await page.waitForFunction(threshold => {
     const region = document.querySelector("section[aria-label='Semantic タスク']");
     return region && (/:\s*failed\b/u.test(region.textContent ?? '') ||
-      Array.from(region.querySelectorAll('progress')).some(element => element.value > 0));
-  }, undefined, { timeout: 90_000 });
+      Array.from(region.querySelectorAll('progress')).some(element => element.value >= threshold));
+  }, transferProbe ? 8 * 1024 * 1024 : 1, { timeout: 90_000 });
   expect(await tasks.innerText()).not.toMatch(/:\s*failed\b/u);
   expect(await progress.evaluate(element => (element as HTMLProgressElement).value)).toBeGreaterThan(0);
+  const transferProbeCompleted = await progress.evaluate(element => (element as HTMLProgressElement).value);
+  const transferProbeTotal = await progress.evaluate(element => (element as HTMLProgressElement).max);
   const cancel = tasks.getByRole('button', { name: 'キャンセル', exact: true });
   await expect(cancel).toBeVisible();
   await cancel.click();
-  await expect(tasks.getByRole('status').last()).toContainText('キャンセル', { timeout: 90_000 });
+  const cancelledTask = tasks.getByRole('status').filter({ hasText: /:\s*cancelled\b/u });
+  await expect(cancelledTask).toBeVisible({ timeout: 90_000 });
+  if (transferProbe) {
+    const elapsedMs = Date.now() - buildStart;
+    metrics.modelLoadProbe = { completedBytes: transferProbeCompleted, totalBytes: transferProbeTotal, elapsedMs,
+      bytesPerSecond: elapsedMs > 0 ? Math.round(transferProbeCompleted * 1000 / elapsedMs) : null };
+    await attachMetrics(testInfo, 'model-load-probe', metrics);
+    return;
+  }
   const resume = tasks.getByRole('button', { name: /再開/u });
   await expect(resume).toBeVisible({ timeout: 90_000 });
   await resume.click();
-  await expect(tasks.getByRole('status').filter({ hasText: /:\s*complete\b/u })).toBeVisible({ timeout: 12 * 60_000 });
+  const completedTask = tasks.getByRole('status').filter({ hasText: /:\s*complete\b/u });
+  await expect(completedTask).toBeVisible({ timeout: 12 * 60_000 });
+  await expect(completedTask).toContainText(/complete · complete \([1-9]\d*\/[1-9]\d*\)/u);
   metrics.indexBuildAndResumeMs = Date.now() - buildStart;
   await attachMetrics(testInfo, 'index-complete', metrics);
 
@@ -269,6 +297,21 @@ test('signed E5 admission gates by real device capacity; semantic search works l
   await openWorkspace(page, identity);
   await page.context().setOffline(true);
   network.markOffline();
+  const offlineTasks = page.getByRole('region', { name: 'Semantic タスク' });
+  await expect(offlineTasks).toBeVisible();
+  await expect(offlineTasks.getByRole('status').first()).toBeVisible({ timeout: 90_000 });
+  const priorOfflineTask = await offlineTasks.getByRole('status').first().innerText();
+  const priorOfflineTaskId = /^([A-Za-z0-9_-]+):/u.exec(priorOfflineTask)?.[1];
+  expect(priorOfflineTaskId, 'Completed online Semantic task should be available after reload').toBeTruthy();
+  const prepareOffline = offlineTasks.getByRole('button', { name: 'インデックスを構築・検索モデルを準備', exact: true });
+  await expect(prepareOffline).toBeVisible({ timeout: 90_000 });
+  const offlineWarmStart = Date.now();
+  await prepareOffline.click();
+  await expect(offlineTasks.getByRole('status').first()).not.toContainText(priorOfflineTaskId!, { timeout: 90_000 });
+  const offlineWarm = offlineTasks.getByRole('status').filter({ hasText: /:\s*complete\b/u });
+  await expect(offlineWarm).toBeVisible({ timeout: 12 * 60_000 });
+  await expect(offlineWarm).toContainText(/complete · complete \([1-9]\d*\/[1-9]\d*\)/u);
+  metrics.offlineWarmMs = Date.now() - offlineWarmStart;
   const offlineStart = Date.now();
   const offlineSearch = await search(page, 'semantic', QUERY);
   await assertSourceNavigation(page, offlineSearch, TARGET_PATH, TARGET_TEXT);
