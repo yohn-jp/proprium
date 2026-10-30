@@ -14,10 +14,10 @@ const sources: Record<string, string> = {
   "bible/characters/char-2/voice.yaml": "firstPerson: [私]\ntone: calm\n",
   "bible/locations/loc-1.yaml": "id: loc-1\nname: Harbor\ntravel:\n  daysTo: 2\n",
   "bible/locations/bad.yaml": "id: [unterminated\n",
-  "plot/volumes/v1/volume.yaml": "id: vol-1\ntype: volume\norder: 1\n",
-  "plot/volumes/v1/chapters/c1/chapter.yaml": "id: ch-1\ntype: chapter\nvolume: vol-1\norder: 1\n",
+  "plot/volumes/v1/volume.yaml": "id: vol-1\ntype: volume\ntitle: First Volume\norder: 1\n",
+  "plot/volumes/v1/chapters/c1/chapter.yaml": "id: ch-1\ntype: chapter\ntitle: First Chapter\nvolume: vol-1\norder: 1\n",
   "plot/volumes/v1/chapters/c1/scenes/scene-1.yaml": [
-    "id: scene-1", "type: scene", "chapter: ch-1", "order: 1", "pov: char-1", "location: loc-missing", "appears: [char-2]", "manuscript: manuscript/v1/c1/actual.md", "",
+    "id: scene-1", "type: scene", "title: 灯の場面", "chapter: ch-1", "order: 1", "pov: char-1", "location: loc-missing", "appears: [char-2]", "manuscript: manuscript/v1/c1/actual.md", "",
   ].join("\n"),
   "meta/tags.yaml": "character: [lead]\n",
   "manuscript/v1/c1/actual.md": "\uFEFF---\r\ntitle: Scene\r\n---\r\n灯😀\r\n",
@@ -74,6 +74,9 @@ test("Knowledge snapshot pages listings and reads exact bytes without eager manu
   assert.deepEqual(story.duplicateIds.get("char-1"), ["bible/characters/char-1.yaml", "bible/characters/char-1/profile.yaml"]);
   assert.equal(story.entities.has("char-1"), false, "ambiguous entity IDs must never be last-write-wins");
   assert.equal(story.entities.get("char-2")?.raw.voice && (story.entities.get("char-2")!.raw.voice as Record<string, unknown>).tone, "calm");
+  assert.equal(story.entities.get("vol-1")?.name, "First Volume");
+  assert.equal(story.entities.get("ch-1")?.name, "First Chapter");
+  assert.equal(story.entities.get("scene-1")?.name, "灯の場面");
   assert.equal((story.entities.get("char-2")?.raw.custom as Record<string, unknown>).ownerField, "preserve");
   assert.ok(story.diagnostics.some((row) => row.code === "duplicate_id" && row.entityId === "char-1"));
   assert.ok(story.diagnostics.some((row) => row.code === "unsupported_format" && row.path === "bible/locations/bad.yaml"));

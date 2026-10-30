@@ -27,7 +27,7 @@ async function openRecentWorkspace(page: import("@playwright/test").Page, worksp
   const recent = page.getByRole("button", { name: new RegExp(escapedName) }).first();
   await expect(recent).toBeVisible();
   await recent.click();
-  await expect(page.locator(".host-message[role='status']")).toContainText("この端末の作品を開きました");
+  await expect(page.locator(".host-message[role='status']")).toContainText("ローカル作品を開きました");
 }
 
 test.beforeAll(async () => {
@@ -44,7 +44,7 @@ test("normal Host installs and enables all independently signed authoring Compon
   if (testInfo.project.name === "webkit-mobile") await openMobileLibrary(page);
   await page.getByLabel("作品名", { exact: true }).fill(workspaceName);
   await page.getByRole("button", { name: "ローカル作品を作成", exact: true }).click();
-  await expect(page.locator(".host-message[role='status']")).toContainText("この端末の作品を開きました");
+  await expect(page.locator(".host-message[role='status']")).toContainText("ローカル作品を開きました");
 
   const fixture = await seedSyntheticAuthoringWork(page, workspaceName);
   expect(fixture.scene_count).toBe(301);

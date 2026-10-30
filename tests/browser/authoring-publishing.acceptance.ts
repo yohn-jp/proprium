@@ -163,6 +163,8 @@ test('signed Publishing locally exports TXT and EPUB and opens vertical print wi
   await episodePanel.getByRole('tab', { name: '旧データの復旧', exact: true }).click();
   await episodePanel.getByRole('button', { name: '旧データの復旧を読み込む', exact: true }).click();
   const recoveryTab = episodePanel.getByRole('tabpanel', { name: '旧データの復旧', exact: true });
+  await expect(recoveryTab.locator('.authoring-surface-body')).toHaveAttribute('aria-busy', 'true', { timeout: 60_000 });
+  await expect(recoveryTab.locator('.authoring-surface-body')).toHaveAttribute('aria-busy', 'false', { timeout: 60_000 });
   await recoveryTab.getByRole('tab', { name: '復旧候補', exact: true }).click();
   await expect(recoveryTab.getByRole('table')).toContainText('ready');
   await expect(recoveryTab.getByRole('table')).toContainText('meta/publish-episodes.yaml');
