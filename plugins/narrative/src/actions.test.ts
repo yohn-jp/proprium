@@ -898,3 +898,28 @@ test("component guest routes changes.compile through cooperative Host continuati
   assert.equal(host.calls.get("workspace.change.propose"), undefined);
   guest.dispose();
 });
+
+test("scene.continue rejects stale metadata even when manuscript bytes are unchanged", () => {
+  const host = new MemoryHost();
+  addWork(host, 1);
+  const metadataPath = "plot/volumes/folder-not-id/chapters/directory-not-id/scenes/file-scene-1.yaml";
+  const manuscriptPath = "manuscript/custom/scene-1.md";
+  const metadataRevision = host.files.get(metadataPath)!.revision;
+  const manuscriptRevision = host.files.get(manuscriptPath)!.revision;
+  const input = { resume_position: {
+    scene_id: "scene-1", manuscript_path: manuscriptPath,
+    metadata_revision: metadataRevision, manuscript_revision: manuscriptRevision,
+    draft_generation: null, sentence_index: 1, scroll_top: 0,
+  } };
+  const action = "proprium.narrative.scene.continue";
+  assert.equal((run(host, request(action, input)) as { status: string }).status, "ready");
+  host.add(metadataPath, [
+    "id: scene-1", "type: scene", "title: Renamed Scene", "volume: work-volume",
+    "chapter: work-chapter", "order: 1", "manuscript: manuscript/custom/scene-1.md", "",
+  ].join("\n"));
+  const result = run(host, request(action, input)) as { status: string; candidate: unknown; diagnostics: Array<{ code: string; path?: string }> };
+  assert.equal(result.status, "stale_position");
+  assert.equal(result.candidate, null);
+  assert.deepEqual(result.diagnostics.map(item => item.code), ["stale_position"]);
+  assert.equal(result.diagnostics[0]?.path, metadataPath);
+});
