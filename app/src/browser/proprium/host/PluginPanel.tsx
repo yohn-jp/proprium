@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { BrowserPluginManager } from "../plugins/index.js";
+import { NATIVE_NARRATIVE_ID, nativeNarrativeVersion } from "../authoring/native-narrative.js";
 import { decodeRegistryBytes } from "../plugins/registry.js";
 import type { InstalledPlugin, PluginInstallPreview, RegistryCatalogEntry } from "../plugins/manager.js";
 import type { PluginCapability, PluginTranscript, RuntimeSnapshot } from "../plugin-runtime/protocol.js";
@@ -121,7 +122,8 @@ export function PluginPanel({ manager, workspaceId, activationScope, git, revisi
   const currentRevisionKey = useRef(revisionKey);
   const currentSnapshots = useRef(new Map<string, SnapshotState>());
   currentRevisionKey.current = revisionKey;
-  const filteredCatalog = registryCatalog.filter(entry => (entry.id + " " + entry.version).toLocaleLowerCase().includes(catalogQuery.trim().toLocaleLowerCase()));
+  const filteredCatalog = registryCatalog.filter(entry => entry.id !== NATIVE_NARRATIVE_ID && (entry.id + " " + entry.version).toLocaleLowerCase().includes(catalogQuery.trim().toLocaleLowerCase()));
+  const legacyPlugins = plugins.filter(plugin => plugin.id !== NATIVE_NARRATIVE_ID);
   useEffect(() => { if (installPlan) previewRef.current?.scrollIntoView({ block: "start" }); }, [installPlan]);
 
   useEffect(() => {
@@ -345,9 +347,10 @@ export function PluginPanel({ manager, workspaceId, activationScope, git, revisi
   }
 
   return <details className="plugin-manager-panel">
-    <summary>プラグイン <span className="count-badge">{plugins.length}件導入済み</span></summary>
+    <summary>プラグイン <span className="count-badge">{legacyPlugins.length}件導入済み</span></summary>
     <div className="plugin-panel-content">
-      <p className="plugin-panel-copy">プラグインは署名を検証してから利用できます。インストールしても無効状態のままで、権限を確認して有効化した後に実行できます。</p>
+      <p className="plugin-panel-copy">NarrativeはHostに標準搭載されたTypeScript機能です。旧WASM版の導入・有効化・更新は不要です。その他の旧プラグインは署名検証後に有効化できます。</p>
+      <p role="status">Narrative v{nativeNarrativeVersion()}：標準搭載・利用可能。レビューとツールの「Work outline」から作品を読み込めます。</p>
       {!config ? <p className="plugin-panel-warning" role="status">このHostビルドには信頼済みプラグインレジストリが設定されていません。</p> : <section className="plugin-registry-catalog" aria-labelledby="plugin-registry-heading">
         <div className="plugin-catalog-heading">
           <div><h3 id="plugin-registry-heading">利用可能なプラグイン</h3>
@@ -361,7 +364,7 @@ export function PluginPanel({ manager, workspaceId, activationScope, git, revisi
         {catalogLoaded && registryCatalog.length === 0 && <p className="plugin-empty">検証済みレジストリに利用可能なプラグインはありません。</p>}
         {catalogLoaded && registryCatalog.length > 0 && filteredCatalog.length === 0 && <p className="plugin-empty">検索条件に一致するプラグインはありません。</p>}
         {filteredCatalog.length > 0 && <ul className="registry-plugin-list">{filteredCatalog.map(entry => {
-          const installed = plugins.some(plugin => plugin.id === entry.id && plugin.version === entry.version);
+          const installed = legacyPlugins.some(plugin => plugin.id === entry.id && plugin.version === entry.version);
           const shortName = entry.id.startsWith("proprium.") ? entry.id.slice("proprium.".length) : entry.id;
           return <li key={entry.registryUrl + ":" + entry.id + "@" + entry.version}>
             <article className="registry-plugin-card">
@@ -387,7 +390,7 @@ export function PluginPanel({ manager, workspaceId, activationScope, git, revisi
       </section>}
       {notice && <p className="plugin-notice" role="status" aria-live="polite">{notice}</p>}
       <h3 className="installed-plugins-heading">この端末に導入済み</h3>
-      {!plugins.length ? <div className="plugin-empty-state"><p className="plugin-empty">検証済みのインストール済みプラグインはありません。</p><p>プラグインがなくても、ワークスペースの編集とGit操作は利用できます。</p></div> : <ul className="installed-plugins">{plugins.map(plugin => {
+      {!legacyPlugins.length ? <div className="plugin-empty-state"><p className="plugin-empty">検証済みのインストール済みプラグインはありません。</p><p>プラグインがなくても、ワークスペースの編集とGit操作は利用できます。</p></div> : <ul className="installed-plugins">{legacyPlugins.map(plugin => {
         const pluginKey = `${plugin.id}@${plugin.version}`;
         const inputId = `plugin-input-${plugin.id}-${plugin.version}`;
         const inputHelpId = `${inputId}-help`;
