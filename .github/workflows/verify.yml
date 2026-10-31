@@ -3,8 +3,38 @@ name: Proprium Browser Verification
 on:
   push:
     branches: [main]
+    paths:
+      - 'app/**'
+      - 'plugins/**'
+      - 'packages/**'
+      - 'modules/**'
+      - 'scripts/**'
+      - 'tests/browser/**'
+      - 'tests/e2e/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+      - 'tsconfig.base.json'
+      - 'tsconfig.safety.json'
+      - 'wrangler.jsonc'
+      - '.github/workflows/verify.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'app/**'
+      - 'plugins/**'
+      - 'packages/**'
+      - 'modules/**'
+      - 'scripts/**'
+      - 'tests/browser/**'
+      - 'tests/e2e/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+      - 'tsconfig.base.json'
+      - 'tsconfig.safety.json'
+      - 'wrangler.jsonc'
+      - '.github/workflows/verify.yml'
   workflow_dispatch:
 
 permissions:
