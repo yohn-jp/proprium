@@ -2,11 +2,11 @@ import { expect, test, type Page } from "@playwright/test";
 import { expectEditorText, showPanel } from "./restored-ui.helpers.js";
 
 const files: Record<string, string> = {
-  "meta/project.yaml": "title: ネイティブ作品\\n",
-  "plot/volumes/v/volume.yaml": "id: v1\\ntype: volume\\ntitle: 第一巻\\norder: 1\\n",
-  "plot/volumes/v/chapters/c/chapter.yaml": "id: c1\\ntype: chapter\\ntitle: 第一章\\nvolume: v1\\norder: 1\\n",
-  "plot/volumes/v/chapters/c/scenes/a.yaml": "id: s1\\ntype: scene\\ntitle: 雨の夜\\nvolume: v1\\nchapter: c1\\norder: 1\\nmanuscript: manuscript/a.md\\n",
-  "manuscript/a.md": "雨の夜から始まる。\\n",
+  "meta/project.yaml": "title: ネイティブ作品\n",
+  "plot/volumes/v/volume.yaml": "id: v1\ntype: volume\ntitle: 第一巻\norder: 1\n",
+  "plot/volumes/v/chapters/c/chapter.yaml": "id: c1\ntype: chapter\ntitle: 第一章\nvolume: v1\norder: 1\n",
+  "plot/volumes/v/chapters/c/scenes/a.yaml": "id: s1\ntype: scene\ntitle: 雨の夜\nvolume: v1\nchapter: c1\norder: 1\nmanuscript: manuscript/a.md\n",
+  "manuscript/a.md": "雨の夜から始まる。\n",
 };
 
 async function revealOutline(page: Page) {
