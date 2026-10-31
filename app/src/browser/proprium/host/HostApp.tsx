@@ -873,8 +873,10 @@ export function HostApp(): ReactElement {
   }
 
   async function saveDraft(): Promise<void> {
-    if (!git || !currentFile || currentFile.binary || currentFile.text === null) return;
-    const savingFile = currentFile;
+    // The current editor can update before React commits a render. Never save
+    // the stale closure's text when Ctrl+S immediately follows an edit.
+    const savingFile = currentFileRef.current;
+    if (!git || !savingFile || savingFile.binary || savingFile.text === null) return;
     setBusy(true);
     try {
       if (savingFile.text === null) return;
@@ -883,9 +885,13 @@ export function HostApp(): ReactElement {
       if (gitRef.current !== git || workspaceRef.current?.identity.localWorkspaceId !== workspace?.identity.localWorkspaceId) return;
       const latest = currentFileRef.current;
       if (latest?.path === savingFile.path && latest.dirty && latest.text !== savingFile.text) {
-        setCurrentFile({ ...latest, data, revision, dirty: true });
-      } else {
-        setCurrentFile({ ...savingFile, data, revision, dirty: false });
+        const newerDraft = { ...latest, data, revision, dirty: true };
+        currentFileRef.current = newerDraft;
+        setCurrentFile(newerDraft);
+      } else if (latest?.path === savingFile.path) {
+        const saved = { ...savingFile, data, revision, dirty: false };
+        currentFileRef.current = saved;
+        setCurrentFile(saved);
       }
       await refresh(git, workspace!);
       if (currentFileRef.current?.dirty) setSyncState("editing");
@@ -926,7 +932,7 @@ export function HostApp(): ReactElement {
   async function commitLocal(): Promise<void> {
     if (!commitReviewed) { setMessage({ tone: "error", text: "変更したファイルの内容を確認してからコミットしてください。" }); return; }
     if (!git || !workspace) return;
-    if (currentFile?.dirty) { setMessage({ tone: "error", text: "Save the current editor text to the local worktree before committing." }); return; }
+    if (currentFileRef.current?.dirty || composingRef.current) { setMessage({ tone: "error", text: "Save the current editor text to the local worktree before committing." }); return; }
     if (!commitMessage.trim()) { setMessage({ tone: "error", text: "Enter a commit message." }); return; }
     if (!preferences.name.trim() || !preferences.email.includes("@")) { setMessage({ tone: "error", text: "Enter a Git author name and valid email address." }); return; }
     setBusy(true); setCheckpointBusy(true);
