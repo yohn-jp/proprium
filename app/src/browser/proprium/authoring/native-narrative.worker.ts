@@ -25,9 +25,11 @@ function failed(error: unknown): void {
   if (!request) return;
   const value = error as { code?: unknown; message?: unknown; retryable?: unknown } | null;
   complete({ request_id: request.request_id, scope: request.scope, snapshot: request.snapshot,
-    ok: false, error: { code: typeof value?.code === "string" ? value.code : "guest_trap",
+    ok: false, error: { code: typeof value?.code === "string" ? value.code : error instanceof RangeError ? "capacity" : "guest_trap",
       message: error instanceof Error ? error.message : typeof value?.message === "string" ? value.message : "Narrative action failed",
-      retryable: value?.retryable === true } });
+      retryable: value?.retryable === true,
+      ...(value?.details && typeof value.details === "object" && !Array.isArray(value.details)
+        ? { details: value.details as Record<string, unknown> } : {}) } });
 }
 function step(response?: Extract<Incoming, { type: "host_response" }>): void {
   if (!iterator || !request) return;
@@ -43,15 +45,20 @@ function step(response?: Extract<Incoming, { type: "host_response" }>): void {
         !call.payload || typeof call.payload !== "object" || Array.isArray(call.payload)) {
       throw Object.assign(new Error("Narrative yielded an invalid Host operation"), { code: "invalid_input" });
     }
-    pending = `${request.request_id}:${++sequence}`;
+    pending = `h:${++sequence}`;
     port.postMessage({ type: "host_call", call_id: pending, operation: call.operation, payload: call.payload });
   } catch (error) { failed(error); }
 }
 port.onmessage = event => {
   const message = event.data;
   try {
+    if (!message || typeof message !== "object" || typeof message.type !== "string") {
+      throw Object.assign(new Error("Invalid Narrative Worker message"), { code: "invalid_input" });
+    }
     if (message.type === "invoke") {
-      if (request || message.request.plugin_id !== "proprium.narrative") throw new Error("Invalid Narrative invocation");
+      if (request || !message.request || message.request.plugin_id !== "proprium.narrative") {
+        throw Object.assign(new Error("Invalid Narrative invocation"), { code: "invalid_input" });
+      }
       request = message.request;
       iterator = invokeNarrative(request as Parameters<typeof invokeNarrative>[0], {
         *request<T = unknown>(operation: string, payload: Record<string, unknown>): Generator<HostCall, T, unknown> {
