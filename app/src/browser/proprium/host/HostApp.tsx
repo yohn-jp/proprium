@@ -364,21 +364,22 @@ export function HostApp(): ReactElement {
     return () => { void service.dispose(); };
   }, [git, workspaceGeneration, pluginManager, providerSettingsEpoch]);
   useEffect(() => {
+    // Native panels must be immediately available, but an ordinary action
+    // refresh must not temporarily hide other already registered panels.
+    if (!authoring) return;
+    const native = nativeNarrativeSurfaces().map(surface => ({
+      pluginId: NATIVE_NARRATIVE_ID, pluginVersion: nativeNarrativeVersion(),
+      surface, availability: "ready" as const,
+    }));
+    setAuthoringRegistrations(validateAuthoringSurfaceRegistrations(native));
+  }, [authoring]);
+  useEffect(() => {
     let cancelled = false;
-    if (authoring) {
-      // Narrative is built into the Host: never wait for legacy IndexedDB or
-      // Registry verification before exposing its authoring navigation.
-      const native = nativeNarrativeSurfaces().map(surface => ({
-        pluginId: NATIVE_NARRATIVE_ID, pluginVersion: nativeNarrativeVersion(),
-        surface, availability: "ready" as const,
-      }));
-      setAuthoringRegistrations(validateAuthoringSurfaceRegistrations(native));
-      void authoring.listSurfaces().then(values => {
-        if (!cancelled) setAuthoringRegistrations(validateAuthoringSurfaceRegistrations(values));
-      }).catch(error => {
-        if (!cancelled) setMessage({ tone: "error", text: errorMessage(error) });
-      });
-    }
+    if (authoring) void authoring.listSurfaces().then(values => {
+      if (!cancelled) setAuthoringRegistrations(validateAuthoringSurfaceRegistrations(values));
+    }).catch(error => {
+      if (!cancelled) setMessage({ tone: "error", text: errorMessage(error) });
+    });
     return () => { cancelled = true; };
   }, [authoring, authoringEpoch]);
   const invokeAuthoring = async (event: Event, pluginId: string, actionId: string, input: Readonly<Record<string, import("./authoring/types.js").AuthoringJson>>, invocationSource?: { readonly surfaceId: string; readonly resume?: HostWritingResume }) => {
