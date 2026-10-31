@@ -23,7 +23,7 @@ function complete(result: ActionResult): void {
 }
 function failed(error: unknown): void {
   if (!request) return;
-  const value = error as { code?: unknown; message?: unknown; retryable?: unknown } | null;
+  const value = error as { code?: unknown; message?: unknown; retryable?: unknown; details?: unknown } | null;
   complete({ request_id: request.request_id, scope: request.scope, snapshot: request.snapshot,
     ok: false, error: { code: typeof value?.code === "string" ? value.code : error instanceof RangeError ? "capacity" : "guest_trap",
       message: error instanceof Error ? error.message : typeof value?.message === "string" ? value.message : "Narrative action failed",
