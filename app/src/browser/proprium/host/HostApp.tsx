@@ -256,6 +256,7 @@ export function HostApp(): ReactElement {
   const sessionRef = useRef<GitHubAccountSession | null>(null);
   const authorizationRef = useRef<AbortController | null>(null);
   const currentFileRef = useRef<OpenFile | null>(currentFile);
+  const fileLoadSequence = useRef(0);
   const livePluginInvoker = useRef<((args: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>) | null>(null);
   currentFileRef.current = currentFile;
   useEffect(() => () => { void pluginManager.dispose(); }, [pluginManager]);
@@ -337,10 +338,11 @@ export function HostApp(): ReactElement {
         if (gitRef.current !== git || workspaceGenerationRef.current !== workspaceGeneration) throw new Error("snapshot_stale");
         if (currentFileRef.current?.dirty) throw new Error("dirty_draft: save the current document before navigation");
         if (target.path) {
+          const loadSequence = ++fileLoadSequence.current;
           const initial = currentFileRef.current;
           const read = await git.read(target.path);
           await git.assertAuthoringSnapshot(expected.snapshot.id);
-          if (gitRef.current !== git || workspaceGenerationRef.current !== workspaceGeneration) throw new Error("snapshot_stale");
+          if (loadSequence !== fileLoadSequence.current || gitRef.current !== git || workspaceGenerationRef.current !== workspaceGeneration) throw new Error("snapshot_stale");
           if (composingRef.current || currentFileRef.current !== initial || currentFileRef.current?.dirty) throw new Error("dirty_draft");
           if (read.data === null) throw new Error("file_not_found");
           const text = asText(read.data);
@@ -803,22 +805,24 @@ export function HostApp(): ReactElement {
     const initialFile = currentFileRef.current;
     const discardConfirmed = Boolean(initialFile?.dirty && window.confirm("Discard unsaved editor text and open another file?"));
     if (initialFile?.dirty && !discardConfirmed) return;
+    const loadSequence = ++fileLoadSequence.current;
     setBusy(true);
     setMessage(null);
     try {
       const read = await git.read(path);
-      if (gitRef.current !== git || workspaceRef.current?.identity.localWorkspaceId !== workspace.identity.localWorkspaceId) return;
+      if (loadSequence !== fileLoadSequence.current || gitRef.current !== git || workspaceRef.current?.identity.localWorkspaceId !== workspace.identity.localWorkspaceId) return;
       const liveFile = currentFileRef.current;
       if (liveFile?.dirty && (!discardConfirmed || liveFile.path !== initialFile?.path || liveFile.text !== initialFile?.text) &&
           !window.confirm("The editor changed while the file was loading. Discard the newer text and continue?")) return;
       const data = read.data;
       const text = data === null ? "" : asText(data);
       const entry: OpenFile = { path, data, revision: read.revision, text, binary: data !== null && text === null, dirty: false };
+      currentFileRef.current = entry;
       setCurrentFile(entry);
       setRequestedPanel(value => ({ id: "editor", sequence: value.sequence + 1 }));
       requestAnimationFrame(() => document.querySelector<HTMLElement>(".cm-content")?.focus());
-    } catch (error) { setMessage({ tone: "error", text: errorMessage(error) }); }
-    finally { setBusy(false); }
+    } catch (error) { if (loadSequence === fileLoadSequence.current) setMessage({ tone: "error", text: errorMessage(error) }); }
+    finally { if (loadSequence === fileLoadSequence.current) setBusy(false); }
   }
 
   async function createFile(path: string): Promise<void> {
@@ -827,20 +831,23 @@ export function HostApp(): ReactElement {
     const discardConfirmed = Boolean(initialFile?.dirty && window.confirm("Discard unsaved editor text and create another file?"));
     if (initialFile?.dirty && !discardConfirmed) return;
     if (!path) { setMessage({ tone: "error", text: "Enter a repository-relative file path." }); return; }
+    const loadSequence = ++fileLoadSequence.current;
     setBusy(true);
     try {
       const read = await git.read(path);
-      if (gitRef.current !== git || workspaceRef.current?.identity.localWorkspaceId !== workspace.identity.localWorkspaceId) return;
+      if (loadSequence !== fileLoadSequence.current || gitRef.current !== git || workspaceRef.current?.identity.localWorkspaceId !== workspace.identity.localWorkspaceId) return;
       const liveFile = currentFileRef.current;
       if (liveFile?.dirty && (!discardConfirmed || liveFile.path !== initialFile?.path || liveFile.text !== initialFile?.text) &&
           !window.confirm("The editor changed while the new file was loading. Discard the newer text and continue?")) return;
       if (read.data !== null) throw new Error(`File already exists: ${path}`);
-      setCurrentFile({ path, data: null, revision: read.revision, text: "", binary: false, dirty: true });
+      const created: OpenFile = { path, data: null, revision: read.revision, text: "", binary: false, dirty: true };
+      currentFileRef.current = created;
+      setCurrentFile(created);
       setSyncState("editing");
       setRequestedPanel(value => ({ id: "editor", sequence: value.sequence + 1 }));
       requestAnimationFrame(() => document.querySelector<HTMLElement>(".cm-content")?.focus());
-    } catch (error) { setMessage({ tone: "error", text: errorMessage(error) }); }
-    finally { setBusy(false); }
+    } catch (error) { if (loadSequence === fileLoadSequence.current) setMessage({ tone: "error", text: errorMessage(error) }); }
+    finally { if (loadSequence === fileLoadSequence.current) setBusy(false); }
   }
 
   async function beforeFileMutation(): Promise<boolean> {
