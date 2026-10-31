@@ -347,11 +347,15 @@ export class BrowserAuthoringService {
   }
 
   async listSurfaces(): Promise<AuthoringSurfaceRegistration[]> {
-    const installed = await this.options.manager.installed();
+    // A first-party Narrative workspace must remain usable even if the legacy
+    // signed registry is offline or its stored external artifacts are broken.
     const registrations: AuthoringSurfaceRegistration[] = nativeNarrativeSurfaces().map(surface => Object.freeze({
       pluginId: NATIVE_NARRATIVE_ID, pluginVersion: nativeNarrativeVersion(),
       surface, availability: "ready" as const,
     }));
+    let installed: InstalledPlugin[];
+    try { installed = await this.options.manager.installed(); }
+    catch { return registrations; }
     for (const plugin of installed) {
       if (plugin.id === NATIVE_NARRATIVE_ID) continue;
       const manifest = plugin.manifest;
