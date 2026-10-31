@@ -3,8 +3,14 @@ name: Proprium Gateway Verification
 on:
   push:
     branches: [main]
+    paths:
+      - 'gateway/**'
+      - '.github/workflows/verify-gateway.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'gateway/**'
+      - '.github/workflows/verify-gateway.yml'
   workflow_dispatch:
 
 permissions:
