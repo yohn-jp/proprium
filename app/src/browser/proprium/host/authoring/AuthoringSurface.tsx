@@ -804,6 +804,20 @@ export function AuthoringSurface({ surface, data: initialData = EMPTY_DATA, stat
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const readController = useRef<AbortController | null>(null);
+  const sceneIdentity = isRecord(initialData) && isRecord(initialData.host_context)
+    ? plainText(initialData.host_context.scene_id) : "";
+  const scopeKey = `${surface.id}\u0000${sceneIdentity}`;
+  const scopeRef = useRef(scopeKey);
+  scopeRef.current = scopeKey;
+  useEffect(() => {
+    readController.current?.abort();
+    readController.current = null;
+    setLastActionResult(undefined);
+    setLoadResults({});
+    setArtifact(undefined);
+    setError("");
+    setBusy(false);
+  }, [scopeKey]);
   useEffect(() => () => readController.current?.abort(), []);
   const runAction = useCallback(async (binding: AuthoringActionBinding, context: AuthoringJson, event: Event) => {
     const resolved = Object.fromEntries(Object.entries(binding.input_template).map(([key, template]) => [key, resolveAuthoringTemplate(template, context)]));
@@ -813,15 +827,17 @@ export function AuthoringSurface({ surface, data: initialData = EMPTY_DATA, stat
   const invoke = useCallback(async (binding: AuthoringActionBinding, event: Event, context: AuthoringJson = data): Promise<void> => {
     if (!validBinding(binding) || busy) return;
     setBusy(true); setError(""); setArtifact(undefined);
+    const invocationScope = scopeRef.current;
     try {
       const output = await runAction(binding, context, event);
+      if (scopeRef.current !== invocationScope) return;
       if (!output.action_result.ok) throw new Error(`${output.action_result.error.code}: ${output.action_result.error.message}`);
       // Navigation-only results leave the current outline page and its scroll position mounted.
       const resultValue = output.action_result.value;
       if (!(isRecord(resultValue) && isRecord(resultValue.navigation))) setLastActionResult(cloneJson(resultValue, 0));
       setArtifact(output.artifact);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "操作を完了できませんでした。"); }
-    finally { setBusy(false); }
+    } catch (cause) { if (scopeRef.current === invocationScope) setError(cause instanceof Error ? cause.message : "操作を完了できませんでした。"); }
+    finally { if (scopeRef.current === invocationScope) setBusy(false); }
   }, [busy, data, runAction]);
   const navigate = useCallback(async (binding: AuthoringNavigationTemplate, event: Event, context: AuthoringJson = data): Promise<void> => {
     if (!onNavigate) { setError("Host navigation is unavailable."); return; }
@@ -841,7 +857,11 @@ export function AuthoringSurface({ surface, data: initialData = EMPTY_DATA, stat
     if (readController.current) { readController.current.abort(); readController.current = null; setBusy(false); }
     // Independently loaded tabs must not show another tab's records or cursor.
     // Forms without a read intentionally share the selected action result.
-    if (next && (next.load_action || next.load_actions?.length)) setLastActionResult(undefined);
+    if (next && (next.load_action || next.load_actions?.length)) {
+      setLastActionResult(undefined);
+      setLoadResults({});
+      setArtifact(undefined);
+    }
   }, []);
   const load = useCallback(async (node: AuthoringWidget = surface.body) => {
     const requestedActions = node.load_actions?.length ? node.load_actions
@@ -875,7 +895,11 @@ export function AuthoringSurface({ surface, data: initialData = EMPTY_DATA, stat
       if (latest !== undefined) setLastActionResult(latest);
       setArtifact(undefined);
     } catch (cause) {
-      if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "読み込みを完了できませんでした。");
+      if (!controller.signal.aborted) {
+        setLastActionResult(undefined);
+        setLoadResults({});
+        setError(cause instanceof Error ? cause.message : "読み込みを完了できませんでした。");
+      }
     } finally {
       if (readController.current === controller) readController.current = null;
       if (!controller.signal.aborted) setBusy(false);
