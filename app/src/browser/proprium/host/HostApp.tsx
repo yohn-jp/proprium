@@ -18,6 +18,7 @@ import { createHostPluginManager, PluginPanel } from "./PluginPanel.js";
 import { LiveMcpPanel } from "./LiveMcpPanel.js";
 import "./authoring/authoring-surface.css";
 import { createBrowserAuthoringService, type BrowserAuthoringService } from "../authoring/service.js";
+import { NATIVE_NARRATIVE_ID, nativeNarrativeSurfaces, nativeNarrativeVersion } from "../authoring/native-narrative.js";
 import { authoringPanelId, createAuthoringWorkspacePanels, validateAuthoringSurfaceRegistrations, type AuthoringSurfaceRegistration } from "./authoring/WorkspaceAuthoringPanels.js";
 import { AuthoringReview } from "./authoring/AuthoringReview.js";
 import { DiagnosticsFindings } from "./authoring/DiagnosticsFindings.js";
@@ -364,8 +365,20 @@ export function HostApp(): ReactElement {
   }, [git, workspaceGeneration, pluginManager, providerSettingsEpoch]);
   useEffect(() => {
     let cancelled = false;
-    if (authoring) void authoring.listSurfaces().then(values => { if (!cancelled) setAuthoringRegistrations(validateAuthoringSurfaceRegistrations(values)); })
-      .catch(error => { if (!cancelled) setMessage({ tone: "error", text: errorMessage(error) }); });
+    if (authoring) {
+      // Narrative is built into the Host: never wait for legacy IndexedDB or
+      // Registry verification before exposing its authoring navigation.
+      const native = nativeNarrativeSurfaces().map(surface => ({
+        pluginId: NATIVE_NARRATIVE_ID, pluginVersion: nativeNarrativeVersion(),
+        surface, availability: "ready" as const,
+      }));
+      setAuthoringRegistrations(validateAuthoringSurfaceRegistrations(native));
+      void authoring.listSurfaces().then(values => {
+        if (!cancelled) setAuthoringRegistrations(validateAuthoringSurfaceRegistrations(values));
+      }).catch(error => {
+        if (!cancelled) setMessage({ tone: "error", text: errorMessage(error) });
+      });
+    }
     return () => { cancelled = true; };
   }, [authoring, authoringEpoch]);
   const invokeAuthoring = async (event: Event, pluginId: string, actionId: string, input: Readonly<Record<string, import("./authoring/types.js").AuthoringJson>>, invocationSource?: { readonly surfaceId: string; readonly resume?: HostWritingResume }) => {
