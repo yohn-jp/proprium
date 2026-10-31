@@ -242,7 +242,13 @@ export class AuthoringActionDispatcher {
       throw new ActionDispatchError("capability_denied", "Required capability is not granted", false, { capability: name });
     }
     await this.options.authority.assertCurrent(current);
-    const executionId = this.options.hostControlAction?.(call.plugin_id, call.action_id) ? `${call.plugin_id}:${call.action_id}` : call.plugin_id;
+    // Narrative uses a fresh TS Worker per read, unlike the single-instance
+    // WASM runtime. Independent outline and resume reads may safely overlap.
+    // MAX_JOBS still limits total work; proposals retain exclusive admission.
+    const executionId = call.plugin_id === "proprium.narrative" && descriptor.effect === "read"
+      ? `${call.plugin_id}:read:${context.request_id}`
+      : this.options.hostControlAction?.(call.plugin_id, call.action_id)
+        ? `${call.plugin_id}:${call.action_id}` : call.plugin_id;
     this.acquire(executionId, context.scope.workspace_id);
     let idKey: IdempotencyKey | undefined; let bodyDigest: string | undefined; let reserved = false; let submitted = false;
     try {
