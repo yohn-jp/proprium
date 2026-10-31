@@ -6,6 +6,8 @@ on:
     paths:
       - 'app/**'
       - 'packages/**'
+      - 'modules/**'
+      - 'tsconfig.base.json'
       - 'plugins/narrative/**'
       - 'plugins/shared/**'
       - 'pnpm-lock.yaml'
