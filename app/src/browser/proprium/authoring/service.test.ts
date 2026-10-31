@@ -74,7 +74,7 @@ function makeService(descriptor = action(), editorState: ConstructorParameters<t
         publication: { remote_commit: null, files: [] } };
     } },
   });
-  return { service, calls, hostReads, pinCount: () => pins };
+  return { service, calls, hostReads, pinCount: () => pins, manager };
 }
 
 test("UI background reads and MCP use the same typed Host dispatcher and selected snapshot", async () => {
@@ -93,6 +93,17 @@ test("UI background reads and MCP use the same typed Host dispatcher and selecte
   assert.equal(service.authority.isSnapshotCurrent({ scope, snapshot } as never), true);
   await service.dispose();
   assert.equal(service.authority.isSnapshotCurrent({ scope, snapshot } as never), false);
+});
+
+test("native Narrative panels remain registered without a signed registry", async () => {
+  const { service, manager } = makeService();
+  const initial = await service.listSurfaces();
+  assert.ok(initial.some(row => row.pluginId === "proprium.narrative" &&
+    row.surface.id === "proprium.narrative.work-outline" && row.availability === "ready"));
+  manager.installed = async () => { throw new Error("legacy registry offline"); };
+  const offline = await service.listSurfaces();
+  assert.deepEqual(offline, initial);
+  await service.dispose().catch(() => undefined);
 });
 
 test("UI and MCP guest asset reads retain verified plugin attribution while direct and ungranted reads fail closed", async () => {
