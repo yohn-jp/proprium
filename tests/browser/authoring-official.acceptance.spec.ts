@@ -27,6 +27,34 @@ async function activateNarrativeOutline(page: import("@playwright/test").Page): 
   return page.getByRole("tabpanel", { name: "Work outline", exact: true }).first();
 }
 
+// Native Narrative is bundled with the Host; no registry download or enable step.
+test("native TypeScript Narrative recognizes and opens a work without WASM installation", async ({ page }) => {
+  const files = {
+    "plot/volumes/v/volume.yaml": "id: volume-native\\ntype: volume\\ntitle: 第一巻\\norder: 1\\n",
+    "plot/volumes/v/chapters/c/chapter.yaml": "id: chapter-native\\ntype: chapter\\ntitle: 第一章\\nvolume: volume-native\\norder: 1\\n",
+    "plot/volumes/v/chapters/c/scenes/s.yaml": "id: scene-native\\ntype: scene\\ntitle: 第一場\\nvolume: volume-native\\nchapter: chapter-native\\norder: 1\\nmanuscript: manuscript/custom/native.md\\n",
+    "manuscript/custom/native.md": "雨の夜から始まる。\\n",
+  };
+  const wasmRequests: string[] = [];
+  page.on("request", request => { if (/\\.wasm(?:$|\\?)/.test(request.url())) wasmRequests.push(request.url()); });
+  await page.goto("/");
+  await page.waitForFunction(() => typeof window.propriumHostTest?.openWorkspace === "function");
+  await page.evaluate(async items => window.propriumHostTest!.openWorkspace({
+    provider: "local", name: "native-narrative", branch: "main",
+    localWorkspaceId: `native-${crypto.randomUUID()}`,
+  }, items), files);
+  await showPanel(page, "review");
+  const outline = await activateNarrativeOutline(page);
+  await outline.getByRole("button", { name: "読み込む", exact: true }).click();
+  await waitForNarrativeRead(outline, "このリポジトリの作品構成を認識しました。");
+  await showNarrativeOutline(page);
+  await outline.getByText("第一巻", { exact: true }).click();
+  await outline.getByText("第一章", { exact: true }).click();
+  await outline.getByText("第一場", { exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "原稿 Markdown" })).toContainText("雨の夜から始まる。");
+  expect(wasmRequests).toEqual([]);
+});
+
 // These are actual Narrative sources and actual signed registry artifacts. Only
 // repository provisioning and the test registry HTTP transport are fixtures.
 test("signed Narrative installs and navigates a large work in the real Host", async ({ page }) => {
