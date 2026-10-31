@@ -18,7 +18,7 @@ import { createHostPluginManager, PluginPanel } from "./PluginPanel.js";
 import { LiveMcpPanel } from "./LiveMcpPanel.js";
 import "./authoring/authoring-surface.css";
 import { createBrowserAuthoringService, type BrowserAuthoringService } from "../authoring/service.js";
-import { createAuthoringWorkspacePanels, validateAuthoringSurfaceRegistrations, type AuthoringSurfaceRegistration } from "./authoring/WorkspaceAuthoringPanels.js";
+import { authoringPanelId, createAuthoringWorkspacePanels, validateAuthoringSurfaceRegistrations, type AuthoringSurfaceRegistration } from "./authoring/WorkspaceAuthoringPanels.js";
 import { AuthoringReview } from "./authoring/AuthoringReview.js";
 import { DiagnosticsFindings } from "./authoring/DiagnosticsFindings.js";
 import type { DiagnosticsEvidence, DiagnosticsFeedbackDecision, DiagnosticsFindingsReport, DiagnosticsLegacyMigrationReport } from "./authoring/DiagnosticsFindings.js";
@@ -1606,7 +1606,15 @@ export function HostApp(): ReactElement {
       <p>Binary file · {currentFile.data?.byteLength ?? 0} bytes</p>
       {hostFileActions}
     </> : <RestoredEditor key={`${workspace.identity.localWorkspaceId}:${currentFile.path}`} workspace={workspace.identity} file={currentFile} onCompositionChange={value => { composingRef.current = value; }} diagnosticMarkers={diagnosticsMargin} onDiagnosticMarkerSelect={onSelectDiagnosticMarker} onDiagnosticMarkerDecision={onDiagnosticMarkerDecision} hostNavigationSelection={navigationSelection} onHostNavigationSelectionApplied={() => setNavigationSelection(undefined)} onWritingPosition={captureWritingPosition} hostResume={hostResume?.generation === workspaceGeneration && hostResume.authorScope === (preferences.email || "local") && hostResume.savedBytes === currentFile.data && hostResume.position.manuscript_path === currentFile.path && !currentFile.dirty ? hostResume : undefined} onHostResumeApplied={(id, restored) => { setHostResume(current => current?.requestId === id ? undefined : current); if (!restored) setMessage({ tone: "error", text: "続き位置が現在の原稿と一致しないため、カーソルを移動しませんでした。" }); }} readOnly={fileMutationBusy} head={status.head} published={syncState === "published"} localCommitted={!!status.head && status.entries.length === 0} busy={busy} checkpointBusy={checkpointBusy} publishBusy={publishBusy} authorScope={preferences.email || "local"} author={preferences} git={git} hostFileActions={hostFileActions}
-      onChange={text => { setCurrentFile(previous => previous ? { ...previous, text, dirty: true } : previous); setSyncState("editing"); }}
+      onChange={text => {
+        const previous = currentFileRef.current;
+        if (!previous || previous.path !== currentFile.path) return;
+        const next = { ...previous, text, dirty: true };
+        // The Writer and navigation guards must observe the draft before React re-renders.
+        currentFileRef.current = next;
+        setCurrentFile(next);
+        setSyncState("editing");
+      }}
       onSave={() => void saveDraft()} onCommit={() => revealPanel("inspector")} onPublish={() => void publishRemote()} canPublish={!!syncClient && status.localState === "local-committed" && !currentFile.dirty}
       onHistory={() => revealPanel("history")} onRegisterFlush={registerEditorFlush} onRegisterQuickAppend={registerQuickAppend} onScratchApplied={refreshAfterPlugin} />}
     {authoring && !currentFile.binary && selectedNarrativeScene.current?.path===currentFile.path &&
@@ -1656,7 +1664,7 @@ export function HostApp(): ReactElement {
   </details> : null;
   const Shell = mode === "desktop" ? DesktopShell : MobileShell;
   return <main className="proprium-host restored-host" onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); if (!busy && !recoveryEntry) void saveDraft(); } }}>{providerConsent.view}<Suspense fallback={<p>ワークスペースを開いています…</p>}><Shell mode={mode} onNavigateHome={leaveWorkspace}
-    header={<header className="topbar">{mode === "desktop" && <button type="button" className="quiet-button" onClick={() => { void beforeLayoutChange().then(ok => { if (ok) setDesktopSettingsOpen(true); }); }}>設定</button>}{workspace && <button className="quiet-button" onClick={leaveWorkspace}>作品一覧</button>}{workspace && !syncClient && isGitHubWorkspaceIdentity(workspace.identity) && <button type="button" className="quiet-button" aria-haspopup="dialog" aria-controls="workspace-github-auth" disabled={busy} onClick={openWorkspaceGitHubAuth}>GitHubに接続</button>}{account && <span className="host-account-label" aria-label="GitHub account">{account.login}</span>}<ThemeControl mode={theme} onChange={value => { setTheme(value); try { persistThemeMode(value); } catch { setMessage({ tone: "error", text: "外観設定を保存できませんでした。" }); } }} />{workspace && account && <button className="quiet-button" onClick={signOut}>GitHubからログアウト</button>}</header>}
+    header={<header className="topbar">{mode === "desktop" && <button type="button" className="quiet-button" onClick={() => { void beforeLayoutChange().then(ok => { if (ok) setDesktopSettingsOpen(true); }); }}>設定</button>}{workspace && <button className="quiet-button" onClick={leaveWorkspace}>作品一覧</button>}{workspace && authoringRegistrations.some(row => row.pluginId === "proprium.narrative" && row.surface.id === "proprium.narrative.work-outline" && row.status === "ready") && <button type="button" className="quiet-button" onClick={() => revealPanel(authoringPanelId("proprium.narrative", "proprium.narrative.work-outline"))}>作品構成を開く</button>}{workspace && !syncClient && isGitHubWorkspaceIdentity(workspace.identity) && <button type="button" className="quiet-button" aria-haspopup="dialog" aria-controls="workspace-github-auth" disabled={busy} onClick={openWorkspaceGitHubAuth}>GitHubに接続</button>}{account && <span className="host-account-label" aria-label="GitHub account">{account.login}</span>}<ThemeControl mode={theme} onChange={value => { setTheme(value); try { persistThemeMode(value); } catch { setMessage({ tone: "error", text: "外観設定を保存できませんでした。" }); } }} />{workspace && account && <button className="quiet-button" onClick={signOut}>GitHubからログアウト</button>}</header>}
     documentTitle={currentFile?.path ?? workspace?.title ?? "Proprium"} documentContext={workspace?.identity.branch}
     desktopDurability={syncState === "published" ? "saved" : checkpointBusy ? "checkpointing" : status.head && status.entries.length === 0 && !currentFile?.dirty ? "checkpointed" : "draft"}
     settings={settings} library={library} editor={workspace ? <RetainedPanelSlot node={editorNode} /> : editor} tools={<RetainedPanelSlot node={toolsNode} />} status={statusSurface} renderStatus={error => <>{statusSurface}{error && <p role="alert">{error}</p>}</>}
