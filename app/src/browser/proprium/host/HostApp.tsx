@@ -1413,7 +1413,13 @@ export function HostApp(): ReactElement {
       </div>
       <p className="locality-note"><span>●</span> 端末内の保存とGitHubへの公開は別の操作です。公開は選んだときだけ行います。</p>
     </section>;
-  const library = workspace ? <div className="host-controls"><WorkspaceFileBrowser
+  const library = workspace ? <div className="host-controls">
+    {authoringRegistrations.some(row => row.pluginId === NATIVE_NARRATIVE_ID && row.surface.id === "proprium.narrative.work-outline" && row.status === "ready") && <section className="sidebar-section">
+      <h2>Narrative・作品構成</h2>
+      <p>この一覧はリポジトリ内のファイル管理です。巻・章・シーンの構成と執筆位置はNarrativeで操作します。</p>
+      <button type="button" className="primary-button" onClick={() => revealPanel(authoringPanelId(NATIVE_NARRATIVE_ID, "proprium.narrative.work-outline"))}>巻・章・シーンを開く</button>
+    </section>}
+    <WorkspaceFileBrowser
             git={git!} files={files} selectedPath={currentFile?.path ?? null} pendingPath={currentFile?.data === null ? currentFile.path : undefined}
             changedPaths={changedPaths} busy={busy} canModify={!currentFile?.dirty} onBusyChange={setFileOperationBusy} beforeApply={beforeFileMutation}
             onSelect={path => { if (path === currentFile?.path) revealPanel("editor"); else void loadFile(path); }} onCreate={createFile}
