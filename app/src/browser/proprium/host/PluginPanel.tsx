@@ -174,8 +174,15 @@ export function PluginPanel({ manager, workspaceId, activationScope, git, revisi
         await manager.restoreEnabled({ scope: JSON.parse(activationScopeKey), hostAllowed: [...AUTHORING_HOST_CAPABILITIES, ...HOST_CAPABILITIES] });
         if (cancelled) return;
         const installed = await manager.installed();
+        // A previously enabled WASM Narrative must not be reactivated after
+        // migration to the built-in TypeScript worker.
+        for (const legacy of installed) {
+          if (legacy.id === NATIVE_NARRATIVE_ID && (legacy.state === "active" || legacy.state === "enabled-idle")) {
+            await manager.disable(legacy.id, legacy.version);
+          }
+        }
         if (!cancelled) {
-          setPlugins(installed);
+          setPlugins(await manager.installed());
           onAuthoringSurfacesChanged?.();
         }
       } catch (error) {
@@ -351,6 +358,17 @@ export function PluginPanel({ manager, workspaceId, activationScope, git, revisi
     <div className="plugin-panel-content">
       <p className="plugin-panel-copy">NarrativeはHostに標準搭載されたTypeScript機能です。旧WASM版の導入・有効化・更新は不要です。その他の旧プラグインは署名検証後に有効化できます。</p>
       <p role="status">Narrative v{nativeNarrativeVersion()}：標準搭載・利用可能。レビューとツールの「Work outline」から作品を読み込めます。</p>
+      {plugins.some(plugin => plugin.id === NATIVE_NARRATIVE_ID) && <p className="plugin-panel-copy">旧WASM版Narrativeが端末に残っています。標準搭載版とは別物です。<button type="button" disabled={busy} onClick={() => void (async () => {
+        setOwnBusy(true); onBusyChange(true);
+        try {
+          for (const legacy of plugins.filter(plugin => plugin.id === NATIVE_NARRATIVE_ID)) {
+            await manager.uninstall(legacy.id, legacy.version);
+          }
+          await refreshPlugins();
+          setNotice("旧WASM版Narrativeをこの端末から削除しました。標準搭載版は引き続き利用できます。");
+        } catch (error) { setNotice(error instanceof Error ? error.message : "旧版の削除に失敗しました。"); }
+        finally { setOwnBusy(false); onBusyChange(false); }
+      })()}>旧WASM版を削除</button></p>}
       {!config ? <p className="plugin-panel-warning" role="status">このHostビルドには信頼済みプラグインレジストリが設定されていません。</p> : <section className="plugin-registry-catalog" aria-labelledby="plugin-registry-heading">
         <div className="plugin-catalog-heading">
           <div><h3 id="plugin-registry-heading">利用可能なプラグイン</h3>
