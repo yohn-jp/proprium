@@ -54,7 +54,7 @@ port.onmessage = event => {
       if (request || message.request.plugin_id !== "proprium.narrative") throw new Error("Invalid Narrative invocation");
       request = message.request;
       iterator = invokeNarrative(request as Parameters<typeof invokeNarrative>[0], {
-        *request<T>(operation: string, payload: Record<string, unknown>) {
+        *request<T = unknown>(operation: string, payload: Record<string, unknown>): Generator<HostCall, T, unknown> {
           return (yield { kind: "host_call", call_id: "", operation, payload }) as T;
         },
       });
