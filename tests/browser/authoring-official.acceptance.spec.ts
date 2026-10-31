@@ -30,10 +30,10 @@ async function activateNarrativeOutline(page: import("@playwright/test").Page): 
 // Native Narrative is bundled with the Host; no registry download or enable step.
 test("native TypeScript Narrative recognizes and opens a work without WASM installation", async ({ page }) => {
   const files = {
-    "plot/volumes/v/volume.yaml": "id: volume-native\\ntype: volume\\ntitle: 第一巻\\norder: 1\\n",
-    "plot/volumes/v/chapters/c/chapter.yaml": "id: chapter-native\\ntype: chapter\\ntitle: 第一章\\nvolume: volume-native\\norder: 1\\n",
-    "plot/volumes/v/chapters/c/scenes/s.yaml": "id: scene-native\\ntype: scene\\ntitle: 第一場\\nvolume: volume-native\\nchapter: chapter-native\\norder: 1\\nmanuscript: manuscript/custom/native.md\\n",
-    "manuscript/custom/native.md": "雨の夜から始まる。\\n",
+    "plot/volumes/v/volume.yaml": "id: volume-native\ntype: volume\ntitle: 第一巻\norder: 1\n",
+    "plot/volumes/v/chapters/c/chapter.yaml": "id: chapter-native\ntype: chapter\ntitle: 第一章\nvolume: volume-native\norder: 1\n",
+    "plot/volumes/v/chapters/c/scenes/s.yaml": "id: scene-native\ntype: scene\ntitle: 第一場\nvolume: volume-native\nchapter: chapter-native\norder: 1\nmanuscript: manuscript/custom/native.md\n",
+    "manuscript/custom/native.md": "雨の夜から始まる。\n",
   };
   const wasmRequests: string[] = [];
   page.on("request", request => { if (/\\.wasm(?:$|\\?)/.test(request.url())) wasmRequests.push(request.url()); });
