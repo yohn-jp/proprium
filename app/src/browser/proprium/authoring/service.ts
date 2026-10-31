@@ -230,6 +230,33 @@ async function verifiedAuthoringActionSet(manager: Pick<BrowserPluginManager, "v
   return pluginId === NATIVE_NARRATIVE_ID ? nativeNarrativeActionSet() : manager.verifiedActionSet(pluginId);
 }
 
+/**
+ * Built-in Narrative's Host-owned dirty draft and cursor guards. These run
+ * before native Worker invocation; the Writer remains authoritative for Git.
+ */
+export function assertNarrativeEditorReady(pluginId: string, actionId: string,
+  editor: AuthoringEditorState, input: Record<string, unknown>, caller: string): void {
+  if (pluginId !== NATIVE_NARRATIVE_ID) return;
+  if (["proprium.narrative.reading-marks.create", "proprium.narrative.reading-marks.create-ui",
+       "proprium.narrative.reading-marks.delete"].includes(actionId) && (editor.dirty || editor.composing)) {
+    throw Object.assign(new Error("Save locally and finish composition before changing reading marks"), { code: "dirty_draft" });
+  }
+  if (actionId !== "proprium.narrative.resume.mark.propose") return;
+  const position = editor.resume_position;
+  if (editor.dirty || editor.composing) {
+    throw Object.assign(new Error("Save locally and finish composition before capturing a portable position"), { code: "dirty_draft" });
+  }
+  if (caller !== "ui" || !position || editor.path !== position.manuscript_path) {
+    throw Object.assign(new Error("Host has no current saved editor position"), { code: "capability_denied" });
+  }
+  if (input.scene_id !== position.scene_id || input.expected_manuscript_revision !== position.manuscript_revision) {
+    throw Object.assign(new Error("Portable position belongs to another scene or body revision"), { code: "snapshot_stale" });
+  }
+  if (input.sentence_index !== position.sentence_index || input.scroll_top !== position.scroll_top) {
+    throw invalid("Portable position differs from the Host-captured cursor");
+  }
+}
+
 export class BrowserAuthoringService {
   private readonly dispatcher: AuthoringActionDispatcher;
   private readonly leases = new Map<string, AuthoringSnapshotContext>();
@@ -255,12 +282,8 @@ export class BrowserAuthoringService {
       installed: pluginId => verifiedAuthoringActionSet(options.manager, pluginId),
       authority: this.authority,
       runtime: { invoke: async invoke => {
-        if(invoke.request.plugin_id==="proprium.narrative"&&[
-          "proprium.narrative.reading-marks.create","proprium.narrative.reading-marks.create-ui","proprium.narrative.reading-marks.delete",
-        ].includes(invoke.request.action_id)){
-          const editor=options.editorState();
-          if(editor.dirty||editor.composing)throw Object.assign(new Error("Save locally and finish composition before changing reading marks"),{code:"dirty_draft"});
-        }
+        assertNarrativeEditorReady(invoke.request.plugin_id, invoke.request.action_id,
+          options.editorState(), invoke.request.input, invoke.caller);
         const taskProfile = getAuthoringTaskProfileForAction(invoke.request.plugin_id, invoke.request.action_id);
         if (taskProfile) {
           const request=invoke.request, epoch=invoke.activation_epoch;
@@ -310,13 +333,6 @@ export class BrowserAuthoringService {
             }catch(error){await this.tasks.finishTask(begun.task.key,"failed",(error as {code?:string})?.code);throw error;}
           }
           if(request.action_id===taskProfile.step_action_id)throw Object.assign(new Error("Task step permission was already consumed"),{code:"capability_denied"});
-        }
-        if (invoke.request.plugin_id === "proprium.narrative" && invoke.request.action_id === "proprium.narrative.resume.mark.propose") {
-          const editor = options.editorState(), position = editor.resume_position, input = invoke.request.input;
-          if (editor.dirty || editor.composing) throw Object.assign(new Error("Save locally and finish composition before capturing a portable position"), { code: "dirty_draft" });
-          if (invoke.caller !== "ui" || !position || editor.path !== position.manuscript_path) throw Object.assign(new Error("Host has no current saved editor position"), { code: "capability_denied" });
-          if (input.scene_id !== position.scene_id || input.expected_manuscript_revision !== position.manuscript_revision) throw Object.assign(new Error("Portable position belongs to another scene or body revision"), { code: "snapshot_stale" });
-          if (input.sentence_index !== position.sentence_index || input.scroll_top !== position.scroll_top) throw invalid("Portable position differs from the Host-captured cursor");
         }
         if (invoke.request.plugin_id === NATIVE_NARRATIVE_ID) return invokeNativeNarrative(invoke);
         return options.manager.authoringRuntime(invoke.request.plugin_id).invoke(invoke);
