@@ -27,6 +27,7 @@ import { AuthoringTaskRegistry, IndexedDbAuthoringTaskStore, SEMANTIC_PROGRESS_K
   type AuthoringTaskIdentity, type AuthoringTaskUpdate } from "./tasks.js";
 import { assertValue } from "./schema.js";
 import { sourceTextDecoder } from "./source-text.js";
+import { NATIVE_NARRATIVE_ID, invokeNativeNarrative, nativeNarrativeActionSet, nativeNarrativeSurfaces, nativeNarrativeVersion } from "./native-narrative.js";
 
 export interface AuthoringWorkspaceSelection {
   readonly git: BrowserLocalGit;
@@ -225,6 +226,10 @@ const ACTION_PAGE = 50;
  * Gateway plugin_call adapter. It owns selection, saved-byte snapshots, gesture
  * capture, and the one action dispatcher; plugin IDs never select a repository.
  */
+async function verifiedAuthoringActionSet(manager: Pick<BrowserPluginManager, "verifiedActionSet">, pluginId: string) {
+  return pluginId === NATIVE_NARRATIVE_ID ? nativeNarrativeActionSet() : manager.verifiedActionSet(pluginId);
+}
+
 export class BrowserAuthoringService {
   private readonly dispatcher: AuthoringActionDispatcher;
   private readonly leases = new Map<string, AuthoringSnapshotContext>();
@@ -247,7 +252,7 @@ export class BrowserAuthoringService {
   constructor(private readonly options: BrowserAuthoringServiceOptions) {
     this.nextRequestId = options.createRequestId ?? ID;
     this.dispatcher = new AuthoringActionDispatcher({
-      installed: pluginId => options.manager.verifiedActionSet(pluginId),
+      installed: pluginId => verifiedAuthoringActionSet(options.manager, pluginId),
       authority: this.authority,
       runtime: { invoke: async invoke => {
         if(invoke.request.plugin_id==="proprium.narrative"&&[
@@ -259,7 +264,7 @@ export class BrowserAuthoringService {
         const taskProfile = getAuthoringTaskProfileForAction(invoke.request.plugin_id, invoke.request.action_id);
         if (taskProfile) {
           const request=invoke.request, epoch=invoke.activation_epoch;
-          if(request.action_id===taskProfile.status_action_id)return options.manager.verifiedActionSet(request.plugin_id).then(async set => ({
+          if(request.action_id===taskProfile.status_action_id)return verifiedAuthoringActionSet(options.manager, request.plugin_id).then(async set => ({
             request_id:request.request_id,scope:request.scope,snapshot:request.snapshot,ok:true as const,
             value:{snapshot:request.snapshot,activeTasks:await this.tasks.status(request.plugin_id,request.scope,request.snapshot,set?.version,set?.manifest_digest,
               taskProfile.profile_id,typeof request.input.taskId==="string"?request.input.taskId:undefined)},warnings:[]}));
@@ -279,7 +284,7 @@ export class BrowserAuthoringService {
               await sha256Bytes(new TextEncoder().encode(canonicalJson({plugin_id:request.plugin_id,action_id:request.action_id,
                 idempotency_key:idempotencyKey,workspace_id:request.scope.workspace_id,repository_id:request.scope.repository_id,branch:request.scope.branch})));
             const guestInvoke=taskId===request.input.taskId?invoke:{...invoke,request:{...request,input:{...request.input,taskId}}};
-            const set=await options.manager.verifiedActionSet(request.plugin_id);
+            const set=await verifiedAuthoringActionSet(options.manager, request.plugin_id);
             if(!set?.enabled||!set.activation_epoch)throw Object.assign(new Error("The indexing plugin is not active in this workspace"),{code:"plugin_unavailable"});
             const controller=this.controllers.get(request.request_id)??new AbortController();
             const identity:AuthoringTaskIdentity={plugin_id:request.plugin_id,plugin_version:set.version,manifest_digest:set.manifest_digest,
@@ -313,6 +318,7 @@ export class BrowserAuthoringService {
           if (input.scene_id !== position.scene_id || input.expected_manuscript_revision !== position.manuscript_revision) throw Object.assign(new Error("Portable position belongs to another scene or body revision"), { code: "snapshot_stale" });
           if (input.sentence_index !== position.sentence_index || input.scroll_top !== position.scroll_top) throw invalid("Portable position differs from the Host-captured cursor");
         }
+        if (invoke.request.plugin_id === NATIVE_NARRATIVE_ID) return invokeNativeNarrative(invoke);
         return options.manager.authoringRuntime(invoke.request.plugin_id).invoke(invoke);
       } },
       capabilities: this.capabilityPorts(),
@@ -326,8 +332,12 @@ export class BrowserAuthoringService {
 
   async listSurfaces(): Promise<AuthoringSurfaceRegistration[]> {
     const installed = await this.options.manager.installed();
-    const registrations: AuthoringSurfaceRegistration[] = [];
+    const registrations: AuthoringSurfaceRegistration[] = nativeNarrativeSurfaces().map(surface => Object.freeze({
+      pluginId: NATIVE_NARRATIVE_ID, pluginVersion: nativeNarrativeVersion(),
+      surface, availability: "ready" as const,
+    }));
     for (const plugin of installed) {
+      if (plugin.id === NATIVE_NARRATIVE_ID) continue;
       const manifest = plugin.manifest;
       if (!manifest || manifest.schema !== "proprium.plugin/v2") continue;
       const available = plugin.state === "enabled-idle" || plugin.state === "active";
@@ -376,7 +386,7 @@ export class BrowserAuthoringService {
     try {
       let idempotencyKey = typeof input.idempotency_key === "string" ? input.idempotency_key : undefined;
       let retryIdentity: string | undefined;
-      const descriptor = (await this.options.manager.verifiedActionSet(pluginId))?.descriptors.find(item => item.action_id === actionId);
+      const descriptor = (await this.verifiedAuthoringActionSet(options.manager, pluginId))?.descriptors.find(item => item.action_id === actionId);
       if (!idempotencyKey && descriptor) {
         retryIdentity = canonicalJson({ pluginId, actionId, input });
         idempotencyKey = this.uiProposalRetryKeys.get(retryIdentity) ?? this.nextRequestId();
@@ -945,7 +955,7 @@ export class BrowserAuthoringService {
       const selected = this.requireSelection();
       const scope = this.scope(selected);
       if (!principal.selected_scope || !sameScope(principal.selected_scope, scope)) throw staleScope();
-      const installed = await this.options.manager.verifiedActionSet(plugin_id);
+      const installed = await this.verifiedAuthoringActionSet(options.manager, plugin_id);
       if (!installed?.activation_epoch) throw Object.assign(new Error("Plugin is unavailable or disabled"), { code: "plugin_unavailable" });
       const obtain = async () => {
         this.requireSelection();
@@ -980,7 +990,7 @@ export class BrowserAuthoringService {
     },
     issueChild: async (parent, caller_plugin_id, target_plugin_id, action_id, staging_snapshot) => {
       await this.assertInvocationCurrent(parent);
-      const installed = await this.options.manager.verifiedActionSet(target_plugin_id);
+      const installed = await this.verifiedAuthoringActionSet(options.manager, target_plugin_id);
       if (!installed?.activation_epoch) throw Object.assign(new Error("Dependency is unavailable or disabled"), { code: "dependency_unavailable" });
       const saved = this.findLease(parent.scope, parent.snapshot);
       return Object.freeze({ ...saved,
@@ -1078,7 +1088,7 @@ export function createBrowserAuthoringService(options: CreateBrowserAuthoringSer
   const cache = new DerivedCacheBroker(brokerStore);
   const preferenceSchemas = new Map<string,JsonSchema>();
   const admitPreferenceSchema = async (pluginId:string,key:string,version:number) => {
-    const installed=await options.manager.verifiedActionSet(pluginId);
+    const installed=await verifiedAuthoringActionSet(options.manager, pluginId);
     if(!installed?.enabled||!installed.grants.includes("plugin.preferences"))throw Object.assign(new Error("Enable the plugin and grant local preferences first"),{code:"capability_denied"});
     // This key reuses the signed, closed settings patch declaration. The Host
     // interprets its schema; it does not execute plugin settings code.
@@ -1132,7 +1142,7 @@ export function createBrowserAuthoringService(options: CreateBrowserAuthoringSer
     journal: new IndexedDbWriterJournalStore(), workspace: writerWorkspace, resolve_artifact: artifactReader,
     new_proposal_id: ID,
     assert_action: async (pluginId, actionId) => {
-      const installed = await options.manager.verifiedActionSet(pluginId);
+      const installed = await verifiedAuthoringActionSet(options.manager, pluginId);
       if (!installed?.enabled || installed.plugin_id !== pluginId ||
           !installed.descriptors.some(descriptor => descriptor.action_id === actionId)) {
         throw new ChangeWriterError("capability_denied", "Host action is not declared by an active, verified plugin.");
