@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BrowserAuthoringService, IndexedDbActionIdempotencyStore } from "./service.js";
+import { BrowserAuthoringService, IndexedDbActionIdempotencyStore, assertNarrativeEditorReady } from "./service.js";
 import type { VerifiedActionSet } from "./actions.js";
 import type { ActionDescriptor, ActionRequest, ActionResult, Scope, Snapshot } from "./types.js";
 import type { BrowserLocalGit } from "../git/index.js";
@@ -125,39 +125,34 @@ test("a synthetic UI event never satisfies a signed action gesture requirement",
   await service.dispose();
 });
 
-test("reading mark proposals reject dirty drafts and IME before entering the guest",async()=>{
-  for(const action_id of ["proprium.narrative.reading-marks.create","proprium.narrative.reading-marks.create-ui","proprium.narrative.reading-marks.delete"]){
-    for(const state of [{dirty:true,composing:false},{dirty:false,composing:true}]){
-      const descriptor={...action(),plugin_id:"proprium.narrative",action_id,effect:"propose" as const};
-      const {service,calls}=makeService(descriptor,()=>({path:"manuscript/a.md",draft_generation:null,...state}));
-      const result=await service.invokeUi(new Event("click"),descriptor.plugin_id,action_id,{});
-      assert.equal(result.ok,false);
-      if(!result.ok)assert.equal(result.error.code,"dirty_draft");
-      assert.equal(calls.length,0);
-      await service.dispose();
+test("native Narrative reading-mark actions block dirty drafts and IME before entering the Worker", () => {
+  for (const actionId of ["proprium.narrative.reading-marks.create", "proprium.narrative.reading-marks.create-ui",
+    "proprium.narrative.reading-marks.delete"]) {
+    for (const state of [{ dirty: true, composing: false }, { dirty: false, composing: true }]) {
+      assert.throws(() => assertNarrativeEditorReady("proprium.narrative", actionId,
+        { path: "manuscript/a.md", draft_generation: null, ...state }, {}, "ui"),
+      error => (error as { code?: string }).code === "dirty_draft");
     }
+    assert.doesNotThrow(() => assertNarrativeEditorReady("proprium.narrative", actionId,
+      { path: "manuscript/a.md", dirty: false, composing: false, draft_generation: null }, {}, "ui"));
   }
 });
 
-test("portable resume proposals cannot invent a position or capture a dirty editor",async()=>{
-  const markerPlugin="proprium.narrative",markerAction="proprium.narrative.resume.mark.propose";
-  const descriptor={...action(),plugin_id:markerPlugin,action_id:markerAction,effect:"propose" as const,
-    input_schema:{type:"object",additionalProperties:false,properties:{scene_id:{type:"string",maxLength:256},expected_manuscript_revision:{type:"string",maxLength:256},
-      expected_marker_revision:{type:["string","null"],maxLength:256},sentence_index:{type:["integer","null"]},scroll_top:{type:"number"}}}};
-  let dirty=true;
-  const h=makeService(descriptor,()=>({path:"manuscript/a.md",dirty,draft_generation:null,composing:false,
-    resume_position:{scene_id:"a",manuscript_path:"manuscript/a.md",manuscript_revision:"b".repeat(64),sentence_index:2,scroll_top:123}}));
-  const input={scene_id:"a",expected_manuscript_revision:"b".repeat(64),expected_marker_revision:null,sentence_index:2,scroll_top:123};
-  const blocked=await h.service.invokeUi(new Event("click"),markerPlugin,markerAction,input);
-  assert.equal(blocked.ok,false);if(!blocked.ok)assert.equal(blocked.error.code,"dirty_draft",JSON.stringify(blocked));
-  assert.equal(h.calls.length,0);
-  dirty=false;
-  const invented=await h.service.invokeUi(new Event("click"),markerPlugin,markerAction,{...input,scroll_top:999});
-  assert.equal(invented.ok,false);if(!invented.ok)assert.equal(invented.error.code,"invalid_input");
-  assert.equal(h.calls.length,0);
-  const captured=await h.service.invokeUi(new Event("click"),markerPlugin,markerAction,input);
-  assert.equal(captured.ok,true);assert.equal(h.calls.length,1);
-  await h.service.dispose();
+test("native Narrative portable resume cannot invent a saved cursor or capture a dirty editor", () => {
+  const actionId = "proprium.narrative.resume.mark.propose";
+  const position = { scene_id: "a", manuscript_path: "manuscript/a.md",
+    manuscript_revision: "b".repeat(64), sentence_index: 2, scroll_top: 123 };
+  const editor = { path: "manuscript/a.md", dirty: false, composing: false,
+    draft_generation: null, resume_position: position };
+  const input = { scene_id: "a", expected_manuscript_revision: "b".repeat(64),
+    expected_marker_revision: null, sentence_index: 2, scroll_top: 123 };
+  assert.throws(() => assertNarrativeEditorReady("proprium.narrative", actionId,
+    { ...editor, dirty: true }, input, "ui"), error => (error as { code?: string }).code === "dirty_draft");
+  assert.throws(() => assertNarrativeEditorReady("proprium.narrative", actionId,
+    { ...editor, resume_position: null }, input, "ui"), error => (error as { code?: string }).code === "capability_denied");
+  assert.throws(() => assertNarrativeEditorReady("proprium.narrative", actionId,
+    editor, { ...input, scroll_top: 999 }, "ui"), error => (error as { code?: string }).code === "invalid_input");
+  assert.doesNotThrow(() => assertNarrativeEditorReady("proprium.narrative", actionId, editor, input, "ui"));
 });
 
 test("production action idempotency fails closed when durable IndexedDB is unavailable", async () => {
