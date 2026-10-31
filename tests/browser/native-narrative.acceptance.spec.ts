@@ -26,11 +26,11 @@ async function revealOutline(page: Page) {
 
 test("built-in Narrative opens a real manuscript without installing or invoking WASM", async ({ page }) => {
   const wasmRequests: string[] = [];
-  page.on("request", request => { if (/\\.wasm(?:$|\\?)/u.test(request.url())) wasmRequests.push(request.url()); });
+  page.on("request", request => { if (/\.wasm(?:$|\?)/u.test(request.url())) wasmRequests.push(request.url()); });
   await page.goto("/");
   await page.waitForFunction(() => typeof window.propriumHostTest?.openWorkspace === "function");
   await page.evaluate(async entries => window.propriumHostTest!.openWorkspace({
-    provider: "local", name: "narrative-ts", branch: "main",
+    origin: "https://github.com", repositoryId: 923456792, owner: "proprium-test", repository: "native-narrative", branch: "main",
     localWorkspaceId: `narrative-ts-${crypto.randomUUID()}`,
   }, entries), files);
   const outline = await revealOutline(page);
