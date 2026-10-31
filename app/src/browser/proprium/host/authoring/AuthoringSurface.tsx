@@ -631,21 +631,27 @@ function OutlineWidget({ node, data, invoke, navigate, busy }: {
   const items = useMemo(() => rowsForOutline(isDataKey(node.items) ? dataAtPath(data, node.items.data_key) : node.items), [data, node.items]);
   const [activeId, setActiveId] = useState(items[0]?.id ?? "");
   const [selectedId, setSelectedId] = useState("");
+  const treeRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(items.map(item => item.id)));
+  useEffect(() => {
+    const ids = new Set(items.map(row => row.id));
+    if (selectedId && !ids.has(selectedId)) setSelectedId("");
+    if (activeId && !ids.has(activeId)) setActiveId(items[0]?.id ?? "");
+  }, [items, activeId, selectedId]);
   const visible: AuthoringOutlineRow[] = [];
   const flatten = (rows: readonly AuthoringOutlineRow[]) => rows.forEach(row => { visible.push(row); if (expanded.has(row.id)) flatten(row.children ?? []); });
   flatten(items);
   const focusByOffset = (id: string, offset: number) => {
     const index = visible.findIndex(item => item.id === id);
     const target = visible[Math.max(0, Math.min(visible.length - 1, index + offset))];
-    if (target) { setActiveId(target.id); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-authoring-tree-id="${CSS.escape(target.id)}"]`)?.focus()); }
+    if (target) { setActiveId(target.id); requestAnimationFrame(() => treeRef.current?.querySelector<HTMLButtonElement>(`[data-authoring-tree-id="${CSS.escape(target.id)}"]`)?.focus()); }
   };
   const handleKey = (event: KeyboardEvent<HTMLButtonElement>, item: AuthoringOutlineRow) => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); focusByOffset(item.id, event.key === "ArrowDown" ? 1 : -1); }
-    else if (event.key === "Home" || event.key === "End") { event.preventDefault(); const target = event.key === "Home" ? visible[0] : visible.at(-1); if (target) { setActiveId(target.id); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-authoring-tree-id="${CSS.escape(target.id)}"]`)?.focus()); } }
+    else if (event.key === "Home" || event.key === "End") { event.preventDefault(); const target = event.key === "Home" ? visible[0] : visible.at(-1); if (target) { setActiveId(target.id); requestAnimationFrame(() => treeRef.current?.querySelector<HTMLButtonElement>(`[data-authoring-tree-id="${CSS.escape(target.id)}"]`)?.focus()); } }
     else if (event.key === "ArrowRight" && item.children?.length) { event.preventDefault(); setExpanded(current => new Set(current).add(item.id)); }
     else if (event.key === "ArrowLeft" && expanded.has(item.id)) { event.preventDefault(); setExpanded(current => { const next = new Set(current); next.delete(item.id); return next; }); }
-    else if (event.key === "Enter") { event.preventDefault(); activate(item, event.nativeEvent); }
+    else if (event.key === "Enter") { event.preventDefault(); setSelectedId(item.id); activate(item, event.nativeEvent); }
     else if (event.key === " ") { event.preventDefault(); setSelectedId(item.id); }
   };
   const activate = (item: AuthoringOutlineRow, event: Event) => {
@@ -658,7 +664,7 @@ function OutlineWidget({ node, data, invoke, navigate, busy }: {
       {item.children?.length ? <span aria-hidden="true">{expanded.has(item.id) ? "▾" : "▸"}</span> : <span aria-hidden="true">·</span>}<span>{item.title}</span>{item.path && <small>{item.path}</small>}
     </button>{item.children?.length && expanded.has(item.id) ? render(item.children) : null}
   </li>)}</ul>;
-  return <section className="authoring-widget" aria-labelledby={`authoring-widget-${node.id}`}><h3 id={`authoring-widget-${node.id}`}>{node.title || "作品構成"}</h3>{node.description && <p>{node.description}</p>}{items.length ? <div className="authoring-outline" role="tree" aria-label={node.title || "構成"}>{render(items)}</div> : <p className="authoring-empty">表示できる項目はありません。</p>}<Pagination previous={node.previous_action} next={node.next_action} previousWhen={node.previous_action_when} nextWhen={node.next_action_when} data={data} invoke={(binding, event) => invoke(binding, event)} disabled={busy} /></section>;
+  return <section className="authoring-widget" aria-labelledby={`authoring-widget-${node.id}`}><h3 id={`authoring-widget-${node.id}`}>{node.title || "作品構成"}</h3>{node.description && <p>{node.description}</p>}{items.length ? <div ref={treeRef} className="authoring-outline" role="tree" aria-label={node.title || "構成"}>{render(items)}</div> : <p className="authoring-empty">表示できる項目はありません。</p>}<Pagination previous={node.previous_action} next={node.next_action} previousWhen={node.previous_action_when} nextWhen={node.next_action_when} data={data} invoke={(binding, event) => invoke(binding, event)} disabled={busy} /></section>;
 }
 
 function WidgetRenderer({ node, data, invoke, navigate, busy, load, cancelRead, nested = false }: {
