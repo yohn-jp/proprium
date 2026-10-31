@@ -386,7 +386,7 @@ export class BrowserAuthoringService {
     try {
       let idempotencyKey = typeof input.idempotency_key === "string" ? input.idempotency_key : undefined;
       let retryIdentity: string | undefined;
-      const descriptor = (await this.verifiedAuthoringActionSet(options.manager, pluginId))?.descriptors.find(item => item.action_id === actionId);
+      const descriptor = (await verifiedAuthoringActionSet(this.options.manager, pluginId))?.descriptors.find(item => item.action_id === actionId);
       if (!idempotencyKey && descriptor) {
         retryIdentity = canonicalJson({ pluginId, actionId, input });
         idempotencyKey = this.uiProposalRetryKeys.get(retryIdentity) ?? this.nextRequestId();
@@ -955,7 +955,7 @@ export class BrowserAuthoringService {
       const selected = this.requireSelection();
       const scope = this.scope(selected);
       if (!principal.selected_scope || !sameScope(principal.selected_scope, scope)) throw staleScope();
-      const installed = await this.verifiedAuthoringActionSet(options.manager, plugin_id);
+      const installed = await verifiedAuthoringActionSet(this.options.manager, plugin_id);
       if (!installed?.activation_epoch) throw Object.assign(new Error("Plugin is unavailable or disabled"), { code: "plugin_unavailable" });
       const obtain = async () => {
         this.requireSelection();
@@ -990,7 +990,7 @@ export class BrowserAuthoringService {
     },
     issueChild: async (parent, caller_plugin_id, target_plugin_id, action_id, staging_snapshot) => {
       await this.assertInvocationCurrent(parent);
-      const installed = await this.verifiedAuthoringActionSet(options.manager, target_plugin_id);
+      const installed = await verifiedAuthoringActionSet(this.options.manager, target_plugin_id);
       if (!installed?.activation_epoch) throw Object.assign(new Error("Dependency is unavailable or disabled"), { code: "dependency_unavailable" });
       const saved = this.findLease(parent.scope, parent.snapshot);
       return Object.freeze({ ...saved,
