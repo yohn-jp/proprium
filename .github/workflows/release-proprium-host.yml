@@ -3,6 +3,18 @@ name: Release Proprium Host
 on:
   push:
     branches: [main]
+    paths:
+      - 'app/**'
+      - 'packages/**'
+      - 'plugins/narrative/**'
+      - 'plugins/shared/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+      - 'wrangler.jsonc'
+      - 'scripts/verify-proprium-static.mjs'
+      - 'scripts/build-proprium-static.mjs'
+      - '.github/workflows/release-proprium-host.yml'
   workflow_dispatch:
 
 permissions:
