@@ -2,6 +2,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
+    "rootDir": "..",
     "types": ["node", "vite/client"]
   },
   "include": ["src/browser/proprium/**/*.ts", "src/browser/proprium/**/*.tsx"],
