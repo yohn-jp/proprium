@@ -36,11 +36,11 @@ test("native TypeScript Narrative recognizes and opens a work without WASM insta
     "manuscript/custom/native.md": "雨の夜から始まる。\n",
   };
   const wasmRequests: string[] = [];
-  page.on("request", request => { if (/\\.wasm(?:$|\\?)/.test(request.url())) wasmRequests.push(request.url()); });
+  page.on("request", request => { if (/\.wasm(?:$|\?)/.test(request.url())) wasmRequests.push(request.url()); });
   await page.goto("/");
   await page.waitForFunction(() => typeof window.propriumHostTest?.openWorkspace === "function");
   await page.evaluate(async items => window.propriumHostTest!.openWorkspace({
-    provider: "local", name: "native-narrative", branch: "main",
+    origin: "https://github.com", repositoryId: 923456793, owner: "proprium-test", repository: "native-narrative", branch: "main",
     localWorkspaceId: `native-${crypto.randomUUID()}`,
   }, items), files);
   await showPanel(page, "review");
